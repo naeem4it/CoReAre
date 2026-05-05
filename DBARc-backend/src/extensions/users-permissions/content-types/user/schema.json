@@ -10,6 +10,12 @@
       "type": "enumeration",
       "enum": ["SUPER_ADMIN", "TENANT_ADMIN", "SHIPPER", "RIDER"],
       "default": "SHIPPER"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::parcel.parcel",
+      "mappedBy": "shipper"
     }
   }
 }

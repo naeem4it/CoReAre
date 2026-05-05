@@ -34,6 +34,12 @@
       "relation": "oneToMany",
       "target": "plugin::users-permissions.user",
       "mappedBy": "tenant"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::parcel.parcel",
+      "mappedBy": "tenant"
     }
   }
 }
