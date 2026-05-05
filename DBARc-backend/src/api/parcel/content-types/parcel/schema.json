@@ -1,0 +1,62 @@
+{
+  "kind": "collectionType",
+  "collectionName": "parcels",
+  "info": {
+    "singularName": "parcel",
+    "pluralName": "parcels",
+    "displayName": "Parcel",
+    "description": "Logistics parcel entities"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tracking_number": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["created", "picked", "in_hub", "in_transit", "delivered", "failed", "returned"],
+      "default": "created"
+    },
+    "cod_amount": {
+      "type": "decimal",
+      "default": 0
+    },
+    "weight": {
+      "type": "decimal",
+      "required": true
+    },
+    "delivery_charges": {
+      "type": "decimal",
+      "required": true
+    },
+    "recipient_name": {
+      "type": "string",
+      "required": true
+    },
+    "recipient_phone": {
+      "type": "string",
+      "required": true
+    },
+    "recipient_address": {
+      "type": "text",
+      "required": true
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "inversedBy": "parcels"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "parcels"
+    }
+  }
+}

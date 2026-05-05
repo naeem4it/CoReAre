@@ -1,0 +1,15 @@
+{
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "inversedBy": "users"
+    },
+    "role_type": {
+      "type": "enumeration",
+      "enum": ["SUPER_ADMIN", "TENANT_ADMIN", "SHIPPER", "RIDER"],
+      "default": "SHIPPER"
+    }
+  }
+}

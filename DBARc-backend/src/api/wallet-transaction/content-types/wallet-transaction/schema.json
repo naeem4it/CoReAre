@@ -1,0 +1,48 @@
+{
+  "kind": "collectionType",
+  "collectionName": "wallet_transactions",
+  "info": {
+    "singularName": "wallet-transaction",
+    "pluralName": "wallet-transactions",
+    "displayName": "Wallet Transaction",
+    "description": "Financial ledger records"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "amount": {
+      "type": "decimal",
+      "required": true
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": ["credit", "debit"],
+      "required": true
+    },
+    "category": {
+      "type": "enumeration",
+      "enum": ["cod_collection", "delivery_fee", "commission", "withdrawal", "gst"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "completed", "cancelled"],
+      "default": "pending"
+    },
+    "description": {
+      "type": "string"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tenants",
+  "info": {
+    "singularName": "tenant",
+    "pluralName": "tenants",
+    "displayName": "Tenant",
+    "description": "Multi-tenant SaaS root entities"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "domain": {
+      "type": "string",
+      "unique": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "suspended", "pending"],
+      "default": "pending"
+    },
+    "platform_commission_pct": {
+      "type": "decimal",
+      "default": 2.0
+    },
+    "users": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "plugin::users-permissions.user",
+      "mappedBy": "tenant"
+    }
+  }
+}
