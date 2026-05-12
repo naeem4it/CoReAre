@@ -1,0 +1,16 @@
+# Ignore Node modules
+node_modules/
+
+# Next.js build output
+.next/
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
