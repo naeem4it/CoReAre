@@ -27,14 +27,10 @@ export function middleware(request: NextRequest) {
     if (pathname.startsWith('/admin') && userRole !== 'SUPER_ADMIN') {
       return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
     }
-    if (pathname.startsWith('/courier') && userRole !== 'TENANT_ADMIN') {
+    if (pathname.startsWith('/courier') && userRole !== 'TENANT_ADMIN' && userRole !== 'SUPER_ADMIN') {
       return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
     }
-    if (pathname.startsWith('/merchant') && userRole !== 'SHIPPER') {
-      return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
-    }
-    
-    // 3. Redirect authenticated users away from login page
+    if (pathname.startsWith('/merchant') && userRole !== 'SHIPPER' && userRole !== 'SUPER_ADMIN') {
     if (pathname === '/auth/login') {
       return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
     }

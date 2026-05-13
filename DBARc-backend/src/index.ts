@@ -6,19 +6,24 @@ const SUPER_ADMIN_PASSWORD = '#0321Blouch';
 const SUPER_ADMIN_USERNAME = 'naeem4it';
 const SUPER_ADMIN_FIRSTNAME = 'Naeem';
 const SUPER_ADMIN_LASTNAME = 'IT';
-const SUPER_ADMIN_ROLE_CODE = 'strapi-super-admin';
+const SUPER_ADMIN_ROLE_CODES = [
+  'strapi-super-admin',
+  'strapi-tenant-admin',
+  'strapi-shipper',
+  'strapi-rider',
+];
 
 export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
     try {
-      const superAdminRole = await strapi.db.query('admin::role').findOne({
-        where: { code: SUPER_ADMIN_ROLE_CODE },
+      const adminRoles = await strapi.db.query('admin::role').findMany({
+        where: { code: SUPER_ADMIN_ROLE_CODES },
       });
 
-      if (!superAdminRole) {
-        strapi.log.warn('Super Admin role not found. Skipping admin bootstrap.');
+      if (!adminRoles || adminRoles.length === 0) {
+        strapi.log.warn('No admin roles found for bootstrap. Skipping admin bootstrap.');
         return;
       }
 
@@ -36,7 +41,7 @@ export default {
         password: hashedPassword,
         isActive: true,
         blocked: false,
-        roles: [superAdminRole.id],
+        roles: adminRoles.map((role) => role.id),
       };
 
       if (!existingAdmin) {
@@ -50,11 +55,13 @@ export default {
       }
 
       const currentRoleIds = existingAdmin.roles?.map((role: any) => role.id) ?? [];
+      const adminRoleIds = adminRoles.map((role) => role.id);
+      const missingRoleIds = adminRoleIds.filter((id) => !currentRoleIds.includes(id));
       const needsUpdate =
         existingAdmin.username !== SUPER_ADMIN_USERNAME ||
         !existingAdmin.isActive ||
         existingAdmin.blocked ||
-        !currentRoleIds.includes(superAdminRole.id);
+        missingRoleIds.length > 0;
 
       if (needsUpdate) {
         await strapi.db.query('admin::user').update({
@@ -66,7 +73,7 @@ export default {
             password: hashedPassword,
             isActive: true,
             blocked: false,
-            roles: Array.from(new Set([...currentRoleIds, superAdminRole.id])),
+            roles: Array.from(new Set([...currentRoleIds, ...adminRoleIds])),
           },
           populate: ['roles'],
         });

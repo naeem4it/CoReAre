@@ -20,12 +20,13 @@ export default function PortalLayout({
     if (!isAuthenticated) {
       redirect('/auth/login');
     }
-    if (user && user.role !== portalRole) {
+    if (user && user.role !== portalRole && user.role !== 'SUPER_ADMIN') {
       // Redirect to correct portal if they try to switch manually
       const paths: Record<string, string> = {
         SUPER_ADMIN: '/admin',
         TENANT_ADMIN: '/courier',
         SHIPPER: '/merchant',
+        RIDER: '/rider',
       };
       redirect(paths[user.role] || '/');
     }

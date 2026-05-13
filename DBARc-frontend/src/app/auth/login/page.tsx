@@ -1,14 +1,13 @@
 'use client';
 
 import * as React from 'react';
+import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, UserRole } from '@/shared/model/auth.store';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { Package, Lock, Mail, ArrowRight } from 'lucide-react';
-
-import { apiClient } from '@/shared/api/api-client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,33 +23,52 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await apiClient.post('/auth/local', {
-        identifier: email,
-        password: password,
+      const apiRoot = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337').replace(/\/api$/, '');
+      const response = await axios.post(`${apiRoot}/admin/login`, {
+        email,
+        password,
       });
 
-      const { jwt, user } = response.data;
+      const loginData = response.data?.data;
+      const user = loginData?.user;
+      const accessToken = loginData?.accessToken || loginData?.token;
 
-      // Populate user info (Strapi user might need populating for tenant info)
-      // For now we assume user object has what we need
+      const roleCodes = Array.isArray(user?.roles) ? user.roles.map((role: any) => role.code) : [];
+      const roleMap: Record<string, UserRole> = {
+        'strapi-super-admin': 'SUPER_ADMIN',
+        'strapi-tenant-admin': 'TENANT_ADMIN',
+        'strapi-shipper': 'SHIPPER',
+        'strapi-rider': 'RIDER',
+      };
+      const normalizedRole = roleCodes.includes('strapi-super-admin')
+        ? 'SUPER_ADMIN'
+        : roleMap[roleCodes.find((code) => roleMap[code]) ?? ''] ||
+          (user?.role_type as UserRole) ||
+          'SUPER_ADMIN';
+
       const userData = {
-        id: user.id.toString(),
-        email: user.email,
-        name: user.username,
-        role: user.role_type as UserRole,
-        tenantId: user.tenant?.id?.toString(),
-        tenantName: user.tenant?.name,
+        id: user?.id?.toString() ?? '',
+        email: user?.email ?? email,
+        name:
+          user?.username ||
+          `${user?.firstname ?? ''} ${user?.lastname ?? ''}`.trim() ||
+          user?.email ||
+          email,
+        role: normalizedRole,
+        tenantId: user?.tenant?.id?.toString(),
+        tenantName: user?.tenant?.name,
       };
 
-      setAuth(userData, jwt, jwt); // Using jwt as refresh for now as Strapi 5 has different refresh logic
+      setAuth(userData, accessToken, accessToken);
 
       const redirects: Record<string, string> = {
         SUPER_ADMIN: '/admin',
         TENANT_ADMIN: '/courier',
         SHIPPER: '/merchant',
+        RIDER: '/rider',
       };
 
-      router.push(redirects[user.role_type as string] || '/');
+      router.push(redirects[normalizedRole] || '/');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -134,11 +152,7 @@ export default function LoginPage() {
               Sign In <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
 
-            <div className="pt-4 text-center">
-              <p className="text-sm text-slate-500">
-                Mock Hint: Use <span className="font-mono font-bold text-slate-700">admin@</span> or <span className="font-mono font-bold text-slate-700">merchant@</span> to test roles.
-              </p>
-            </div>
+
           </form>
         </CardContent>
       </Card>

@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Building2,
   FileText,
-  BarChart3
+  BarChart3,
+  BadgeDollarSign
 } from 'lucide-react';
 import { UserRole } from '@/shared/model/auth.store';
 
@@ -27,6 +28,9 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   SUPER_ADMIN: [
     { label: 'System Overview', href: '/admin', icon: LayoutDashboard },
     { label: 'Tenants', href: '/admin/tenants', icon: Building2 },
+    { label: 'Courier Portal', href: '/courier', icon: Truck },
+    { label: 'Merchant Portal', href: '/merchant', icon: Package },
+    { label: 'Riders App', href: '/rider', icon: Users },
     { label: 'System Logs', href: '/admin/logs', icon: ShieldCheck },
     { label: 'Settings', href: '/admin/settings', icon: Settings },
   ],
