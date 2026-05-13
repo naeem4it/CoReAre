@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { TrackingInfo } from '../model/tracking.model';
+import { TrackingInfo } from '@/entities/tracking/model/tracking.model';
 import { CheckCircle2, Circle, Clock, MapPin, Phone, User } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { Card, CardContent } from '@/shared/ui/Card';

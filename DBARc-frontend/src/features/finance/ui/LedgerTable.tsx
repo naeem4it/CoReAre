@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { mockTransactions, Transaction } from '../model/finance.model';
+import { mockTransactions, Transaction } from '@/entities/finance/model/finance.model';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { cn } from '@/shared/lib/utils';
 import { ArrowDownLeft, ArrowUpRight, Search, FileDown } from 'lucide-react';

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { shipmentSchema, ShipmentFormValues, regions } from '../model/shipment.schema';
+import { shipmentSchema, ShipmentFormValues, regions } from '@/entities/shipment/model/shipment.schema';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Card, CardContent } from '@/shared/ui/Card';

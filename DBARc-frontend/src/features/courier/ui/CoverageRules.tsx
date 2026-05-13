@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { regions } from '@/entities/shipment/model/shipment.schema';
-import { mockTPLPartners } from '../model/tpl.model';
+import { mockTPLPartners } from '@/entities/courier/model/tpl.model';
 import { cn } from '@/shared/lib/utils';
 import { MapPin, ShieldCheck, Truck, ArrowRight } from 'lucide-react';
 

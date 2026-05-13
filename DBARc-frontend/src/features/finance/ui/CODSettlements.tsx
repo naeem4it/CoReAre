@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
-import { mockSettlementShippers } from '../model/finance.model';
+import { mockSettlementShippers } from '@/entities/finance/model/finance.model';
 import { Users, Calendar, Calculator, CheckCircle2, BadgePercent } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 

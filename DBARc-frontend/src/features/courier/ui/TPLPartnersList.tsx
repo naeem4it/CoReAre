@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { mockTPLPartners, TPLPartner } from '../model/tpl.model';
+import { mockTPLPartners, TPLPartner } from '@/entities/courier/model/tpl.model';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Settings2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';

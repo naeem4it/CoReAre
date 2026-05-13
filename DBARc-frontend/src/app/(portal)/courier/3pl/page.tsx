@@ -1,7 +1,6 @@
 import { TPLPartnersList } from '@/features/courier/ui/TPLPartnersList';
 import { CoverageRules } from '@/features/courier/ui/CoverageRules';
 import { RateCardMatrix } from '@/features/courier/ui/RateCardMatrix';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs';
 import { Truck, MapPin, BadgeDollarSign, Settings2 } from 'lucide-react';
 
 export default function TPLConfigPage() {
