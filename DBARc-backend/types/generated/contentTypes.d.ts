@@ -484,6 +484,39 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiRiderRider extends Struct.CollectionTypeSchema {
+  collectionName: 'riders';
+  info: {
+    description: 'Delivery riders for the courier service';
+    displayName: 'Rider';
+    pluralName: 'riders';
+    singularName: 'rider';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::rider.rider'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'inactive', 'suspended']> &
+      Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   collectionName: 'tenants';
   info: {
@@ -511,6 +544,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     platform_commission_pct: Schema.Attribute.Decimal &
       Schema.Attribute.DefaultTo<2>;
     publishedAt: Schema.Attribute.DateTime;
+    riders: Schema.Attribute.Relation<'oneToMany', 'api::rider.rider'>;
     status: Schema.Attribute.Enumeration<['active', 'suspended', 'pending']> &
       Schema.Attribute.DefaultTo<'pending'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -1062,6 +1096,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::parcel.parcel': ApiParcelParcel;
+      'api::rider.rider': ApiRiderRider;
       'api::tenant.tenant': ApiTenantTenant;
       'api::wallet-transaction.wallet-transaction': ApiWalletTransactionWalletTransaction;
       'plugin::content-releases.release': PluginContentReleasesRelease;

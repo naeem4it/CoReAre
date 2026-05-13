@@ -40,6 +40,12 @@
       "relation": "oneToMany",
       "target": "api::parcel.parcel",
       "mappedBy": "tenant"
+    },
+    "riders": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::rider.rider",
+      "mappedBy": "tenant"
     }
   }
 }

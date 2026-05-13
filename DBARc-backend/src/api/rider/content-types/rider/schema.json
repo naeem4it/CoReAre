@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "riders",
+  "info": {
+    "singularName": "rider",
+    "pluralName": "riders",
+    "displayName": "Rider",
+    "description": "Delivery riders for the courier service"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "phone": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "email": {
+      "type": "email",
+      "required": false
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "inactive", "suspended"],
+      "default": "active"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "inversedBy": "riders"
+    }
+  }
+}
