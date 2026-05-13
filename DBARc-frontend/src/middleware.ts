@@ -31,9 +31,12 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
     }
     if (pathname.startsWith('/merchant') && userRole !== 'SHIPPER' && userRole !== 'SUPER_ADMIN') {
-    if (pathname === '/auth/login') {
       return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
     }
+  }
+
+  if (pathname === '/auth/login' && authToken && userRole) {
+    return NextResponse.redirect(new URL(ROLE_PORTAL_MAP[userRole] || '/', request.url));
   }
 
   return NextResponse.next();
