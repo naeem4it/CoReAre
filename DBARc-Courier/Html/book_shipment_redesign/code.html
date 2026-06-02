@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fly Courier - Book Shipment</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "inverse-on-surface": "#eff1f3",
+                        "tertiary-container": "#57677e",
+                        "on-surface-variant": "#434656",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-container": "#d6e6ff",
+                        "surface": "#f7f9fb",
+                        "secondary-container": "#dae2fd",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary-container": "#dfe3ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#3f4f65",
+                        "on-secondary-container": "#5c647a",
+                        "primary-fixed-dim": "#b7c4ff",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-primary-fixed-variant": "#0038b6",
+                        "secondary": "#565e74",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "inverse-surface": "#2d3133",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#004ced",
+                        "on-surface": "#191c1e",
+                        "surface-container-highest": "#e0e3e5",
+                        "outline-variant": "#c3c5d9",
+                        "surface-bright": "#f7f9fb",
+                        "on-error-container": "#93000a",
+                        "on-error": "#ffffff",
+                        "background": "#f7f9fb",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#b7c4ff",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container-high": "#e6e8ea",
+                        "on-background": "#191c1e",
+                        "outline": "#737688",
+                        "primary-fixed": "#dde1ff",
+                        "surface-container": "#eceef0",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-variant": "#e0e3e5",
+                        "on-primary-fixed": "#001452",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#0052ff",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "primary": "#003ec7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "lg": "32px",
+                        "gutter": "24px",
+                        "xl": "48px",
+                        "sm": "16px",
+                        "xs": "8px",
+                        "margin": "32px",
+                        "md": "24px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "tabular-nums": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "tabular-nums": ["14px", { "lineHeight": "20px", "fontWeight": "500" }]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface min-h-screen">
+<!-- TopNavBar Shell -->
+<header class="bg-surface-container-lowest dark:bg-surface-dim h-[64px] w-full sticky top-0 z-50 shadow-sm dark:shadow-none border-b border-outline-variant dark:border-outline">
+<div class="flex items-center justify-between px-lg w-full max-w-[1280px] mx-auto h-full">
+<div class="flex items-center gap-xl">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Fly Courier</span>
+<nav class="hidden md:flex gap-md">
+<a class="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Dashboard</a>
+<a class="font-body-md text-body-md text-primary dark:text-primary-fixed border-b-2 border-primary dark:border-primary-fixed pb-1 font-semibold" href="#">Shipments</a>
+<a class="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Fleet</a>
+<a class="font-body-md text-body-md text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200" href="#">Invoices</a>
+</nav>
+</div>
+<div class="flex-1 max-w-[500px] mx-xl">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-xl pl-xl pr-sm py-xs text-body-md focus:ring-2 focus:ring-primary" placeholder="Search track ID, customer, or fleet..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-low p-base rounded-full transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-low p-base rounded-full transition-colors">help</button>
+<div class="h-8 w-8 rounded-full bg-primary-container flex items-center justify-center overflow-hidden border border-outline-variant">
+<img alt="User profile" data-alt="A professional headshot of a middle-aged male logistics manager in a modern office. He is smiling warmly, wearing a crisp white dress shirt. The background is a soft-focus corporate environment with cool blue and slate grey tones, echoing a high-tech logistics control center. Natural daylight from a side window creates clean, bright highlights on his face." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCErF9-urKH4LAzAAxlHALF_RKuLIPKzHUdqC0-1dp23sI-haw10IsgV_R9yxhEtdk635bcA23_JtXq9sYKSec7M0k0YlkUxcGC33ZiiHxSH8XVDnt_BSU-zvoEPaaTARBYcJnt7HYcjgtDXp5xbuIFj-kvLdKQ2iYwp_zt90SROo82-PBIWmYOBFSoneHwuyFS2D7t6h9GYy0Ai7Wky-pWmMzJ8xqBs6tzY7nMVyMYvBnGv-cJUVeUilGp3vSBpiuQwhehBrWFBSs"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-[1280px] mx-auto px-lg py-xl">
+<!-- Page Header -->
+<div class="flex items-center justify-between mb-xl">
+<div>
+<nav class="flex gap-xs text-label-md font-label-md text-on-surface-variant mb-xs">
+<a class="hover:text-primary" href="#">Shipments</a>
+<span>/</span>
+<span class="text-on-surface">Book Shipment</span>
+</nav>
+<h1 class="font-display-lg text-display-lg text-on-surface">Book New Shipment</h1>
+</div>
+<div class="flex gap-md">
+<button class="px-md py-sm bg-surface-container-high text-on-surface-variant font-label-md text-label-md rounded-xl hover:bg-surface-container-highest transition-all active:scale-95">Cancel</button>
+<button class="px-md py-sm bg-primary text-on-primary font-label-md text-label-md rounded-xl shadow-sm hover:bg-surface-tint transition-all active:scale-95 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">save</span>
+                    Create Shipment
+                </button>
+</div>
+</div>
+<div class="grid grid-cols-12 gap-lg">
+<!-- Form Canvas -->
+<div class="col-span-12 lg:col-span-8 space-y-lg">
+<!-- Section 1: Consignee Details -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+<div class="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+<div class="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined">person</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md">Consignee Detail</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Recipient's contact and delivery information</p>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Full Name *</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="e.g. John Doe" type="text"/>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Phone Number *</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="+92 300 1234567" type="tel"/>
+</div>
+<div class="md:col-span-2 space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Delivery Address *</label>
+<textarea class="w-full border border-outline-variant rounded-lg p-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Street address, building, floor..." rows="2"></textarea>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Destination City *</label>
+<select class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all bg-white">
+<option>Select City</option>
+<option>Karachi</option>
+<option>Lahore</option>
+<option>Islamabad</option>
+</select>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Area/Locality</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="DHA Phase 6" type="text"/>
+</div>
+</div>
+</section>
+<!-- Section 2: Shipment Detail -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+<div class="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+<div class="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md">Shipment Detail</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Package weight, contents, and value</p>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Weight (kg) *</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="0.5" step="0.1" type="number"/>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Pieces *</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="1" type="number"/>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">COD Amount (PKR)</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="0" type="number"/>
+</div>
+<div class="md:col-span-2 space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Product Description *</label>
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="e.g. Electronics, Clothing" type="text"/>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Service Type</label>
+<select class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all bg-white">
+<option>Overnight</option>
+<option>Detained</option>
+<option>Second Day</option>
+</select>
+</div>
+</div>
+</section>
+<!-- Section 3: Collection Detail -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+<div class="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+<div class="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined">local_shipping</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md">Collection Detail</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Pickup timing and special instructions</p>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Pickup Date</label>
+<div class="relative">
+<input class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" type="date"/>
+</div>
+</div>
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Pickup Time Slot</label>
+<select class="w-full h-10 border border-outline-variant rounded-lg px-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all bg-white">
+<option>Morning (09 AM - 12 PM)</option>
+<option>Afternoon (12 PM - 04 PM)</option>
+<option>Evening (04 PM - 08 PM)</option>
+</select>
+</div>
+<div class="md:col-span-2 space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Special Instructions</label>
+<textarea class="w-full border border-outline-variant rounded-lg p-sm text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Fragile item, call before arrival..." rows="2"></textarea>
+</div>
+</div>
+</section>
+</div>
+<!-- Sidebar / Summary & Stats -->
+<div class="col-span-12 lg:col-span-4 space-y-lg">
+<!-- Visual Anchor Image -->
+<div class="rounded-xl overflow-hidden border border-outline-variant shadow-sm h-48 relative group">
+<img alt="Fly Courier Dashboard Overview" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCso3PSLKmhfWtz_0bE_k1jKISWASyYG_trC5Meib2KR22S3asUQMdzdsqT_MQHhLRhuIJ_4BovlNzry9o2vwBDrotvIgIJfl2mc0DnQsvxVYTtckFLOzoAVRGj2rdUaRjtQL1eQMZyAOrfZ2FByat4DsDvFhncMl4G1pfu2_tC6jDpBetNsNVC3xWT-2dRceBU07IMQr1wmsyF2zGlVHh4V9NsiM9lMzR27NOhJpP2HacGcpd2oD179mMPZgSBmNy2hX5uEpv8YOw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-md">
+<p class="text-white font-label-md text-label-md">Current Logistics Performance Dashboard</p>
+</div>
+</div>
+<!-- Live Quote Card -->
+<div class="bg-primary text-on-primary rounded-xl p-md shadow-lg">
+<h3 class="font-headline-md text-headline-md mb-md flex items-center gap-xs">
+<span class="material-symbols-outlined">payments</span>
+                        Estimated Cost
+                    </h3>
+<div class="space-y-sm mb-lg">
+<div class="flex justify-between items-center opacity-80">
+<span class="font-body-md text-body-md">Base Rate</span>
+<span class="font-tabular-nums text-tabular-nums">PKR 250.00</span>
+</div>
+<div class="flex justify-between items-center opacity-80">
+<span class="font-body-md text-body-md">Fuel Surcharge</span>
+<span class="font-tabular-nums text-tabular-nums">PKR 35.00</span>
+</div>
+<div class="flex justify-between items-center opacity-80 border-b border-white/20 pb-sm">
+<span class="font-body-md text-body-md">GST (17%)</span>
+<span class="font-tabular-nums text-tabular-nums">PKR 48.45</span>
+</div>
+<div class="flex justify-between items-center pt-xs">
+<span class="font-headline-md text-headline-md">Total</span>
+<span class="font-display-lg text-display-lg tracking-tight">PKR 333.45</span>
+</div>
+</div>
+<p class="font-label-md text-[10px] uppercase tracking-widest opacity-60 text-center">Final price calculated at warehouse</p>
+</div>
+<!-- Helpful Tips Bento -->
+<div class="bg-surface-container-high rounded-xl p-md space-y-md">
+<h4 class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">Quick Actions</h4>
+<button class="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:border-primary transition-colors text-left">
+<span class="material-symbols-outlined text-primary">history</span>
+<div>
+<p class="font-label-md text-label-md">Recent Recipients</p>
+<p class="text-[10px] text-on-surface-variant">Autofill from past bookings</p>
+</div>
+</button>
+<button class="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:border-primary transition-colors text-left">
+<span class="material-symbols-outlined text-primary">calculate</span>
+<div>
+<p class="font-label-md text-label-md">Rate Calculator</p>
+<p class="text-[10px] text-on-surface-variant">Compare different service levels</p>
+</div>
+</button>
+</div>
+<!-- Info Alert -->
+<div class="bg-secondary-container/30 border border-secondary-container rounded-xl p-md flex gap-sm">
+<span class="material-symbols-outlined text-on-secondary-container">info</span>
+<p class="font-body-md text-body-md text-on-secondary-container">
+                        Please ensure the consignee's phone number is correct. Courier will send a tracking link via SMS upon collection.
+                    </p>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Action Bar (Sticky Mobile) -->
+<div class="fixed bottom-0 left-0 right-0 bg-white border-t border-outline-variant p-sm lg:hidden flex gap-sm z-50">
+<button class="flex-1 py-sm bg-surface-container-high text-on-surface-variant font-label-md text-label-md rounded-lg">Draft</button>
+<button class="flex-[2] py-sm bg-primary text-on-primary font-label-md text-label-md rounded-lg shadow-md">Create Shipment</button>
+</div>
+<script>
+        // Simple micro-interaction for form inputs
+        const inputs = document.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.querySelector('label')?.classList.add('text-primary');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.querySelector('label')?.classList.remove('text-primary');
+            });
+        });
+
+        // Add visual feedback on save button
+        const saveBtn = document.querySelector('button.bg-primary');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function() {
+                const originalContent = this.innerHTML;
+                this.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Processing...';
+                this.classList.add('opacity-80');
+                
+                setTimeout(() => {
+                    this.innerHTML = '<span class="material-symbols-outlined">check_circle</span> Booked!';
+                    this.classList.remove('bg-primary');
+                    this.classList.add('bg-green-600');
+                    
+                    setTimeout(() => {
+                        this.innerHTML = originalContent;
+                        this.classList.remove('bg-green-600', 'opacity-80');
+                        this.classList.add('bg-primary');
+                    }, 2000);
+                }, 1500);
+            });
+        }
+    </script>
+</body></html>

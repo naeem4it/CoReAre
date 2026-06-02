@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shipper Advise Management | Fly Courier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "background": "#f7f9fb",
+                      "surface-container-lowest": "#ffffff",
+                      "on-background": "#191c1e",
+                      "surface-tint": "#004ced",
+                      "error": "#ba1a1a",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "tertiary-container": "#57677e",
+                      "surface-container-low": "#f2f4f6",
+                      "surface-container-high": "#e6e8ea",
+                      "tertiary": "#3f4f65",
+                      "secondary": "#565e74",
+                      "surface-variant": "#e0e3e5",
+                      "surface-dim": "#d8dadc",
+                      "surface-container-highest": "#e0e3e5",
+                      "outline-variant": "#c3c5d9",
+                      "on-tertiary": "#ffffff",
+                      "on-surface-variant": "#434656",
+                      "inverse-surface": "#2d3133",
+                      "surface-container": "#eceef0",
+                      "secondary-fixed": "#dae2fd",
+                      "on-error-container": "#93000a",
+                      "primary-fixed-dim": "#b7c4ff",
+                      "on-primary": "#ffffff",
+                      "primary-container": "#0052ff",
+                      "outline": "#737688",
+                      "inverse-primary": "#b7c4ff",
+                      "tertiary-fixed-dim": "#b7c8e1",
+                      "tertiary-fixed": "#d3e4fe",
+                      "on-tertiary-container": "#d6e6ff",
+                      "on-secondary": "#ffffff",
+                      "on-primary-fixed-variant": "#0038b6",
+                      "on-primary-container": "#dfe3ff",
+                      "on-surface": "#191c1e",
+                      "secondary-container": "#dae2fd",
+                      "on-tertiary-fixed-variant": "#38485d",
+                      "on-tertiary-fixed": "#0b1c30",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "surface-bright": "#f7f9fb",
+                      "on-secondary-fixed": "#131b2e",
+                      "inverse-on-surface": "#eff1f3",
+                      "primary": "#003ec7",
+                      "on-primary-fixed": "#001452",
+                      "on-secondary-container": "#5c647a",
+                      "on-error": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "surface": "#f7f9fb",
+                      "primary-fixed": "#dde1ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "lg": "32px",
+                      "base": "4px",
+                      "md": "24px",
+                      "margin": "32px",
+                      "xs": "8px",
+                      "sm": "16px",
+                      "xl": "48px",
+                      "gutter": "24px"
+              },
+              "fontFamily": {
+                      "tabular-nums": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-md": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #f7f9fb;
+            font-family: 'Inter', sans-serif;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .table-row-hover:hover {
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body class="text-on-background">
+<!-- Sidebar Navigation -->
+<aside class="w-64 h-screen fixed left-0 top-0 bg-surface dark:bg-surface-dim border-r border-outline-variant dark:border-outline flex flex-col p-sm gap-xs z-40 hidden md:flex">
+<div class="flex items-center gap-sm mb-lg px-xs">
+<div class="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">local_shipping</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-headline-lg font-black text-primary">Fly Courier</h1>
+<p class="font-label-md text-label-md text-outline">Logistics Mastery</p>
+</div>
+</div>
+<nav class="flex-grow space-y-1">
+<a class="flex items-center gap-sm px-sm py-2 text-secondary hover:bg-surface-container-high rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-2 text-secondary hover:bg-surface-container-high rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">local_shipping</span>
+<span>Booking</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-2 bg-secondary-container text-on-secondary-container font-bold rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">location_on</span>
+<span>Tracking</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-2 text-secondary hover:bg-surface-container-high rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Load Sheets</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-2 text-secondary hover:bg-surface-container-high rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Customers</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-2 text-secondary hover:bg-surface-container-high rounded-lg transition-all font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-md">
+<button class="w-full py-3 bg-primary text-on-primary rounded-xl font-bold active:scale-95 transition-transform flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined">add</span>
+                New Shipment
+            </button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="md:ml-64 min-h-screen">
+<!-- Top Navigation Bar -->
+<header class="h-[64px] w-full sticky top-0 z-50 bg-surface-container-lowest border-b border-outline-variant shadow-sm flex items-center justify-between px-lg">
+<div class="flex items-center gap-lg flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary text-body-md font-body-md outline-none" placeholder="Search shipments, invoices, or customers..." type="text"/>
+</div>
+<div class="hidden lg:flex items-center gap-md">
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Dashboard</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-semibold font-body-md text-body-md" href="#">Shipments</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Fleet</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Invoices</a>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors relative">
+<span class="material-symbols-outlined text-outline">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-outline">help</span>
+</button>
+<div class="h-8 w-[1px] bg-outline-variant mx-2"></div>
+<div class="flex items-center gap-xs cursor-pointer group">
+<div class="w-8 h-8 rounded-full bg-secondary-container overflow-hidden border border-outline-variant">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbXUQqroowebaK1-JvRRkaL3rf3Ng7PCrgkvRotoOxHXVICjFP71tMxEz6wkoMVbexyFJiZgLXFuOOpzj3TdVeQxOPcUn1-NCclnwST1wSNmi0Vt-5MgRMsek4rvwcar2ypvFnC4liGWaEn9pVRMV9Wff-QFtnCi_S0eqIN7zzlRNXbXMHazjXP7ZqsNrj1XAaxUnZ-nOT_zqqiYAnvt6zdPqYWVI9H9rUt5sTxjQ5NpK-Ubkh0nnnWpcheEDKjK7-dS6putQoruY"/>
+</div>
+<span class="font-label-md text-label-md font-bold text-on-surface group-hover:text-primary transition-colors">Alex Rivera</span>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-lg max-w-[1280px] mx-auto">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-md mb-xl">
+<div>
+<div class="flex items-center gap-xs text-primary mb-1">
+<span class="material-symbols-outlined text-sm">assignment_return</span>
+<span class="font-label-md text-label-md uppercase tracking-widest">Delivery Management</span>
+</div>
+<h2 class="font-display-lg text-display-lg text-on-background">Shipper Advise</h2>
+<p class="text-on-surface-variant font-body-md text-body-md mt-1">Manage and resolve failed delivery attempts across your shipment network.</p>
+</div>
+<!-- Filters Section -->
+<div class="flex items-center gap-sm bg-white p-2 rounded-xl border border-outline-variant shadow-sm">
+<div class="flex flex-col px-3 border-r border-outline-variant">
+<label class="font-label-md text-[10px] text-outline uppercase">From Date</label>
+<input class="border-none p-0 focus:ring-0 text-tabular-nums text-sm font-medium" type="date" value="2024-05-01"/>
+</div>
+<div class="flex flex-col px-3 border-r border-outline-variant">
+<label class="font-label-md text-[10px] text-outline uppercase">To Date</label>
+<input class="border-none p-0 focus:ring-0 text-tabular-nums text-sm font-medium" type="date" value="2024-05-14"/>
+</div>
+<button class="bg-primary-container text-on-primary-container p-2 rounded-lg hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+</div>
+<!-- KPI Summary Strip -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-md mb-xl">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-error-container/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined">error_outline</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-outline">Total Failed</p>
+<h3 class="font-headline-lg text-headline-lg text-on-background">124</h3>
+</div>
+</div>
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">pending_actions</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-outline">Pending Advice</p>
+<h3 class="font-headline-lg text-headline-lg text-on-background">48</h3>
+</div>
+</div>
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-700">
+<span class="material-symbols-outlined">task_alt</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-outline">Resolved Today</p>
+<h3 class="font-headline-lg text-headline-lg text-on-background">12</h3>
+</div>
+</div>
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
+<span class="material-symbols-outlined">timer</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-outline">Avg. Response</p>
+<h3 class="font-headline-lg text-headline-lg text-on-background">4.2h</h3>
+</div>
+</div>
+</div>
+<!-- Main Data Table Container -->
+<div class="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+<div class="p-md border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+<h4 class="font-headline-md text-headline-md text-on-surface">Recent Failed Attempts</h4>
+<div class="flex items-center gap-sm">
+<button class="flex items-center gap-xs px-3 py-1.5 border border-outline-variant rounded-lg text-label-md font-label-md hover:bg-white transition-colors">
+<span class="material-symbols-outlined text-sm">download</span> Export CSV
+                        </button>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 flex items-center justify-center text-outline hover:text-primary"><span class="material-symbols-outlined">chevron_left</span></button>
+<span class="text-label-md font-label-md">Page 1 of 12</span>
+<button class="w-8 h-8 flex items-center justify-center text-outline hover:text-primary"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 font-label-md text-label-md text-outline border-b border-outline-variant">
+<th class="px-md py-3 font-semibold">SHIPMENT #</th>
+<th class="px-md py-3 font-semibold">SHIPMENT DATE</th>
+<th class="px-md py-3 font-semibold">STATUS</th>
+<th class="px-md py-3 font-semibold">STATUS DATE</th>
+<th class="px-md py-3 font-semibold">REASON</th>
+<th class="px-md py-3 font-semibold">DESTINATION</th>
+<th class="px-md py-3 font-semibold">SHIPPER ADVICE</th>
+<th class="px-md py-3 font-semibold text-right">ACTION</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md text-on-surface">
+<!-- Row 1 -->
+<tr class="border-b border-outline-variant table-row-hover transition-colors">
+<td class="px-md py-4 font-tabular-nums font-bold text-primary">#FL-98231</td>
+<td class="px-md py-4 text-outline">12 May 2024</td>
+<td class="px-md py-4">
+<span class="px-2 py-1 rounded bg-error/10 text-error font-semibold text-[11px] uppercase tracking-wider">Attempt 1</span>
+</td>
+<td class="px-md py-4 text-outline">14 May 2024</td>
+<td class="px-md py-4 font-medium">Consignee Not Available</td>
+<td class="px-md py-4">Dubai, UAE</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-xs text-outline italic">
+<span class="material-symbols-outlined text-sm">history_edu</span>
+                                        Awaiting advice...
+                                    </div>
+</td>
+<td class="px-md py-4 text-right">
+<button class="px-4 py-1.5 bg-primary text-white rounded-lg text-label-md font-bold hover:bg-primary-container transition-colors">Provide Advice</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="border-b border-outline-variant table-row-hover transition-colors">
+<td class="px-md py-4 font-tabular-nums font-bold text-primary">#FL-98105</td>
+<td class="px-md py-4 text-outline">11 May 2024</td>
+<td class="px-md py-4">
+<span class="px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-semibold text-[11px] uppercase tracking-wider">Attempt 2</span>
+</td>
+<td class="px-md py-4 text-outline">13 May 2024</td>
+<td class="px-md py-4 font-medium">Incorrect Address</td>
+<td class="px-md py-4">London, UK</td>
+<td class="px-md py-4">
+<div class="max-w-[180px] truncate text-xs text-on-surface-variant bg-surface-container p-2 rounded">
+                                        Reroute to Warehouse B...
+                                    </div>
+</td>
+<td class="px-md py-4 text-right">
+<button class="px-4 py-1.5 border border-outline text-on-surface rounded-lg text-label-md font-bold hover:bg-surface-container-low transition-colors">View Details</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="border-b border-outline-variant table-row-hover transition-colors">
+<td class="px-md py-4 font-tabular-nums font-bold text-primary">#FL-97992</td>
+<td class="px-md py-4 text-outline">10 May 2024</td>
+<td class="px-md py-4">
+<span class="px-2 py-1 rounded bg-error/10 text-error font-semibold text-[11px] uppercase tracking-wider">Attempt 1</span>
+</td>
+<td class="px-md py-4 text-outline">13 May 2024</td>
+<td class="px-md py-4 font-medium">Refused by Consignee</td>
+<td class="px-md py-4">New York, US</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-xs text-outline italic">
+<span class="material-symbols-outlined text-sm">history_edu</span>
+                                        Awaiting advice...
+                                    </div>
+</td>
+<td class="px-md py-4 text-right">
+<button class="px-4 py-1.5 bg-primary text-white rounded-lg text-label-md font-bold hover:bg-primary-container transition-colors">Provide Advice</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="border-b border-outline-variant table-row-hover transition-colors">
+<td class="px-md py-4 font-tabular-nums font-bold text-primary">#FL-97881</td>
+<td class="px-md py-4 text-outline">09 May 2024</td>
+<td class="px-md py-4">
+<span class="px-2 py-1 rounded bg-orange-100 text-orange-700 font-semibold text-[11px] uppercase tracking-wider">Attempt 3</span>
+</td>
+<td class="px-md py-4 text-outline">12 May 2024</td>
+<td class="px-md py-4 font-medium">Payment Issue (COD)</td>
+<td class="px-md py-4">Karachi, PK</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-xs text-green-600 font-medium text-xs">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+                                        Contacted &amp; Resolved
+                                    </div>
+</td>
+<td class="px-md py-4 text-right">
+<button class="px-4 py-1.5 border border-outline text-on-surface rounded-lg text-label-md font-bold hover:bg-surface-container-low transition-colors">View Logs</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Contextual Insight/Guidance Section -->
+<div class="mt-xl grid grid-cols-1 lg:grid-cols-3 gap-lg">
+<div class="lg:col-span-2 relative h-[320px] rounded-2xl overflow-hidden shadow-lg group">
+<img alt="System view" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRJqhJDOh1YkLzrRsEBgAJ5PyhtS334hky5khHHaLAcbpDOvroTMGE0JzI6-QBDkbMdn3okBYLRErtGZ6289UVSUlToJZylgM9ZJDbs8WURJbU7L9hqtBxrw1_oa5ncbWpcLJ0FEsj2-Kp7c8YjCJlCQl-ZZXNcG2gAgRbuswGWrvRft29KJf00kbgNjcslMNoDRvsmkrhC8b8fvkJYwCQ1wlA54T-YNjCyf2tFW3EHUpyEtg7T3ytoSHYPA5cTv_9pUsP1dtr60A"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-xl">
+<span class="text-primary-fixed bg-primary/20 px-3 py-1 rounded-full text-label-md font-bold w-fit mb-2">Platform Context</span>
+<h4 class="text-white font-headline-lg text-headline-lg mb-2">Velocity Corporate Integration</h4>
+<p class="text-slate-300 font-body-md text-body-md max-w-xl">
+                            Our Shipper Advise module is directly synced with real-time driver telemetry. Failed attempts trigger instant notifications to the corporate dashboard, reducing RTO (Return to Origin) rates by up to 22%.
+                        </p>
+</div>
+</div>
+<div class="bg-primary p-xl rounded-2xl text-on-primary flex flex-col justify-between">
+<div>
+<span class="material-symbols-outlined text-4xl mb-md">lightbulb</span>
+<h4 class="font-headline-md text-headline-md mb-sm">Resolution Tip</h4>
+<p class="font-body-md text-body-md opacity-90 leading-relaxed">
+                            Most "Consignee Not Available" statuses are resolved by authorizing a secondary delivery window between 5 PM and 8 PM. Use the 'Provide Advice' button to set a preferred re-delivery slot.
+                        </p>
+</div>
+<button class="mt-lg w-full py-3 bg-white text-primary rounded-xl font-bold hover:bg-surface-container-low transition-colors">
+                        Read Optimization Guide
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button for Mobile -->
+<button class="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-primary text-on-primary rounded-full shadow-xl flex items-center justify-center z-50">
+<span class="material-symbols-outlined">add</span>
+</button>
+<script>
+        // Simple micro-interaction for rows
+        document.querySelectorAll('tr.table-row-hover').forEach(row => {
+            row.addEventListener('click', () => {
+                // In a real app, this would navigate to detail or open a modal
+                console.log('Row clicked');
+            });
+        });
+
+        // Search bar focus effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('ring-2', 'ring-primary');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('ring-2', 'ring-primary');
+        });
+    </script>
+</body></html>

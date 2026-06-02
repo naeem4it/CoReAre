@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>API Repository | Fly Courier DevPortal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .code-block {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .endpoint-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .endpoint-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-container": "#0052ff",
+                    "on-secondary": "#ffffff",
+                    "secondary-fixed": "#dae2fd",
+                    "primary-fixed-dim": "#b7c4ff",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "primary-fixed": "#dde1ff",
+                    "on-secondary-container": "#5c647a",
+                    "on-error-container": "#93000a",
+                    "surface-tint": "#004ced",
+                    "outline-variant": "#c3c5d9",
+                    "on-error": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container-lowest": "#ffffff",
+                    "outline": "#737688",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "on-secondary-fixed": "#131b2e",
+                    "tertiary-fixed": "#d3e4fe",
+                    "surface": "#f7f9fb",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-primary-container": "#dfe3ff",
+                    "secondary-container": "#dae2fd",
+                    "surface-container-high": "#e6e8ea",
+                    "tertiary": "#3f4f65",
+                    "inverse-primary": "#b7c4ff",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "tertiary-container": "#57677e",
+                    "surface-container": "#eceef0",
+                    "surface-bright": "#f7f9fb",
+                    "on-tertiary-container": "#d6e6ff",
+                    "surface-dim": "#d8dadc",
+                    "on-primary-fixed-variant": "#0038b6",
+                    "surface-variant": "#e0e3e5",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-surface-variant": "#434656",
+                    "background": "#f7f9fb",
+                    "on-surface": "#191c1e",
+                    "inverse-surface": "#2d3133",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-primary": "#ffffff",
+                    "on-background": "#191c1e",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#001452",
+                    "secondary": "#565e74",
+                    "surface-container-low": "#f2f4f6",
+                    "error": "#ba1a1a",
+                    "primary": "#003ec7"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "lg": "32px",
+                    "base": "4px",
+                    "md": "24px",
+                    "xl": "48px",
+                    "margin": "32px",
+                    "sm": "16px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "tabular-nums": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md overflow-hidden h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 h-16 bg-surface border-b border-outline-variant shadow-sm flex justify-between items-center px-lg">
+<div class="flex items-center gap-md">
+<span class="font-display-lg text-display-lg font-bold text-primary">Fly Courier DevPortal</span>
+</div>
+<div class="flex-1 max-w-[600px] mx-xl">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg pl-xl pr-md py-xs focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="Search for endpoints, plugins, or guides..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-low p-xs rounded-full transition-colors">dark_mode</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-low p-xs rounded-full transition-colors">notifications</span>
+<div class="flex items-center gap-xs ml-xs cursor-pointer hover:bg-surface-container-low p-xs rounded-lg transition-colors">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+<span class="font-label-md text-label-md text-on-surface">DevAdmin_FC</span>
+</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 pt-16 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-surface-container-low border-r border-outline-variant flex flex-col p-sm space-y-base z-40">
+<div class="px-md py-sm">
+<h2 class="font-headline-md text-headline-md text-primary">API Reference</h2>
+<p class="font-label-md text-label-md text-on-surface-variant">v2.4.0-stable</p>
+</div>
+<nav class="flex-1 space-y-base overflow-y-auto">
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">info</span>
+<span class="font-label-md text-label-md">Introduction</span>
+</div>
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">vpn_key</span>
+<span class="font-label-md text-label-md">Authentication</span>
+</div>
+<!-- Active Tab: Booking API as it contains the main endpoints like Book Shipment -->
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer bg-secondary-container text-on-secondary-container font-bold rounded-lg">
+<span class="material-symbols-outlined">local_shipping</span>
+<span class="font-label-md text-label-md">Booking API</span>
+</div>
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-label-md text-label-md">Tracking API</span>
+</div>
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">map</span>
+<span class="font-label-md text-label-md">City Services</span>
+</div>
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">sync_alt</span>
+<span class="font-label-md text-label-md">Webhooks</span>
+</div>
+</nav>
+<div class="pt-sm border-t border-outline-variant">
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">help_outline</span>
+<span class="font-label-md text-label-md">Support</span>
+</div>
+<div class="flex items-center gap-sm px-md py-sm cursor-pointer text-on-surface-variant hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">check_circle</span>
+<span class="font-label-md text-label-md">Status</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 overflow-y-auto bg-surface p-lg">
+<div class="max-w-[1280px] mx-auto space-y-lg">
+<!-- Section 1: API Key and Account ID Management -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex flex-col gap-sm">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-md text-headline-md text-on-surface">Production API Key</h3>
+<span class="text-xs font-bold uppercase tracking-widest text-primary bg-primary-fixed px-xs py-[2px] rounded">Active</span>
+</div>
+<div class="relative">
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-md py-sm font-mono text-sm pr-12 focus:outline-none" readonly="" type="password" value="fc_live_7721_99x2_kklp_9001"/>
+<button class="absolute right-sm top-1/2 -translate-y-1/2 text-primary hover:text-primary-container transition-colors">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+</div>
+<p class="text-xs text-on-surface-variant">Last rotated 12 days ago. <a class="text-primary hover:underline font-bold" href="#">Rotate Key</a></p>
+</div>
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm flex flex-col gap-sm">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-md text-headline-md text-on-surface">Account Identifier</h3>
+<span class="material-symbols-outlined text-outline">help_outline</span>
+</div>
+<div class="relative">
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-md py-sm font-mono text-sm pr-12 focus:outline-none" readonly="" type="text" value="ACC_FLY_7882910"/>
+<button class="absolute right-sm top-1/2 -translate-y-1/2 text-primary hover:text-primary-container transition-colors">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+</div>
+<p class="text-xs text-on-surface-variant">Merchant ID: <span class="font-mono">M-9811-A</span> | Region: EU-WEST-1</p>
+</div>
+</section>
+<!-- Section 2: Ready-to-use Plugins -->
+<section class="space-y-sm">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">E-commerce Plugins</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- WordPress Card -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm hover:border-primary transition-colors cursor-pointer group flex items-start gap-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<img alt="WordPress Logo" class="w-10 h-10 object-contain" data-alt="A clean, flat vector illustration of the WordPress logo centered on a high-contrast white background. The logo maintains its iconic blue and white circular emblem. The overall aesthetic is professional, minimalist, and corporate, fitting a modern software documentation portal." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUrg6CI0A0ZQ6lG15rZ8vd3HB97uCRQ00SubLOz8mYPcAq3Kqtjpva152wFK2RiD1PfjhxRrrjB58cVFWRFb6t8BFEaD5yzArMJKR7BYpG7zfG6Iy4d0pxuhSVC2Oh2r3R8iG5aI6CBEJ8PJwoV_GnTDa9F7jCfZ87NPSEtt-BGdErGq5nSJn528E4E1yfRHDo0WeCBUYVO6kZ39KuV0Lx1R6h7XfZZvYZlsFjpbpejvYu6fjWr0DKjTushxQIJftGr5qhV2Lc7gs"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">WordPress Plugin</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">One-click installation for WooCommerce stores. Supports automatic label generation and real-time tracking updates.</p>
+<div class="mt-md flex items-center gap-xs text-primary font-bold">
+<span class="text-sm">Download v2.1.0</span>
+<span class="material-symbols-outlined text-sm">download</span>
+</div>
+</div>
+</div>
+<!-- Shopify Card -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm hover:border-primary transition-colors cursor-pointer group flex items-start gap-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<img alt="Shopify Logo" class="w-10 h-10 object-contain" data-alt="A professional, high-resolution Shopify brand mark featuring the iconic green shopping bag with the white S logo. The image is set against a clean, neutral background with soft, ambient lighting. The style is sharp and corporate, emphasizing official partnership and integration readiness." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBClK157Q58Qn2dc4BYrm2sQTaxfp5-SC-qvn5up6VkC8i2eY_6ZEBzWoM5EpT9QreGtMBQ0u_lRQjL60mytgY5RDThn7pnUpW7vNed2RNlDfZzMqnM2A6NAZWDYxWNFoJOxN4BF4WX2uRrdD9MwNaOO0aj6av6ysta3ubk9apdPrONCwRgiTg_APaJOp9nJ8q5l3N41jnaLZyaYmdoVgvA-JCbbRal4jNGHhHkkTGQXdYIOJrEzakBG_T8SdThGdAZnRa6QMWg2Kk"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Shopify App</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">Seamlessly sync orders and automate shipping. Integrated directly into the Shopify Admin dashboard.</p>
+<div class="mt-md flex items-center gap-xs text-primary font-bold">
+<span class="text-sm">Get from Shopify App Store</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: REST API Endpoints -->
+<section class="space-y-sm">
+<div class="flex justify-between items-end">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">REST API Endpoints</h2>
+<div class="flex gap-xs">
+<button class="px-md py-xs bg-primary text-white font-bold rounded-lg hover:bg-primary-container transition-colors shadow-sm">Postman Collection</button>
+<button class="px-md py-xs border border-outline-variant text-on-surface-variant font-bold rounded-lg hover:bg-surface-container-low transition-colors">Download OpenAPI Spec</button>
+</div>
+</div>
+<div class="space-y-lg mt-md">
+<!-- Endpoint: Book Shipment -->
+<div class="endpoint-card bg-white rounded-xl border border-outline-variant overflow-hidden">
+<div class="p-md border-b border-outline-variant bg-surface-container-lowest flex justify-between items-center">
+<div class="flex items-center gap-md">
+<span class="bg-primary-container text-white px-md py-xs rounded font-bold text-xs">POST</span>
+<h3 class="font-headline-md text-headline-md">Book Shipment</h3>
+</div>
+<span class="font-mono text-sm text-on-surface-variant">/api/v2/shipment/book</span>
+</div>
+<div class="p-md grid grid-cols-1 lg:grid-cols-2 gap-xl">
+<!-- Docs Column -->
+<div class="space-y-md">
+<div class="space-y-xs">
+<h4 class="font-label-md text-label-md text-outline uppercase tracking-wider">Required Headers</h4>
+<div class="overflow-x-auto">
+<table class="w-full text-sm border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant text-left">
+<th class="p-xs font-bold border-b border-outline-variant">Header</th>
+<th class="p-xs font-bold border-b border-outline-variant">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="p-xs border-b border-outline-variant font-mono">Authorization</td>
+<td class="p-xs border-b border-outline-variant text-on-surface-variant">Bearer {{API_KEY}}</td>
+</tr>
+<tr>
+<td class="p-xs border-b border-outline-variant font-mono">Content-Type</td>
+<td class="p-xs border-b border-outline-variant text-on-surface-variant">application/json</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="space-y-xs">
+<h4 class="font-label-md text-label-md text-outline uppercase tracking-wider">Parameters</h4>
+<div class="overflow-x-auto">
+<table class="w-full text-sm border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant text-left">
+<th class="p-xs font-bold border-b border-outline-variant">Name</th>
+<th class="p-xs font-bold border-b border-outline-variant">Type</th>
+<th class="p-xs font-bold border-b border-outline-variant">Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="p-xs border-b border-outline-variant font-bold">origin_zip</td>
+<td class="p-xs border-b border-outline-variant italic">String (Req)</td>
+<td class="p-xs border-b border-outline-variant text-on-surface-variant">"SW1A 1AA"</td>
+</tr>
+<tr>
+<td class="p-xs border-b border-outline-variant font-bold">service_type</td>
+<td class="p-xs border-b border-outline-variant italic">Enum (Req)</td>
+<td class="p-xs border-b border-outline-variant text-on-surface-variant">"EXPRESS"</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Code Column -->
+<div class="space-y-md">
+<div class="rounded-lg overflow-hidden border border-outline-variant">
+<div class="bg-inverse-surface px-md py-xs flex justify-between items-center">
+<span class="text-white text-xs font-bold">JSON Request</span>
+<span class="material-symbols-outlined text-sm text-outline cursor-pointer hover:text-white">content_copy</span>
+</div>
+<pre class="code-block p-md text-xs leading-relaxed">{
+  "sender": { "name": "Global Hub", "city_id": 402 },
+  "receiver": { "name": "Alex Smith", "city_id": 501 },
+  "package": { "weight": 2.5, "unit": "kg" }
+}</pre>
+</div>
+<div class="rounded-lg overflow-hidden border border-outline-variant">
+<div class="bg-inverse-surface px-md py-xs flex justify-between items-center">
+<span class="text-green-400 text-xs font-bold">Success Response (201)</span>
+</div>
+<pre class="code-block p-md text-xs leading-relaxed">{
+  "status": "success",
+  "shipment_id": "FC-9921-X",
+  "tracking_url": "https://fly.dev/track/9921"
+}</pre>
+</div>
+</div>
+</div>
+</div>
+<!-- Endpoint: Cancel Order (Compact Representation) -->
+<div class="endpoint-card bg-white rounded-xl border border-outline-variant overflow-hidden">
+<div class="p-md border-b border-outline-variant bg-surface-container-lowest flex justify-between items-center">
+<div class="flex items-center gap-md">
+<span class="bg-error text-white px-md py-xs rounded font-bold text-xs">DELETE</span>
+<h3 class="font-headline-md text-headline-md">Cancel Order</h3>
+</div>
+<span class="font-mono text-sm text-on-surface-variant">/api/v2/shipment/cancel/{id}</span>
+</div>
+<div class="p-md">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-xl">
+<div class="space-y-sm">
+<p class="text-on-surface-variant text-sm">Permanently cancels a pending shipment. Note: Shipments already 'In Transit' cannot be canceled via API and require manual support intervention.</p>
+<div class="flex gap-md">
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-outline mb-xs">Path Parameter</h4>
+<div class="p-xs bg-surface-container rounded border border-outline-variant font-mono text-xs">id (String)</div>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-outline mb-xs">Auth Required</h4>
+<div class="p-xs bg-surface-container rounded border border-outline-variant font-mono text-xs">Write Permission</div>
+</div>
+</div>
+</div>
+<div class="rounded-lg overflow-hidden border border-outline-variant">
+<div class="bg-inverse-surface px-md py-xs flex justify-between items-center">
+<span class="text-red-400 text-xs font-bold">Error Response (403)</span>
+</div>
+<pre class="code-block p-md text-xs leading-relaxed">{
+  "error": "SHIPMENT_IN_TRANSIT",
+  "message": "Shipment cannot be canceled after pickup."
+}</pre>
+</div>
+</div>
+</div>
+</div>
+<!-- Grid for smaller utility endpoints -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+<!-- City List -->
+<div class="bg-white rounded-xl border border-outline-variant p-md flex flex-col gap-sm">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold bg-green-100 text-green-800 px-xs py-[2px] rounded">GET</span>
+<span class="material-symbols-outlined text-outline text-sm">open_in_new</span>
+</div>
+<h4 class="font-headline-md text-headline-md">City List</h4>
+<p class="text-xs text-on-surface-variant">Fetch all supported service cities and their respective unique identifiers for shipment booking.</p>
+<div class="mt-auto pt-sm border-t border-outline-variant">
+<code class="text-[10px] text-primary">/api/v2/meta/cities</code>
+</div>
+</div>
+<!-- Tracking API -->
+<div class="bg-white rounded-xl border border-outline-variant p-md flex flex-col gap-sm">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold bg-green-100 text-green-800 px-xs py-[2px] rounded">GET</span>
+<span class="material-symbols-outlined text-outline text-sm">open_in_new</span>
+</div>
+<h4 class="font-headline-md text-headline-md">Tracking API</h4>
+<p class="text-xs text-on-surface-variant">Retrieve current status, location history, and estimated delivery time for any active tracking ID.</p>
+<div class="mt-auto pt-sm border-t border-outline-variant">
+<code class="text-[10px] text-primary">/api/v2/track/{id}</code>
+</div>
+</div>
+<!-- Address Labels -->
+<div class="bg-white rounded-xl border border-outline-variant p-md flex flex-col gap-sm">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold bg-primary-container text-white px-xs py-[2px] rounded">POST</span>
+<span class="material-symbols-outlined text-outline text-sm">open_in_new</span>
+</div>
+<h4 class="font-headline-md text-headline-md">Address Labels</h4>
+<p class="text-xs text-on-surface-variant">Generate PDF or PNG shipping labels for printing. Supports multiple formats (A4, 4x6 thermal).</p>
+<div class="mt-auto pt-sm border-t border-outline-variant">
+<code class="text-[10px] text-primary">/api/v2/labels/generate</code>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Help Footer -->
+<footer class="bg-inverse-surface p-xl rounded-2xl flex flex-col md:flex-row items-center justify-between gap-lg text-white">
+<div class="space-y-xs">
+<h3 class="font-headline-lg text-headline-lg">Need custom integration?</h3>
+<p class="text-on-surface-variant">Our engineering team can help with enterprise-level bespoke logistics workflows.</p>
+</div>
+<div class="flex gap-md">
+<button class="bg-white text-primary px-xl py-md rounded-lg font-bold hover:bg-surface-container-low transition-colors">Contact Sales</button>
+<button class="border border-outline px-xl py-md rounded-lg font-bold hover:bg-white/10 transition-colors">Join Discord</button>
+</div>
+</footer>
+</div>
+</main>
+</div>
+<!-- Floating Action Button - Only for Home/Dashboard context but keeping for completeness as "New Key" -->
+<button class="fixed bottom-lg right-lg w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-container transition-all active:scale-95 group z-50">
+<span class="material-symbols-outlined text-[28px]">add</span>
+<span class="absolute right-full mr-sm bg-inverse-surface text-white text-xs px-md py-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">Create API Key</span>
+</button>
+<script>
+        // Simple logic for interactive elements
+        document.querySelectorAll('.material-symbols-outlined').forEach(icon => {
+            if (icon.innerText === 'content_copy') {
+                icon.addEventListener('click', function() {
+                    const originalText = this.innerText;
+                    this.innerText = 'check';
+                    this.classList.add('text-green-500');
+                    setTimeout(() => {
+                        this.innerText = originalText;
+                        this.classList.remove('text-green-500');
+                    }, 2000);
+                });
+            }
+        });
+
+        // Search bar interaction
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('ring-2', 'ring-primary');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('ring-2', 'ring-primary');
+        });
+    </script>
+</body></html>

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Load Sheets - Fly Courier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ba1a1a",
+                    "inverse-on-surface": "#eff1f3",
+                    "tertiary-container": "#57677e",
+                    "on-surface-variant": "#434656",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "on-tertiary-container": "#d6e6ff",
+                    "surface": "#f7f9fb",
+                    "secondary-container": "#dae2fd",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary-container": "#dfe3ff",
+                    "on-tertiary": "#ffffff",
+                    "surface-dim": "#d8dadc",
+                    "on-secondary-fixed": "#131b2e",
+                    "error-container": "#ffdad6",
+                    "tertiary": "#3f4f65",
+                    "on-primary": "#ffffff",
+                    "surface-tint": "#004ced",
+                    "on-surface": "#191c1e",
+                    "surface-container-highest": "#e0e3e5",
+                    "outline-variant": "#c3c5d9",
+                    "surface-bright": "#f7f9fb",
+                    "on-error-container": "#93000a",
+                    "on-error": "#ffffff",
+                    "background": "#f7f9fb",
+                    "on-secondary": "#ffffff",
+                    "inverse-primary": "#b7c4ff",
+                    "secondary-fixed": "#dae2fd",
+                    "surface-container-high": "#e6e8ea",
+                    "on-background": "#191c1e",
+                    "outline": "#737688",
+                    "primary-fixed": "#dde1ff",
+                    "surface-container": "#eceef0",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "surface-variant": "#e0e3e5",
+                    "on-primary-fixed": "#001452",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-container": "#0052ff",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "primary": "#003ec7"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "lg": "32px",
+                    "gutter": "24px",
+                    "xl": "48px",
+                    "sm": "16px",
+                    "xs": "8px",
+                    "margin": "32px",
+                    "md": "24px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Inter"],
+                    "label-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "tabular-nums": ["Inter"]
+            },
+            "fontSize": {
+                    "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { background-color: #f7f9fb; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .data-table-row:hover { background-color: #f8fafc; }
+        .sidebar-item-active { background-color: #dae2fd; color: #131b2e; font-weight: 700; border-radius: 0.5rem; }
+    </style>
+</head>
+<body class="bg-background text-on-background">
+<!-- SideNavBar (Authority Source: JSON) -->
+<aside class="w-64 h-screen fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col p-sm gap-xs z-50">
+<div class="mb-lg px-xs">
+<h1 class="font-headline-lg text-headline-lg font-black text-primary">Fly Courier</h1>
+<p class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">Logistics Mastery</p>
+</div>
+<button class="mb-md mx-xs py-sm bg-primary-container text-on-primary hover:opacity-90 transition-all flex items-center justify-center gap-xs rounded-lg active:scale-95">
+<span class="material-symbols-outlined">add</span>
+<span class="font-label-md text-label-md">New Shipment</span>
+</button>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-sm py-md text-secondary hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Overview</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-md text-secondary hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined">local_shipping</span>
+<span class="font-label-md text-label-md">Booking</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-md text-secondary hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-label-md text-label-md">Tracking</span>
+</a>
+<!-- Active State for Load Sheets -->
+<a class="flex items-center gap-sm px-sm py-md sidebar-item-active" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-md text-label-md">Load Sheets</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-md text-secondary hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-md text-label-md">Customers</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-md text-secondary hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar (Authority Source: JSON) -->
+<header class="h-[64px] w-full sticky top-0 z-40 bg-surface-container-lowest border-b border-outline-variant shadow-sm flex items-center justify-between px-lg">
+<div class="flex items-center gap-lg flex-1">
+<div class="relative w-full max-w-[600px]">
+<span class="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-full pl-xl pr-md py-xs text-body-md focus:ring-2 focus:ring-primary transition-all" placeholder="Global Search (Shipments, Load Sheets, Customers...)" type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<nav class="hidden md:flex items-center gap-lg mr-lg">
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Dashboard</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Shipments</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Fleet</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Invoices</a>
+</nav>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">notifications</button>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">help</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLGqvh-yFnaTkkp1_AyJT3aaeSk24TDEX4wPvZEXjO9EYx9rApPJDepkKLRMkRD7LPfDfz6IYvJzJaiklwzJVtIM08rikBXe7_tyvtB8soK42p1kjmHF9bmsN8jlWpiovlfjJ8xPgJK3Z3vnMeiPRL76Q31vcyDzEJ-KyjIGRGoN-LtumDCDHajavtPMIrSHqNu7_mda8cpJritKi73rFKwdUYn_v3bZY1JEKfEciCNEUrwn7klinbJUGaxkXi67ktj2pfcRe38L4"/>
+</div>
+</div>
+</header>
+<!-- Page Canvas Content -->
+<div class="p-lg max-w-[1280px] mx-auto w-full flex flex-col gap-lg">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-md">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Load Sheet Management</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Review and create cargo distribution sheets for scheduled departures.</p>
+</div>
+<div class="flex items-center gap-sm">
+<button class="px-md py-sm border border-outline text-on-surface font-label-md text-label-md rounded hover:bg-surface-container-high transition-colors flex items-center gap-xs active:scale-95">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Export CSV
+                    </button>
+<button class="px-md py-sm bg-primary text-on-primary font-label-md text-label-md rounded hover:opacity-90 transition-colors flex items-center gap-xs active:scale-95 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add_task</span>
+                        Create LoadSheet
+                    </button>
+</div>
+</div>
+<!-- Filters Section (Bento Inspired Layout) -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-sm bg-white p-sm border border-outline-variant rounded-xl shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-label-md text-outline">Date Range</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline text-[18px]">calendar_today</span>
+<input class="w-full pl-xl pr-sm py-xs bg-surface-container-low border border-outline-variant rounded font-body-md text-body-md focus:ring-primary focus:border-primary" type="date"/>
+</div>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-label-md text-outline">Station / Branch</label>
+<select class="w-full px-sm py-xs bg-surface-container-low border border-outline-variant rounded font-body-md text-body-md focus:ring-primary focus:border-primary">
+<option>All Stations</option>
+<option>Central Hub - Karachi</option>
+<option>Northern Depot - Islamabad</option>
+</select>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-label-md text-outline">Sheet Status</label>
+<select class="w-full px-sm py-xs bg-surface-container-low border border-outline-variant rounded font-body-md text-body-md focus:ring-primary focus:border-primary">
+<option>All Statuses</option>
+<option>Pending</option>
+<option>Dispatched</option>
+<option>Delivered</option>
+</select>
+</div>
+<div class="flex items-end">
+<button class="w-full py-xs bg-secondary text-on-secondary font-label-md text-label-md rounded hover:bg-on-secondary-fixed-variant transition-colors flex items-center justify-center gap-xs h-[40px]">
+<span class="material-symbols-outlined text-[18px]">search</span>
+                        Search Sheets
+                    </button>
+</div>
+</div>
+<!-- Reference Layout Visual (Inspired by Image 3) -->
+<div class="relative rounded-xl overflow-hidden border border-outline-variant shadow-lg h-[240px] group">
+<img alt="Legacy Interface Reference" class="w-full h-full object-cover grayscale opacity-20 transition-all duration-700 group-hover:grayscale-0 group-hover:opacity-40" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBgeTQoKSKRuq2KSWQ0788l1QkFM8KaVQrt3Qisv18gmt75LKn5ycJ-aIYr4vBvAanKnUzpwS41uLUCfHkLlvOqN3dY2OgNovJw5ntSPQ9RjCUmIQL33piZW7oBR7XkGyxinrIOfAaE6MlxAqfA1Wvj3JHrwYqpxu7BOMf2TzRWDsis0PjQ9ED74ZRFJP3X-GdIcXo4izIgnd5NJOZbdf6-2kasiSO6oKrR00bYkbYYwjYyJU7sa1DL4a3uGzksCK2ZJsawxqmLiU"/>
+<div class="absolute inset-0 bg-gradient-to-r from-surface via-transparent to-surface pointer-events-none"></div>
+<div class="absolute inset-0 flex flex-col items-center justify-center p-xl text-center">
+<span class="bg-primary/10 text-primary px-sm py-xs rounded-full font-label-md text-label-md mb-sm border border-primary/20">Operational Context</span>
+<h3 class="font-display-lg text-display-lg text-on-surface">Precision Freight Management</h3>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-xs">We've modernized the Load Sheet interface for improved legibility and faster data entry, maintaining the core logic of the original system while enhancing visual hierarchy.</p>
+</div>
+</div>
+<!-- Data Table Section -->
+<div class="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
+<div class="p-md border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
+<h4 class="font-headline-md text-headline-md text-on-surface">Recent Load Sheets</h4>
+<div class="flex items-center gap-sm">
+<span class="text-label-md font-label-md text-outline">Showing 1-10 of 124</span>
+<div class="flex border border-outline-variant rounded overflow-hidden">
+<button class="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors border-r border-outline-variant">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container border-b border-outline-variant">
+<tr>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Sheet ID</th>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Date Created</th>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Origin Station</th>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Total Shipments</th>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Status</th>
+<th class="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="data-table-row transition-colors">
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8891</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Oct 24, 2024</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Karachi Central Hub</td>
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">42 Units</td>
+<td class="px-md py-md">
+<span class="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-green-100 text-green-700 border border-green-200">Dispatched</span>
+</td>
+<td class="px-md py-md text-right">
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
+</td>
+</tr>
+<tr class="data-table-row transition-colors">
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8892</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Oct 24, 2024</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Lahore North</td>
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">18 Units</td>
+<td class="px-md py-md">
+<span class="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-orange-100 text-orange-700 border border-orange-200">Pending</span>
+</td>
+<td class="px-md py-md text-right">
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
+</td>
+</tr>
+<tr class="data-table-row transition-colors">
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8893</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Oct 23, 2024</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Islamabad HQ</td>
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">65 Units</td>
+<td class="px-md py-md">
+<span class="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-green-100 text-green-700 border border-green-200">Dispatched</span>
+</td>
+<td class="px-md py-md text-right">
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
+</td>
+</tr>
+<tr class="data-table-row transition-colors">
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8894</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Oct 23, 2024</td>
+<td class="px-md py-md font-body-md text-body-md text-on-surface">Quetta Hub</td>
+<td class="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">12 Units</td>
+<td class="px-md py-md">
+<span class="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-blue-100 text-blue-700 border border-blue-200">On-Route</span>
+</td>
+<td class="px-md py-md text-right">
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Footer / Global Stats -->
+<footer class="mt-auto p-lg bg-surface border-t border-outline-variant">
+<div class="max-w-[1280px] mx-auto flex flex-col md:flex-row justify-between items-center gap-md">
+<div class="flex gap-lg">
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-outline uppercase">Active Fleet</span>
+<span class="text-headline-md font-headline-md text-on-surface">1,204 Trucks</span>
+</div>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-outline uppercase">Efficiency</span>
+<span class="text-headline-md font-headline-md text-primary">98.4%</span>
+</div>
+</div>
+<div class="text-right">
+<p class="font-body-md text-body-md text-on-surface-variant">© 2024 Fly Courier Logistics. System Operational.</p>
+</div>
+</div>
+</footer>
+</main>
+<!-- FAB for Quick Actions (Suppressed per mandate on Details/Table screens, but kept here if user needs one global entry point) -->
+<!-- Determined as focused page, suppressed FAB as per Shell Visibility & Relevance instructions for "Task-Focused" pages. -->
+<script>
+        // Micro-interactions for table row hover and selection
+        document.querySelectorAll('.data-table-row').forEach(row => {
+            row.addEventListener('click', () => {
+                document.querySelectorAll('.data-table-row').forEach(r => r.classList.remove('bg-primary/5'));
+                row.classList.add('bg-primary/5');
+            });
+        });
+
+        // Search input expansion effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.closest('div').classList.add('max-w-[800px]');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.closest('div').classList.remove('max-w-[800px]');
+        });
+    </script>
+</body></html>
