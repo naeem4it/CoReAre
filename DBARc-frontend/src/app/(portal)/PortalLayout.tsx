@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/widgets/Sidebar';
 import { Navbar } from '@/widgets/Navbar';
 import { useAuthStore, UserRole } from '@/shared/model/auth.store';
-import { redirect } from 'next/navigation';
 
 export default function PortalLayout({
   children,
@@ -13,24 +13,31 @@ export default function PortalLayout({
   children: React.ReactNode;
   portalRole: UserRole;
 }) {
+  const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
 
   // Client-side guard (middleware handles server-side)
   React.useEffect(() => {
     if (!isAuthenticated) {
-      redirect('/auth/login');
+      router.push('/auth/login');
+      return;
     }
-    if (user && user.role !== portalRole && user.role !== 'SUPER_ADMIN') {
-      // Redirect to correct portal if they try to switch manually
+
+    const allowedRoles = new Set<UserRole>([portalRole, 'SUPER_ADMIN']);
+    if (portalRole === 'SHIPPER') {
+      allowedRoles.add('TENANT_ADMIN');
+    }
+
+    if (user && !allowedRoles.has(user.role)) {
       const paths: Record<string, string> = {
         SUPER_ADMIN: '/admin',
         TENANT_ADMIN: '/courier',
         SHIPPER: '/merchant',
         RIDER: '/rider',
       };
-      redirect(paths[user.role] || '/');
+      router.push(paths[user.role] || '/');
     }
-  }, [isAuthenticated, user, portalRole]);
+  }, [isAuthenticated, user, portalRole, router]);
 
   if (!user) return null;
 

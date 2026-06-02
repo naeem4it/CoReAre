@@ -14,7 +14,9 @@ import {
   Building2,
   FileText,
   BarChart3,
-  BadgeDollarSign
+  BadgeDollarSign,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { UserRole } from '@/shared/model/auth.store';
 
@@ -22,14 +24,30 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  children?: NavItem[];
 }
+
+const MERCHANT_SUBMENU: NavItem[] = [
+  { label: 'Pickup Information', href: '/merchant/pickup-information', icon: Package },
+  { label: 'Book Shipment', href: '/merchant/book-shipment', icon: Package },
+  { label: 'Reverse Shipment', href: '/merchant/reverse-shipment', icon: Package },
+  { label: 'Upload Shipment', href: '/merchant/upload-shipment', icon: Package },
+  { label: 'Load Sheet', href: '/merchant/load-sheet', icon: Package },
+  { label: 'Customer Report', href: '/merchant/customer-report', icon: FileText },
+  { label: 'Dispatch Report', href: '/merchant/dispatch-report', icon: FileText },
+  { label: 'Shipper Advise', href: '/merchant/shipper-advise', icon: FileText },
+  { label: 'Customer Invoice', href: '/merchant/customer-invoice', icon: FileText },
+  { label: 'Monthly Invoice', href: '/merchant/monthly-invoice', icon: FileText },
+  { label: 'Change Password', href: '/merchant/change-password', icon: Settings },
+  { label: 'APIs Docs', href: '/merchant/apis-docs', icon: ShieldCheck },
+];
 
 const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   SUPER_ADMIN: [
     { label: 'System Overview', href: '/admin', icon: LayoutDashboard },
     { label: 'Tenants', href: '/admin/tenants', icon: Building2 },
     { label: 'Courier Portal', href: '/courier', icon: Truck },
-    { label: 'Merchant Portal', href: '/merchant', icon: Package },
+    { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
     { label: 'Riders App', href: '/rider', icon: Users },
     { label: 'System Logs', href: '/admin/logs', icon: ShieldCheck },
     { label: 'Settings', href: '/admin/settings', icon: Settings },
@@ -40,11 +58,13 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
     { label: 'Settlements', href: '/courier/settlements', icon: BadgeDollarSign },
     { label: 'Riders', href: '/courier/riders', icon: Truck },
     { label: 'Clients', href: '/courier/clients', icon: Users },
+    { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
     { label: 'Reports', href: '/courier/reports', icon: BarChart3 },
     { label: 'Settings', href: '/courier/settings', icon: Settings },
   ],
   SHIPPER: [
     { label: 'Dashboard', href: '/merchant', icon: LayoutDashboard },
+    { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
     { label: 'Create Order', href: '/merchant/new-order', icon: Package },
     { label: 'Order History', href: '/merchant/orders', icon: FileText },
     { label: 'Finance', href: '/merchant/finance', icon: BarChart3 },
@@ -57,6 +77,74 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
 export const Sidebar = ({ role }: { role: UserRole }) => {
   const pathname = usePathname();
   const menuItems = MENU_CONFIG[role] || MENU_CONFIG.DEFAULT;
+  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
+
+  const renderNavItem = (item: NavItem) => {
+    const isActive = pathname === item.href;
+    const hasChildren = Boolean(item.children?.length);
+    const isOpen = hasChildren && (openMenus[item.href] ?? item.children?.some((child) => pathname === child.href));
+
+    return (
+      <div key={item.href} className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href={item.href}
+            className={cn(
+              'flex items-center gap-3 flex-1 px-4 py-3 rounded-xl transition-all duration-200 group',
+              isActive
+                ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20'
+                : 'hover:bg-white/5 hover:text-white'
+            )}
+          >
+            <item.icon className={cn(
+              'h-5 w-5',
+              isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
+            )} />
+            <span className="font-medium">{item.label}</span>
+          </Link>
+
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => setOpenMenus((prev) => ({ ...prev, [item.href]: !prev[item.href] }))}
+              className={cn(
+                'inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200',
+                isOpen ? 'bg-white/10 text-white hover:bg-white/15' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              )}
+            >
+              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          ) : null}
+        </div>
+
+        {hasChildren && isOpen ? (
+          <div className="ml-8 space-y-1">
+            {item.children!.map((child) => {
+              const childActive = pathname === child.href;
+              return (
+                <Link
+                  key={child.href}
+                  href={child.href}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-200 group text-sm',
+                    childActive
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  )}
+                >
+                  <child.icon className={cn(
+                    'h-4 w-4',
+                    childActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
+                  )} />
+                  <span>{child.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <aside className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 z-40 border-r border-white/5">
@@ -68,27 +156,7 @@ export const Sidebar = ({ role }: { role: UserRole }) => {
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1">
-        {menuItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group',
-                isActive 
-                  ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
-                  : 'hover:bg-white/5 hover:text-white'
-              )}
-            >
-              <item.icon className={cn(
-                'h-5 w-5',
-                isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
-              )} />
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          );
-        })}
+        {menuItems.map(renderNavItem)}
       </nav>
 
       <div className="p-4 border-t border-white/5">

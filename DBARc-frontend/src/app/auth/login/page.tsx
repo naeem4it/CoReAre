@@ -34,17 +34,15 @@ export default function LoginPage() {
       const accessToken = loginData?.accessToken || loginData?.token;
 
       const roleCodes = Array.isArray(user?.roles) ? user.roles.map((role: any) => role.code) : [];
-      const roleMap: Record<string, UserRole> = {
-        'strapi-super-admin': 'SUPER_ADMIN',
-        'strapi-tenant-admin': 'TENANT_ADMIN',
-        'strapi-shipper': 'SHIPPER',
-        'strapi-rider': 'RIDER',
-      };
       const normalizedRole = roleCodes.includes('strapi-super-admin')
         ? 'SUPER_ADMIN'
-        : roleMap[roleCodes.find((code) => roleMap[code]) ?? ''] ||
-          (user?.role_type as UserRole) ||
-          'SUPER_ADMIN';
+        : roleCodes.includes('strapi-shipper')
+        ? 'SHIPPER'
+        : roleCodes.includes('strapi-tenant-admin')
+        ? 'TENANT_ADMIN'
+        : roleCodes.includes('strapi-rider')
+        ? 'RIDER'
+        : (user?.role_type as UserRole) || 'SUPER_ADMIN';
 
       const userData = {
         id: user?.id?.toString() ?? '',
