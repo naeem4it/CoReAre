@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "hubs",
+  "info": {
+    "singularName": "hub",
+    "pluralName": "hubs",
+    "displayName": "Hub",
+    "description": "Courier operational hubs (pickup, sorting, delivery)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "hub_type": {
+      "type": "string"
+    },
+    "address": {
+      "type": "text"
+    },
+    "geo_location": {
+      "type": "json"
+    },
+    "capacity_weight": {
+      "type": "decimal"
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    }
+  }
+}

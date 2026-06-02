@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "parcel_hub_movements",
+  "info": {
+    "singularName": "parcel-hub-movement",
+    "pluralName": "parcel-hub-movements",
+    "displayName": "Parcel Hub Movement",
+    "description": "Tracking log of parcel movements through hubs and bags"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "parcel": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "from_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "to_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "bag": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::bag.bag"
+    },
+    "moved_by": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "moved_at": {
+      "type": "datetime"
+    }
+  }
+}

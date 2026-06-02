@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "rider_location_histories",
+  "info": {
+    "singularName": "rider-location-history",
+    "pluralName": "rider-location-historys",
+    "displayName": "Rider Location History",
+    "description": "Periodic coordinates recorded for riders during shifts"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "location": {
+      "type": "json",
+      "required": true
+    },
+    "recorded_at": {
+      "type": "datetime"
+    }
+  }
+}

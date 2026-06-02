@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "platform_integrations",
+  "info": {
+    "singularName": "platform-integration",
+    "pluralName": "platform-integrations",
+    "displayName": "Platform Integration",
+    "description": "Shopify, WooCommerce, and other external store sync settings"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "platform_type": {
+      "type": "string",
+      "required": true
+    },
+    "store_url": {
+      "type": "string"
+    },
+    "api_credentials": {
+      "type": "json"
+    },
+    "sync_settings": {
+      "type": "json"
+    },
+    "webhook_secret": {
+      "type": "string"
+    },
+    "last_sync_at": {
+      "type": "datetime"
+    }
+  }
+}

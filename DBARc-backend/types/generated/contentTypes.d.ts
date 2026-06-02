@@ -430,6 +430,285 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiBagBag extends Struct.CollectionTypeSchema {
+  collectionName: 'bags';
+  info: {
+    description: 'Consolidated parcel transit bags between hubs';
+    displayName: 'Bag';
+    pluralName: 'bags';
+    singularName: 'bag';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    bag_number: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    from_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::bag.bag'> &
+      Schema.Attribute.Private;
+    parcel_count: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    sealed_at: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'open'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    to_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiCodSettlementCodSettlement
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'cod_settlements';
+  info: {
+    description: 'Invoicing and billing settlements for collected Cash On Delivery funds';
+    displayName: 'COD Settlement';
+    pluralName: 'cod-settlements';
+    singularName: 'cod-settlement';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::cod-settlement.cod-settlement'
+    > &
+      Schema.Attribute.Private;
+    net_payable: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    paid_at: Schema.Attribute.DateTime;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    status: Schema.Attribute.Enumeration<
+      ['calculated', 'approved', 'processing', 'paid', 'disputed']
+    > &
+      Schema.Attribute.DefaultTo<'calculated'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    total_cod_collected: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
+  collectionName: 'couriers';
+  info: {
+    description: 'Internal and 3PL courier/carrier partners';
+    displayName: 'Courier';
+    pluralName: 'couriers';
+    singularName: 'courier';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    api_enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    contact_info: Schema.Attribute.JSON;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::courier.courier'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiDeliveryAttemptDeliveryAttempt
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'delivery_attempts';
+  info: {
+    description: 'Log of delivery attempts made by riders';
+    displayName: 'Delivery Attempt';
+    pluralName: 'delivery-attempts';
+    singularName: 'delivery-attempt';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    attempt_time: Schema.Attribute.DateTime;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    failure_reason: Schema.Attribute.String;
+    geo_location: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::delivery-attempt.delivery-attempt'
+    > &
+      Schema.Attribute.Private;
+    parcel: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    proof_of_delivery_url: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    recipient_name: Schema.Attribute.String;
+    recipient_relation: Schema.Attribute.String;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    status: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
+  collectionName: 'disputes';
+  info: {
+    description: 'Claims and customer support tickets for lost/damaged parcels';
+    displayName: 'Dispute';
+    pluralName: 'disputes';
+    singularName: 'dispute';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    category: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::dispute.dispute'
+    > &
+      Schema.Attribute.Private;
+    parcel: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    resolution: Schema.Attribute.Text;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'open'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEventStreamEventStream extends Struct.CollectionTypeSchema {
+  collectionName: 'event_streams';
+  info: {
+    description: 'Real-time telemetry event stream log for auditing and webhooks';
+    displayName: 'Event Stream';
+    pluralName: 'event-streams';
+    singularName: 'event-stream';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    entity_id: Schema.Attribute.String & Schema.Attribute.Required;
+    entity_type: Schema.Attribute.String & Schema.Attribute.Required;
+    event_type: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::event-stream.event-stream'
+    > &
+      Schema.Attribute.Private;
+    payload: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiHubHub extends Struct.CollectionTypeSchema {
+  collectionName: 'hubs';
+  info: {
+    description: 'Courier operational hubs (pickup, sorting, delivery)';
+    displayName: 'Hub';
+    pluralName: 'hubs';
+    singularName: 'hub';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text;
+    capacity_weight: Schema.Attribute.Decimal;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    geo_location: Schema.Attribute.JSON;
+    hub_type: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::hub.hub'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiParcelHubMovementParcelHubMovement
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'parcel_hub_movements';
+  info: {
+    description: 'Tracking log of parcel movements through hubs and bags';
+    displayName: 'Parcel Hub Movement';
+    pluralName: 'parcel-hub-movements';
+    singularName: 'parcel-hub-movement';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    bag: Schema.Attribute.Relation<'manyToOne', 'api::bag.bag'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    from_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::parcel-hub-movement.parcel-hub-movement'
+    > &
+      Schema.Attribute.Private;
+    moved_at: Schema.Attribute.DateTime;
+    moved_by: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    parcel: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    to_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
   collectionName: 'parcels';
   info: {
@@ -484,6 +763,243 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiPickupRequestPickupRequest
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'pickup_requests';
+  info: {
+    description: 'Shipper requests for bulk parcel pickups';
+    displayName: 'Pickup Request';
+    pluralName: 'pickup-requests';
+    singularName: 'pickup-request';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::pickup-request.pickup-request'
+    > &
+      Schema.Attribute.Private;
+    parcel_count: Schema.Attribute.Integer;
+    publishedAt: Schema.Attribute.DateTime;
+    requested_date: Schema.Attribute.Date & Schema.Attribute.Required;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'requested'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    time_slot_id: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPlatformIntegrationPlatformIntegration
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'platform_integrations';
+  info: {
+    description: 'Shopify, WooCommerce, and other external store sync settings';
+    displayName: 'Platform Integration';
+    pluralName: 'platform-integrations';
+    singularName: 'platform-integration';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    api_credentials: Schema.Attribute.JSON;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    last_sync_at: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::platform-integration.platform-integration'
+    > &
+      Schema.Attribute.Private;
+    platform_type: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    store_url: Schema.Attribute.String;
+    sync_settings: Schema.Attribute.JSON;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    webhook_secret: Schema.Attribute.String;
+  };
+}
+
+export interface ApiRatingRating extends Struct.CollectionTypeSchema {
+  collectionName: 'ratings';
+  info: {
+    description: 'Customer ratings and feedback for riders and deliveries';
+    displayName: 'Rating';
+    pluralName: 'ratings';
+    singularName: 'rating';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    feedback: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::rating.rating'
+    > &
+      Schema.Attribute.Private;
+    parcel: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    stars: Schema.Attribute.Integer & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRegionCoverageRuleRegionCoverageRule
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'region_coverage_rules';
+  info: {
+    description: 'Defines coverage routing for zones (e.g. self-delivery or 3PL)';
+    displayName: 'Region Coverage Rule';
+    pluralName: 'region-coverage-rules';
+    singularName: 'region-coverage-rule';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    coverage_type: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::region-coverage-rule.region-coverage-rule'
+    > &
+      Schema.Attribute.Private;
+    preferred_tpl_partner: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::tpl-partner.tpl-partner'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    region: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRegionRegion extends Struct.CollectionTypeSchema {
+  collectionName: 'regions';
+  info: {
+    description: 'Geographical coverage zones, cities, states, and polygons';
+    displayName: 'Region';
+    pluralName: 'regions';
+    singularName: 'region';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    geo_polygon: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::region.region'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    parent: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
+    publishedAt: Schema.Attribute.DateTime;
+    type: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRiderAssignmentRiderAssignment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'rider_assignments';
+  info: {
+    description: 'Assigning parcels to riders for dispatch';
+    displayName: 'Rider Assignment';
+    pluralName: 'rider-assignments';
+    singularName: 'rider-assignment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    accepted_at: Schema.Attribute.DateTime;
+    assigned_at: Schema.Attribute.DateTime;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::rider-assignment.rider-assignment'
+    > &
+      Schema.Attribute.Private;
+    parcel: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'assigned'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRiderLocationHistoryRiderLocationHistory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'rider_location_histories';
+  info: {
+    description: 'Periodic coordinates recorded for riders during shifts';
+    displayName: 'Rider Location History';
+    pluralName: 'rider-location-historys';
+    singularName: 'rider-location-history';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::rider-location-history.rider-location-history'
+    > &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.JSON & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    recorded_at: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiRiderRider extends Struct.CollectionTypeSchema {
   collectionName: 'riders';
   info: {
@@ -511,6 +1027,136 @@ export interface ApiRiderRider extends Struct.CollectionTypeSchema {
     status: Schema.Attribute.Enumeration<['active', 'inactive', 'suspended']> &
       Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRoleDefinitionRoleDefinition
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'role_definitions';
+  info: {
+    description: 'Tenant custom user roles and permissions definitions';
+    displayName: 'Role Definition';
+    pluralName: 'role-definitions';
+    singularName: 'role-definition';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::role-definition.role-definition'
+    > &
+      Schema.Attribute.Private;
+    permissions: Schema.Attribute.JSON & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    role_name: Schema.Attribute.String & Schema.Attribute.Required;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiShipperWalletShipperWallet
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'shipper_wallets';
+  info: {
+    description: 'Financial balance sheet wallet for shippers';
+    displayName: 'Shipper Wallet';
+    pluralName: 'shipper-wallets';
+    singularName: 'shipper-wallet';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    balance: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    currency: Schema.Attribute.String & Schema.Attribute.DefaultTo<'PKR'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::shipper-wallet.shipper-wallet'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
+  collectionName: 'shippers';
+  info: {
+    description: 'Ecommerce merchant shippers associated with tenants';
+    displayName: 'Shipper';
+    pluralName: 'shippers';
+    singularName: 'shipper';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    api_key: Schema.Attribute.String & Schema.Attribute.Unique;
+    business_type: Schema.Attribute.String;
+    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::shipper.shipper'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    webhook_url: Schema.Attribute.String;
+  };
+}
+
+export interface ApiTenantPlanTenantPlan extends Struct.CollectionTypeSchema {
+  collectionName: 'tenant_plans';
+  info: {
+    description: 'SaaS subscription and tier plans';
+    displayName: 'Tenant Plan';
+    pluralName: 'tenant-plans';
+    singularName: 'tenant-plan';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    features: Schema.Attribute.JSON;
+    limits: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tenant-plan.tenant-plan'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -554,6 +1200,121 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       'oneToMany',
       'plugin::users-permissions.user'
     >;
+  };
+}
+
+export interface ApiTplPartnerTplPartner extends Struct.CollectionTypeSchema {
+  collectionName: 'tpl_partners';
+  info: {
+    description: 'Third-party logistics API integrations (e.g. Leopards, TCS)';
+    displayName: 'TPL Partner';
+    pluralName: 'tpl-partners';
+    singularName: 'tpl-partner';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    api_credentials: Schema.Attribute.JSON;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tpl-partner.tpl-partner'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiTplRateCardTplRateCard extends Struct.CollectionTypeSchema {
+  collectionName: 'tpl_rate_cards';
+  info: {
+    description: 'Pricing rate cards for third-party logistics partners';
+    displayName: 'TPL Rate Card';
+    pluralName: 'tpl-rate-cards';
+    singularName: 'tpl-rate-card';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    destination_region: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::region.region'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tpl-rate-card.tpl-rate-card'
+    > &
+      Schema.Attribute.Private;
+    origin_region: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
+    partner: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::tpl-partner.tpl-partner'
+    >;
+    price: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiTplStatusMappingTplStatusMapping
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'tpl_status_mappings';
+  info: {
+    description: 'Maps external 3PL status codes to internal parcel statuses';
+    displayName: 'TPL Status Mapping';
+    pluralName: 'tpl-status-mappings';
+    singularName: 'tpl-status-mapping';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    external_status_code: Schema.Attribute.String & Schema.Attribute.Required;
+    internal_status: Schema.Attribute.Enumeration<
+      [
+        'created',
+        'picked',
+        'in_hub',
+        'in_transit',
+        'delivered',
+        'failed',
+        'returned',
+      ]
+    > &
+      Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tpl-status-mapping.tpl-status-mapping'
+    > &
+      Schema.Attribute.Private;
+    partner: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::tpl-partner.tpl-partner'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1095,9 +1856,31 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::bag.bag': ApiBagBag;
+      'api::cod-settlement.cod-settlement': ApiCodSettlementCodSettlement;
+      'api::courier.courier': ApiCourierCourier;
+      'api::delivery-attempt.delivery-attempt': ApiDeliveryAttemptDeliveryAttempt;
+      'api::dispute.dispute': ApiDisputeDispute;
+      'api::event-stream.event-stream': ApiEventStreamEventStream;
+      'api::hub.hub': ApiHubHub;
+      'api::parcel-hub-movement.parcel-hub-movement': ApiParcelHubMovementParcelHubMovement;
       'api::parcel.parcel': ApiParcelParcel;
+      'api::pickup-request.pickup-request': ApiPickupRequestPickupRequest;
+      'api::platform-integration.platform-integration': ApiPlatformIntegrationPlatformIntegration;
+      'api::rating.rating': ApiRatingRating;
+      'api::region-coverage-rule.region-coverage-rule': ApiRegionCoverageRuleRegionCoverageRule;
+      'api::region.region': ApiRegionRegion;
+      'api::rider-assignment.rider-assignment': ApiRiderAssignmentRiderAssignment;
+      'api::rider-location-history.rider-location-history': ApiRiderLocationHistoryRiderLocationHistory;
       'api::rider.rider': ApiRiderRider;
+      'api::role-definition.role-definition': ApiRoleDefinitionRoleDefinition;
+      'api::shipper-wallet.shipper-wallet': ApiShipperWalletShipperWallet;
+      'api::shipper.shipper': ApiShipperShipper;
+      'api::tenant-plan.tenant-plan': ApiTenantPlanTenantPlan;
       'api::tenant.tenant': ApiTenantTenant;
+      'api::tpl-partner.tpl-partner': ApiTplPartnerTplPartner;
+      'api::tpl-rate-card.tpl-rate-card': ApiTplRateCardTplRateCard;
+      'api::tpl-status-mapping.tpl-status-mapping': ApiTplStatusMappingTplStatusMapping;
       'api::wallet-transaction.wallet-transaction': ApiWalletTransactionWalletTransaction;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

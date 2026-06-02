@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "shippers",
+  "info": {
+    "singularName": "shipper",
+    "pluralName": "shippers",
+    "displayName": "Shipper",
+    "description": "Ecommerce merchant shippers associated with tenants"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier.courier"
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "business_type": {
+      "type": "string"
+    },
+    "api_key": {
+      "type": "string",
+      "unique": true
+    },
+    "webhook_url": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    }
+  }
+}

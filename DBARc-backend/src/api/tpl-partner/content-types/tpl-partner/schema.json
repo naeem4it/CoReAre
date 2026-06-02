@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tpl_partners",
+  "info": {
+    "singularName": "tpl-partner",
+    "pluralName": "tpl-partners",
+    "displayName": "TPL Partner",
+    "description": "Third-party logistics API integrations (e.g. Leopards, TCS)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "api_credentials": {
+      "type": "json"
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    }
+  }
+}

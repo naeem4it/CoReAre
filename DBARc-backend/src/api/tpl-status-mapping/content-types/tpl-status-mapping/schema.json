@@ -1,0 +1,38 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tpl_status_mappings",
+  "info": {
+    "singularName": "tpl-status-mapping",
+    "pluralName": "tpl-status-mappings",
+    "displayName": "TPL Status Mapping",
+    "description": "Maps external 3PL status codes to internal parcel statuses"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "partner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tpl-partner.tpl-partner"
+    },
+    "external_status_code": {
+      "type": "string",
+      "required": true
+    },
+    "internal_status": {
+      "type": "enumeration",
+      "enum": [
+        "created",
+        "picked",
+        "in_hub",
+        "in_transit",
+        "delivered",
+        "failed",
+        "returned"
+      ],
+      "required": true
+    }
+  }
+}

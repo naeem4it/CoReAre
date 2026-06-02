@@ -1,0 +1,48 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cod_settlements",
+  "info": {
+    "singularName": "cod-settlement",
+    "pluralName": "cod-settlements",
+    "displayName": "COD Settlement",
+    "description": "Invoicing and billing settlements for collected Cash On Delivery funds"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "total_cod_collected": {
+      "type": "decimal",
+      "required": true
+    },
+    "net_payable": {
+      "type": "decimal",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "calculated",
+        "approved",
+        "processing",
+        "paid",
+        "disputed"
+      ],
+      "default": "calculated"
+    },
+    "paid_at": {
+      "type": "datetime"
+    }
+  }
+}

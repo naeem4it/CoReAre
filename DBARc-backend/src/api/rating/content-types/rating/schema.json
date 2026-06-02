@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "ratings",
+  "info": {
+    "singularName": "rating",
+    "pluralName": "ratings",
+    "displayName": "Rating",
+    "description": "Customer ratings and feedback for riders and deliveries"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "parcel": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "stars": {
+      "type": "integer",
+      "required": true
+    },
+    "feedback": {
+      "type": "text"
+    }
+  }
+}

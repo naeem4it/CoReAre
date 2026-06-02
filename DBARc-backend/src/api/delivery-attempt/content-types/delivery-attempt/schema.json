@@ -1,0 +1,48 @@
+{
+  "kind": "collectionType",
+  "collectionName": "delivery_attempts",
+  "info": {
+    "singularName": "delivery-attempt",
+    "pluralName": "delivery-attempts",
+    "displayName": "Delivery Attempt",
+    "description": "Log of delivery attempts made by riders"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "parcel": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "attempt_time": {
+      "type": "datetime"
+    },
+    "status": {
+      "type": "string",
+      "required": true
+    },
+    "proof_of_delivery_url": {
+      "type": "string"
+    },
+    "recipient_name": {
+      "type": "string"
+    },
+    "recipient_relation": {
+      "type": "string"
+    },
+    "failure_reason": {
+      "type": "string"
+    },
+    "geo_location": {
+      "type": "json"
+    }
+  }
+}

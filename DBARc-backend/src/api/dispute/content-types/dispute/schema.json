@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "disputes",
+  "info": {
+    "singularName": "dispute",
+    "pluralName": "disputes",
+    "displayName": "Dispute",
+    "description": "Claims and customer support tickets for lost/damaged parcels"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "parcel": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "category": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "status": {
+      "type": "string",
+      "default": "open"
+    },
+    "resolution": {
+      "type": "text"
+    }
+  }
+}

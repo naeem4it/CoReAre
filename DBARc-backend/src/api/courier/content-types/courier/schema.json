@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "couriers",
+  "info": {
+    "singularName": "courier",
+    "pluralName": "couriers",
+    "displayName": "Courier",
+    "description": "Internal and 3PL courier/carrier partners"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "contact_info": {
+      "type": "json"
+    },
+    "api_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    }
+  }
+}

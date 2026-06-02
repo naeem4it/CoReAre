@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tpl_rate_cards",
+  "info": {
+    "singularName": "tpl-rate-card",
+    "pluralName": "tpl-rate-cards",
+    "displayName": "TPL Rate Card",
+    "description": "Pricing rate cards for third-party logistics partners"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "partner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tpl-partner.tpl-partner"
+    },
+    "origin_region": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::region.region"
+    },
+    "destination_region": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::region.region"
+    },
+    "price": {
+      "type": "decimal",
+      "required": true
+    }
+  }
+}

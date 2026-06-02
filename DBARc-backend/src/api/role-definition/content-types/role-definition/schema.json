@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "role_definitions",
+  "info": {
+    "singularName": "role-definition",
+    "pluralName": "role-definitions",
+    "displayName": "Role Definition",
+    "description": "Tenant custom user roles and permissions definitions"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "role_name": {
+      "type": "string",
+      "required": true
+    },
+    "permissions": {
+      "type": "json",
+      "required": true
+    }
+  }
+}

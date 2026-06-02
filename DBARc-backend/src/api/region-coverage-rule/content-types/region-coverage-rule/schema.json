@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "region_coverage_rules",
+  "info": {
+    "singularName": "region-coverage-rule",
+    "pluralName": "region-coverage-rules",
+    "displayName": "Region Coverage Rule",
+    "description": "Defines coverage routing for zones (e.g. self-delivery or 3PL)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "region": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::region.region"
+    },
+    "coverage_type": {
+      "type": "string",
+      "required": true
+    },
+    "preferred_tpl_partner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tpl-partner.tpl-partner"
+    }
+  }
+}

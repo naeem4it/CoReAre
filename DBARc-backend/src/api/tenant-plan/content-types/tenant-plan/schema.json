@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tenant_plans",
+  "info": {
+    "singularName": "tenant-plan",
+    "pluralName": "tenant-plans",
+    "displayName": "Tenant Plan",
+    "description": "SaaS subscription and tier plans"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "features": {
+      "type": "json"
+    },
+    "limits": {
+      "type": "json"
+    }
+  }
+}

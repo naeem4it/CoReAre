@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "rider_assignments",
+  "info": {
+    "singularName": "rider-assignment",
+    "pluralName": "rider-assignments",
+    "displayName": "Rider Assignment",
+    "description": "Assigning parcels to riders for dispatch"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "parcel": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "assigned_at": {
+      "type": "datetime"
+    },
+    "accepted_at": {
+      "type": "datetime"
+    },
+    "status": {
+      "type": "string",
+      "default": "assigned"
+    }
+  }
+}

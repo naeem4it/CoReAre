@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "bags",
+  "info": {
+    "singularName": "bag",
+    "pluralName": "bags",
+    "displayName": "Bag",
+    "description": "Consolidated parcel transit bags between hubs"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "bag_number": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "from_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "to_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "parcel_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "default": "open"
+    },
+    "sealed_at": {
+      "type": "datetime"
+    }
+  }
+}

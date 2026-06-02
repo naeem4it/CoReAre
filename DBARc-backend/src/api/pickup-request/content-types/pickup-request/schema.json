@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pickup_requests",
+  "info": {
+    "singularName": "pickup-request",
+    "pluralName": "pickup-requests",
+    "displayName": "Pickup Request",
+    "description": "Shipper requests for bulk parcel pickups"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "requested_date": {
+      "type": "date",
+      "required": true
+    },
+    "time_slot_id": {
+      "type": "string"
+    },
+    "parcel_count": {
+      "type": "integer"
+    },
+    "status": {
+      "type": "string",
+      "default": "requested"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "shipper_wallets",
+  "info": {
+    "singularName": "shipper-wallet",
+    "pluralName": "shipper-wallets",
+    "displayName": "Shipper Wallet",
+    "description": "Financial balance sheet wallet for shippers"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "balance": {
+      "type": "decimal",
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "PKR"
+    }
+  }
+}

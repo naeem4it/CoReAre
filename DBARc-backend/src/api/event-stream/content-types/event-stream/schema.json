@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "event_streams",
+  "info": {
+    "singularName": "event-stream",
+    "pluralName": "event-streams",
+    "displayName": "Event Stream",
+    "description": "Real-time telemetry event stream log for auditing and webhooks"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "entity_type": {
+      "type": "string",
+      "required": true
+    },
+    "entity_id": {
+      "type": "string",
+      "required": true
+    },
+    "event_type": {
+      "type": "string",
+      "required": true
+    },
+    "payload": {
+      "type": "json"
+    }
+  }
+}
