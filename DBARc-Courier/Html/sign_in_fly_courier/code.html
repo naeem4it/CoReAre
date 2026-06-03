@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fly Courier - LogisticsMastery Sign In</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-container": "#57677e",
+                    "on-primary-fixed-variant": "#0038b6",
+                    "tertiary": "#3f4f65",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-secondary-container": "#5c647a",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-background": "#191c1e",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-container": "#0052ff",
+                    "outline-variant": "#c3c5d9",
+                    "on-primary-fixed": "#001452",
+                    "secondary-fixed": "#dae2fd",
+                    "primary-fixed": "#dde1ff",
+                    "on-primary-container": "#dfe3ff",
+                    "surface-variant": "#e0e3e5",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "primary": "#003ec7",
+                    "on-primary": "#ffffff",
+                    "surface-dim": "#d8dadc",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container": "#eceef0",
+                    "secondary-container": "#dae2fd",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "background": "#f7f9fb",
+                    "on-tertiary-container": "#d6e6ff",
+                    "on-secondary": "#ffffff",
+                    "on-surface-variant": "#434656",
+                    "on-error-container": "#93000a",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#f7f9fb",
+                    "tertiary-fixed": "#d3e4fe",
+                    "outline": "#737688",
+                    "surface-tint": "#004ced",
+                    "surface": "#f7f9fb",
+                    "surface-container-low": "#f2f4f6",
+                    "surface-container-high": "#e6e8ea",
+                    "on-surface": "#191c1e",
+                    "error-container": "#ffdad6",
+                    "secondary": "#565e74",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "inverse-primary": "#b7c4ff",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "inverse-surface": "#2d3133",
+                    "error": "#ba1a1a",
+                    "primary-fixed-dim": "#b7c4ff",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed": "#131b2e"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "xl": "48px",
+                    "margin": "32px",
+                    "base": "4px",
+                    "lg": "32px",
+                    "gutter": "24px",
+                    "sm": "16px",
+                    "md": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "tabular-nums": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, rgba(0, 62, 199, 0.85) 0%, rgba(25, 28, 30, 0.95) 100%);
+        }
+        input:focus {
+            box-shadow: 0 0 0 2px #0052ff;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface overflow-hidden">
+<!-- Main Container: Split Layout -->
+<main class="flex min-h-screen w-full">
+<!-- Left Side: Logistics Hero & Brand (Hidden on Mobile) -->
+<section class="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-inverse-surface">
+<img alt="Logistics Cargo Hub" class="absolute inset-0 w-full h-full object-cover grayscale opacity-40" data-alt="A cinematic wide shot of a high-tech automated logistics terminal at dawn. Rows of massive cargo containers are perfectly aligned under a cool blue morning sky. In the foreground, a sleek cargo aircraft is being loaded by precision robotic arms. The lighting is crisp and professional, highlighting the cool grays and corporate blues of the facility, evoking a sense of global scale and mastery." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBamTePAe09VYo-JB8a2FZtqnE3J6CfkRlej9eJfudiPLSErdu0d5fdymSIct0l0VjYOVkI9Zmm2W3AyvC0JyeA83bk8ouE8CZdSOMqSvTjYYW7zrkRxQCP09UHz-4kBZFp2f1jt48lOj1JUFHR_LA0LJs5EHsGd882AbSMWfV9FuLhxPgnh-nVPyelKx0NkFRlnxtdokl61By63v6le8_E8fankBOflbz8LTRgQ7KwVXD9hzTFtHxPx9qQaBmR88mXlSVlWFohPUY"/>
+<div class="absolute inset-0 hero-gradient"></div>
+<div class="relative z-10 flex flex-col justify-between p-xl w-full">
+<!-- Brand Anchor -->
+<div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-white tracking-tight">
+                        LogisticsMastery
+                    </h1>
+</div>
+<!-- Messaging Content -->
+<div class="max-w-md">
+<h2 class="font-display-lg text-display-lg text-white mb-sm">
+                        Precision in Motion. Global in Scale.
+                    </h2>
+<p class="font-body-lg text-body-lg text-primary-fixed opacity-90 leading-relaxed">
+                        Access Fly Courier's high-performance terminal. Manage fleet analytics, real-time shipment tracking, and compliance workflows from a single unified command center.
+                    </p>
+<div class="mt-lg flex gap-md">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-white">4.2M</span>
+<span class="font-label-md text-label-md text-primary-fixed uppercase tracking-widest">Shipments Daily</span>
+</div>
+<div class="w-px h-12 bg-outline opacity-30"></div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-white">99.9%</span>
+<span class="font-label-md text-label-md text-primary-fixed uppercase tracking-widest">Uptime SLA</span>
+</div>
+</div>
+</div>
+<!-- Footer Text -->
+<div>
+<p class="font-label-md text-label-md text-primary-fixed opacity-60">
+                        © 2024 LogisticsMastery. All rights reserved. Precision in Motion.
+                    </p>
+</div>
+</div>
+</section>
+<!-- Right Side: Sign In Form -->
+<section class="w-full lg:w-1/2 flex items-center justify-center p-md bg-surface">
+<div class="w-full max-w-[440px] flex flex-col">
+<!-- Mobile Branding (Logo only visible on mobile) -->
+<div class="lg:hidden mb-lg flex justify-center">
+<span class="font-headline-lg text-headline-lg font-bold text-primary">LogisticsMastery</span>
+</div>
+<!-- Header -->
+<div class="mb-lg">
+<h3 class="font-headline-lg text-headline-lg text-on-surface mb-xs">Sign In</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Enter your credentials to access the Fly Courier dashboard.</p>
+</div>
+<!-- Form -->
+<form class="space-y-md" onsubmit="return false;">
+<!-- Email Field -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-label-md text-on-surface-variant" for="email">BUSINESS EMAIL</label>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">mail</span>
+<input class="w-full h-10 pl-10 pr-md bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50" id="email" placeholder="name@flycourier.com" type="email"/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<label class="font-label-md text-label-md text-on-surface-variant" for="password">PASSWORD</label>
+<a class="font-label-md text-label-md text-primary hover:underline transition-all" href="#">Forgot Password?</a>
+</div>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">lock</span>
+<input class="w-full h-10 pl-10 pr-md bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50" id="password" placeholder="••••••••" type="password"/>
+<button class="absolute right-sm top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<!-- Remember Me -->
+<div class="flex items-center gap-xs">
+<input class="w-4 h-4 rounded-sm border-outline text-primary focus:ring-primary" id="remember" type="checkbox"/>
+<label class="font-body-md text-body-md text-on-surface-variant cursor-pointer select-none" for="remember">Remember this device for 30 days</label>
+</div>
+<!-- Actions -->
+<div class="pt-sm space-y-md">
+<button class="w-full h-10 bg-primary-container text-on-primary font-body-md text-body-md font-semibold rounded-lg flex items-center justify-center gap-xs hover:bg-primary transition-all active:scale-[0.98] shadow-sm">
+                            Sign In to Terminal
+                            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<div class="flex items-center gap-sm">
+<div class="h-px w-full bg-outline-variant"></div>
+<span class="font-label-md text-label-md text-outline whitespace-nowrap">OR SSO ACCESS</span>
+<div class="h-px w-full bg-outline-variant"></div>
+</div>
+<button class="w-full h-10 bg-white border border-outline-variant text-secondary font-body-md text-body-md font-medium rounded-lg flex items-center justify-center gap-xs hover:bg-surface-container-low transition-all active:scale-[0.98]">
+<img alt="Google Logo" class="w-5 h-5" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASROpil3bMbZL_r5fm5dp4K5HW-oqpz6JyOR50iOJcmmNOu7VbKEEYjYnpCV7ucSRAh24fmbYbEwVhusQZezA720en-kypDLX2VgHndHOxSWqnkpeTMio6JhSTZz7AiMTTR5FZFIBxN5lJP9-lk9E-LQqH5TChXoW0Zo_LOHcY-FnbUqq_6EmTG2zp5ObjuvCSbIK7gLEGhjfebAjuf4KFzXk4MVSUAMIGecK4rVS7exKfKVvcay5WUHw7yU6x9UUttxXPQsX7qcM"/>
+                            Continue with Enterprise Account
+                        </button>
+</div>
+</form>
+<!-- Footer -->
+<div class="mt-xl text-center">
+<p class="font-body-md text-body-md text-on-surface-variant">
+                        New to Fly Courier? 
+                        <a class="font-body-md text-body-md font-bold text-primary hover:underline transition-all" href="#">Create Account</a>
+</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Micro-interaction Script -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputs = document.querySelectorAll('input');
+            
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    input.parentElement.classList.add('scale-[1.01]');
+                });
+                input.addEventListener('blur', () => {
+                    input.parentElement.classList.remove('scale-[1.01]');
+                });
+            });
+
+            // Handle password visibility toggle
+            const visibilityBtn = document.querySelector('button span[data-icon="visibility"]' || 'button span.material-symbols-outlined');
+            if(visibilityBtn) {
+                visibilityBtn.parentElement.addEventListener('click', function() {
+                    const passInput = document.getElementById('password');
+                    if (passInput.type === 'password') {
+                        passInput.type = 'text';
+                        this.querySelector('span').innerText = 'visibility_off';
+                    } else {
+                        passInput.type = 'password';
+                        this.querySelector('span').innerText = 'visibility';
+                    }
+                });
+            }
+        });
+    </script>
+</body></html>
