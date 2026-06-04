@@ -45,18 +45,6 @@
     "recipient_address": {
       "type": "text",
       "required": true
-    },
-    "tenant": {
-      "type": "relation",
-      "relation": "manyToOne",
-      "target": "api::tenant.tenant",
-      "inversedBy": "parcels"
-    },
-    "shipper": {
-      "type": "relation",
-      "relation": "manyToOne",
-      "target": "plugin::users-permissions.user",
-      "inversedBy": "parcels"
     }
   }
 }

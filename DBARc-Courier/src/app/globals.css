@@ -4,6 +4,13 @@
 
 @theme {
   --font-sans: 'Inter', sans-serif;
+  --font-body-md: 'Inter', sans-serif;
+  --font-body-lg: 'Inter', sans-serif;
+  --font-headline-md: 'Inter', sans-serif;
+  --font-display-lg: 'Inter', sans-serif;
+  --font-label-md: 'Inter', sans-serif;
+  --font-headline-lg: 'Inter', sans-serif;
+  --font-tabular-nums: 'Inter', sans-serif;
 
   --color-error: #ba1a1a;
   --color-inverse-on-surface: #eff1f3;
@@ -44,7 +51,13 @@
   --color-primary-container: #0052ff;
   --color-tertiary-fixed-dim: #b7c8e1;
   --color-primary: #003ec7;
-  --color-secondary: #3f465c; /* Mapped text-secondary color */
+  --color-secondary: #565e74; /* Exact value from design template */
+  --color-inverse-surface: #2d3133;
+  --color-on-primary-fixed-variant: #0038b6;
+  --color-on-secondary-container: #5c647a;
+  --color-on-tertiary-fixed: #0b1c30;
+  --color-on-tertiary-fixed-variant: #38485d;
+  --color-primary-fixed-dim: #b7c4ff;
 
   /* Spacings */
   --spacing-lg: 32px;
@@ -57,10 +70,17 @@
   --spacing-base: 4px;
 
   /* Border radius */
+  --radius: 0.125rem;
   --radius-default: 0.125rem;
   --radius-lg: 0.25rem;
   --radius-xl: 0.5rem;
   --radius-full: 0.75rem;
+
+  /* Fix Tailwind v4 max-width conflict with custom spacing */
+  --max-width-sm: 24rem;
+  --max-width-md: 28rem;
+  --max-width-lg: 32rem;
+  --max-width-xl: 36rem;
 }
 
 /* Explicit font utilities with exact designed font weights and line heights */
@@ -110,6 +130,7 @@ body {
 }
 
 .material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif;
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   display: inline-block;
   line-height: 1;
@@ -126,3 +147,8 @@ body {
   background: #e2e8f0;
   border-radius: 10px;
 }
+
+.hero-gradient {
+  background: linear-gradient(135deg, rgba(0, 62, 199, 0.85) 0%, rgba(25, 28, 30, 0.95) 100%);
+}
+

@@ -1,14 +1,36 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { CourierStats } from '@/features/courier/ui/CourierStats';
 import { FleetDistributionMap } from '@/features/courier/ui/FleetDistributionMap';
 import { LiveOperationsFeed } from '@/features/courier/ui/LiveOperationsFeed';
 import { CourierShipmentsTable } from '@/features/courier/ui/CourierShipmentsTable';
 
 export default function Dashboard() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = React.useState('Overview');
   const [activeTimeframe, setActiveTimeframe] = React.useState('24h');
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
+    if (!token) {
+      router.push('/login');
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [router]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 text-primary border-4 border-solid border-current border-r-transparent rounded-full" role="status">
+          <span className="sr-only">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col">
