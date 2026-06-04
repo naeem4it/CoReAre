@@ -43,7 +43,7 @@ export default function LoginPage() {
         localStorage.setItem('token', jwt);
         localStorage.setItem('dbarc-token', jwt);
         localStorage.setItem('user', JSON.stringify(user));
-        
+
         // Redirect to dashboard
         router.push('/');
       } else {
@@ -59,8 +59,9 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex h-screen w-full bg-background text-on-surface overflow-hidden">
-      <style dangerouslySetInnerHTML={{ __html: `
+    <main className="flex min-h-screen w-full bg-background text-on-surface">
+      <style dangerouslySetInnerHTML={{
+        __html: `
         body { font-family: 'Inter', sans-serif; }
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -74,14 +75,14 @@ export default function LoginPage() {
         }
       `}} />
       {/* Left Side: Logistics Hero & Brand (Hidden on Mobile) */}
-      <section className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-inverse-surface h-full">
+      <section className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-inverse-surface">
         <img
           alt="Logistics Cargo Hub"
           className="absolute inset-0 w-full h-full object-cover grayscale opacity-40 animate-pulse-slow"
           src="https://lh3.googleusercontent.com/aida-public/AB6AXuBamTePAe09VYo-JB8a2FZtqnE3J6CfkRlej9eJfudiPLSErdu0d5fdymSIct0l0VjYOVkI9Zmm2W3AyvC0JyeA83bk8ouE8CZdSOMqSvTjYYW7zrkRxQCP09UHz-4kBZFp2f1jt48lOj1JUFHR_LA0LJs5EHsGd882AbSMWfV9FuLhxPgnh-nVPyelKx0NkFRlnxtdokl61By63v6le8_E8fankBOflbz8LTRgQ7KwVXD9hzTFtHxPx9qQaBmR88mXlSVlWFohPUY"
         />
         <div className="absolute inset-0 hero-gradient"></div>
-        <div className="relative z-10 flex flex-col justify-between p-xl w-full h-full">
+        <div className="relative z-10 flex flex-col justify-between p-xl w-full">
           {/* Brand Anchor */}
           <div>
             <h1 className="font-headline-lg text-headline-lg font-bold text-white tracking-tight">
@@ -89,7 +90,7 @@ export default function LoginPage() {
             </h1>
           </div>
           {/* Messaging Content */}
-          <div className="max-w-lg">
+          <div className="">
             <h2 className="font-display-lg text-display-lg text-white mb-sm">
               Precision in Motion. Global in Scale.
             </h2>
@@ -118,7 +119,7 @@ export default function LoginPage() {
       </section>
 
       {/* Right Side: Sign In Form */}
-      <section className="w-full lg:w-1/2 flex items-center justify-center p-md bg-surface h-full">
+      <section className="w-full lg:w-1/2 flex items-center justify-center p-md bg-surface">
         <div className="w-full max-w-[440px] flex flex-col">
           {/* Mobile Branding (Logo only visible on mobile) */}
           <div className="lg:hidden mb-lg flex justify-center">
@@ -146,7 +147,7 @@ export default function LoginPage() {
               <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
                 <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">mail</span>
                 <input
-                  className="w-full h-10 pl-10 pr-4 bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container transition-all placeholder:text-outline/50 text-on-surface"
+                  className="w-full h-10 pl-10 pr-md bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
                   id="email"
                   placeholder="name@flycourier.com"
                   type="email"
@@ -167,7 +168,7 @@ export default function LoginPage() {
               <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
                 <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">lock</span>
                 <input
-                  className="w-full h-10 pl-10 pr-12 bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container transition-all placeholder:text-outline/50 text-on-surface"
+                  className="w-full h-10 pl-10 pr-12 bg-white border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
                   id="password"
                   placeholder="••••••••"
                   type={showPassword ? 'text' : 'password'}
