@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/shared/api/api-client';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -251,9 +252,9 @@ export default function LoginPage() {
           <div className="mt-xl text-center">
             <p className="font-body-md text-body-md text-on-surface-variant">
               New to Fly Courier?{' '}
-              <a className="font-body-md text-body-md font-bold text-primary hover:underline transition-all" href="#">
+              <Link className="font-body-md text-body-md font-bold text-primary hover:underline transition-all" href="/signup">
                 Create Account
-              </a>
+              </Link>
             </p>
           </div>
         </div>
