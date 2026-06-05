@@ -1,5 +1,5 @@
 {
-  "name": "dba-rc-backend",
+  "name": "my-strapi-project",
   "version": "0.1.0",
   "private": true,
   "description": "A Strapi application",
@@ -9,15 +9,19 @@
     "deploy": "strapi deploy",
     "dev": "strapi develop",
     "develop": "strapi develop",
+    "seed:example": "node ./scripts/seed.js",
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
   "dependencies": {
-    "@strapi/plugin-cloud": "5.43.0",
-    "@strapi/plugin-users-permissions": "5.43.0",
-    "@strapi/strapi": "5.43.0",
+    "@strapi/plugin-cloud": "5.47.1",
+    "@strapi/plugin-documentation": "^5.47.1",
+    "@strapi/plugin-users-permissions": "5.47.1",
+    "@strapi/strapi": "5.47.1",
+    "fs-extra": "^10.0.0",
+    "mime-types": "^2.1.27",
     "pg": "8.20.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -35,7 +39,7 @@
     "npm": ">=6.0.0"
   },
   "strapi": {
-    "uuid": "4c7e625e-1e03-4c2b-a9e1-899b83a4fed8",
-    "installId": "905a7a5b3403defeb36aaa1aa92468e5819e5cc0850f950f0450fada3752f5ed"
+    "uuid": "86e92663-556f-4cc2-b237-105c49ab38f5",
+    "installId": "ef20236b5fcf78e74513c4f1996948ca5b77cd72cc902a6e3310cae6a763f5bb"
   }
 }

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fly Courier - Pickup Information</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "inverse-on-surface": "#eff1f3",
+                        "tertiary-container": "#57677e",
+                        "on-surface-variant": "#434656",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-container": "#d6e6ff",
+                        "surface": "#f7f9fb",
+                        "secondary-container": "#dae2fd",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary-container": "#dfe3ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#3f4f65",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#004ced",
+                        "on-surface": "#191c1e",
+                        "surface-container-highest": "#e0e3e5",
+                        "outline-variant": "#c3c5d9",
+                        "surface-bright": "#f7f9fb",
+                        "on-error-container": "#93000a",
+                        "on-error": "#ffffff",
+                        "background": "#f7f9fb",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#b7c4ff",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container-high": "#e6e8ea",
+                        "on-background": "#191c1e",
+                        "outline": "#737688",
+                        "primary-fixed": "#dde1ff",
+                        "surface-container": "#eceef0",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-variant": "#e0e3e5",
+                        "on-primary-fixed": "#001452",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#0052ff",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "primary": "#003ec7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "lg": "32px",
+                        "gutter": "24px",
+                        "xl": "48px",
+                        "sm": "16px",
+                        "xs": "8px",
+                        "margin": "32px",
+                        "md": "24px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "tabular-nums": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .form-input-focus:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #0052ff;
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-background min-h-screen">
+<!-- Top Navigation Bar -->
+<header class="bg-surface-container-lowest h-[64px] w-full sticky top-0 z-50 shadow-sm border-b border-outline-variant">
+<div class="flex items-center justify-between px-lg w-full max-w-[1280px] mx-auto h-full">
+<div class="flex items-center gap-xl">
+<span class="font-headline-md text-headline-md font-bold text-primary">Fly Courier</span>
+<nav class="hidden md:flex gap-md h-full items-center">
+<a class="text-on-surface-variant hover:text-primary font-body-md transition-colors h-full flex items-center" href="#">Dashboard</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-semibold font-body-md h-full flex items-center" href="#">Shipments</a>
+<a class="text-on-surface-variant hover:text-primary font-body-md transition-colors h-full flex items-center" href="#">Fleet</a>
+<a class="text-on-surface-variant hover:text-primary font-body-md transition-colors h-full flex items-center" href="#">Invoices</a>
+</nav>
+</div>
+<div class="flex-1 max-w-[600px] mx-xl">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full h-10 bg-surface-container-low border border-outline-variant rounded px-xl font-body-md focus:bg-white focus:ring-2 focus:ring-primary-container outline-none transition-all" placeholder="Global Shipment Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-label-md">
+                    JD
+                </div>
+</div>
+</div>
+</header>
+<div class="max-w-[1280px] mx-auto flex">
+<!-- Sidebar Navigation -->
+<aside class="w-64 h-[calc(100vh-64px)] sticky top-16 border-r border-outline-variant p-sm flex flex-col gap-xs bg-surface">
+<div class="mb-md p-sm">
+<h2 class="font-label-md text-label-md text-outline uppercase tracking-wider">Logistics Mastery</h2>
+</div>
+<a class="flex items-center gap-sm p-sm text-secondary hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md">Overview</span>
+</a>
+<a class="flex items-center gap-sm p-sm bg-secondary-container text-on-secondary-container font-bold rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">local_shipping</span>
+<span class="font-label-md">Booking</span>
+</a>
+<a class="flex items-center gap-sm p-sm text-secondary hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-label-md">Tracking</span>
+</a>
+<a class="flex items-center gap-sm p-sm text-secondary hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-md">Load Sheets</span>
+</a>
+<a class="flex items-center gap-sm p-sm text-secondary hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-md">Customers</span>
+</a>
+<a class="flex items-center gap-sm p-sm text-secondary hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md">Settings</span>
+</a>
+<div class="mt-auto p-sm">
+<button class="w-full py-3 bg-primary text-on-primary font-bold rounded flex items-center justify-center gap-sm active:scale-95 transition-transform">
+<span class="material-symbols-outlined">add</span>
+<span>New Shipment</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-lg bg-surface-container-low min-h-[calc(100vh-64px)]">
+<div class="mb-lg flex justify-between items-end">
+<div>
+<nav class="flex gap-xs text-outline font-label-md mb-xs">
+<span>Shipments</span>
+<span>/</span>
+<span class="text-primary">Pickup Information</span>
+</nav>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Pickup Information</h1>
+</div>
+<div class="flex gap-sm">
+<button class="px-md py-2 border border-outline text-secondary font-semibold rounded hover:bg-surface-container-high transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">list</span>
+                        List View
+                    </button>
+</div>
+</div>
+<!-- Reference Image Context (Subtle) -->
+<div class="mb-lg bg-white p-sm border border-outline-variant rounded-xl flex items-center gap-md">
+<img alt="Old System UI" class="h-12 w-24 object-cover rounded border border-outline-variant opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsFpaaJ1hFR6LFzkn6mQAnVOuzVHgMl88mcYZjKRBEiZOXXtRB8ccXng6hRaNfws-OnJe6vEdkB8d1A6dSlZX1tEx8kdauL66_VwLYP1IFBKzsMqoQuMMT5wpqUsf4Y-JeK2iqGm3EvSSBeVTWIncb7GZmzJ1J0rBJu1TNS3-i-XB3JKqKJENzQOVoaek06Lr40tBdA4PmEgJatGtt7kBmCSvO9M6KtdOCOJyGribIT5wOIUk6sdW8H4TXAcfmrTJnbQcMFrDopsA"/>
+<div>
+<p class="font-label-md text-on-surface-variant italic">Modernizing from previous workflow legacy interface.</p>
+</div>
+</div>
+<!-- Form Container -->
+<div class="bg-white border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+<div class="p-lg border-b border-outline-variant bg-slate-50 flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">local_shipping</span>
+                        Pickup Details
+                    </h3>
+<span class="bg-primary-fixed text-on-primary-fixed px-sm py-1 rounded-full text-label-md">DRAFT #PK-98231</span>
+</div>
+<form class="p-lg grid grid-cols-12 gap-x-gutter gap-y-md">
+<!-- Section: Sender Info -->
+<div class="col-span-12 md:col-span-6 grid grid-cols-1 gap-md">
+<h4 class="font-label-md text-primary uppercase tracking-widest border-b border-primary-fixed pb-xs mb-xs">Origin Details</h4>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Client Name</label>
+<input class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="text" value="Zameen Tech Solutions"/>
+</div>
+<div class="grid grid-cols-2 gap-sm">
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Phone Number</label>
+<input class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="tel" value="+92 300 1234567"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Pickup Date</label>
+<div class="relative">
+<input class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="date" value="2024-05-20"/>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Pickup Address</label>
+<textarea class="w-full border border-outline-variant rounded p-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all resize-none" rows="3">12-B, Industrial Area Phase 2, Karachi, Pakistan</textarea>
+</div>
+</div>
+<!-- Section: Logistical Controls -->
+<div class="col-span-12 md:col-span-6 grid grid-cols-1 gap-md">
+<h4 class="font-label-md text-primary uppercase tracking-widest border-b border-primary-fixed pb-xs mb-xs">Status &amp; Logistics</h4>
+<div class="grid grid-cols-2 gap-sm">
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Status</label>
+<select class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white appearance-none cursor-pointer">
+<option value="pending">Pending</option>
+<option selected="" value="scheduled">Scheduled</option>
+<option value="in_transit">In Transit</option>
+<option value="completed">Completed</option>
+<option value="cancelled">Cancelled</option>
+</select>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Courier Assigned</label>
+<select class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white">
+<option>Select Driver</option>
+<option selected="">Ali Ahmed (V-202)</option>
+<option>Sajid Khan (V-105)</option>
+</select>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-sm">
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Total Weight (kg)</label>
+<input class="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" value="45.5"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Package Count</label>
+<input class="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" value="12"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Priority</label>
+<select class="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all">
+<option>Standard</option>
+<option selected="">Express</option>
+<option>Overnight</option>
+</select>
+</div>
+</div>
+<div class="bg-surface p-sm rounded-lg border border-outline-variant mt-xs">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">info</span>
+<p class="text-label-md text-on-surface-variant">Scheduled pickup estimated between 14:00 - 16:00 local time.</p>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="col-span-12 mt-lg flex justify-between items-center border-t border-outline-variant pt-lg">
+<button class="px-lg py-3 text-error font-semibold hover:bg-error-container/20 rounded transition-colors flex items-center gap-xs" type="button">
+<span class="material-symbols-outlined">delete</span>
+                            Cancel Request
+                        </button>
+<div class="flex gap-sm">
+<button class="px-lg py-3 border border-outline text-secondary font-semibold rounded hover:bg-surface-container-high transition-all active:scale-95" type="reset">
+                                Reset Form
+                            </button>
+<button class="px-xl py-3 bg-primary-container text-white font-bold rounded shadow-md hover:brightness-110 transition-all active:scale-95 flex items-center gap-sm" type="submit">
+<span class="material-symbols-outlined">save</span>
+                                Save Changes
+                            </button>
+</div>
+</div>
+</form>
+</div>
+<!-- Map/Route Preview Card (Aesthetic Detail) -->
+<div class="mt-lg grid grid-cols-12 gap-gutter">
+<div class="col-span-12 lg:col-span-8 bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm h-64 relative group cursor-pointer">
+<div class="absolute inset-0 bg-slate-200 flex items-center justify-center overflow-hidden">
+<!-- Simulated Map Pattern -->
+<div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(#0052ff 1px, transparent 0); background-size: 24px 24px;"></div>
+<div class="z-10 bg-white/90 backdrop-blur-md p-md rounded-lg shadow-lg border border-outline-variant flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-[48px] mb-xs">map</span>
+<span class="font-headline-md">Live Route Preview</span>
+<span class="text-label-md text-outline">Click to expand geographic view</span>
+</div>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-4 bg-white border border-outline-variant rounded-xl p-lg shadow-sm flex flex-col justify-between">
+<div>
+<h4 class="font-headline-md mb-sm">Fleet Efficiency</h4>
+<div class="flex justify-between items-center mb-xs">
+<span class="text-body-md text-on-surface-variant">Route Density</span>
+<span class="font-tabular-nums text-primary">88%</span>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full mb-md overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 88%"></div>
+</div>
+<p class="text-label-md text-outline">This pickup adds 12km to existing route V-202. Within optimal threshold.</p>
+</div>
+<button class="w-full py-2 bg-secondary text-on-secondary font-semibold rounded hover:opacity-90 transition-opacity">
+                        View Alternatives
+                    </button>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction script -->
+<script>
+        document.querySelectorAll('input, select, textarea').forEach(el => {
+            el.addEventListener('focus', () => {
+                el.parentElement.querySelector('label')?.classList.add('text-primary');
+            });
+            el.addEventListener('blur', () => {
+                el.parentElement.querySelector('label')?.classList.remove('text-primary');
+            });
+        });
+
+        // Simple form submission mock
+        document.querySelector('form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="material-symbols-outlined animate-spin">sync</span> Saving...`;
+            btn.classList.add('opacity-80');
+            
+            setTimeout(() => {
+                btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> Saved!`;
+                btn.classList.replace('bg-primary-container', 'bg-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('bg-green-600', 'bg-primary-container');
+                    btn.classList.remove('opacity-80');
+                }, 2000);
+            }, 1200);
+        });
+    </script>
+</body></html>

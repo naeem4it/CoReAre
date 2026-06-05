@@ -31,6 +31,18 @@
     "status": {
       "type": "string",
       "default": "active"
+    },
+    "courier_cities": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::courier-city.courier-city",
+      "mappedBy": "couriers"
+    },
+    "parcel": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::parcel.parcel",
+      "inversedBy": "courier"
     }
   }
 }

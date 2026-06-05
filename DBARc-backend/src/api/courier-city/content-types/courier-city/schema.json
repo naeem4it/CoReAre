@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "courier_cities",
+  "info": {
+    "singularName": "courier-city",
+    "pluralName": "courier-cities",
+    "displayName": "CourierCity"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "couriers": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::courier.courier",
+      "inversedBy": "courier_cities"
+    },
+    "cities": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::city.city",
+      "inversedBy": "courier_cities"
+    },
+    "parcel": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::parcel.parcel",
+      "inversedBy": "courier_city"
+    }
+  }
+}

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fly Courier - Logistics Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "inverse-on-surface": "#eff1f3",
+                        "tertiary-container": "#57677e",
+                        "on-surface-variant": "#434656",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-container": "#d6e6ff",
+                        "surface": "#f7f9fb",
+                        "secondary-container": "#dae2fd",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary-container": "#dfe3ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#3f4f65",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#004ced",
+                        "on-surface": "#191c1e",
+                        "surface-container-highest": "#e0e3e5",
+                        "outline-variant": "#c3c5d9",
+                        "surface-bright": "#f7f9fb",
+                        "on-error-container": "#93000a",
+                        "on-error": "#ffffff",
+                        "background": "#f7f9fb",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#b7c4ff",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container-high": "#e6e8ea",
+                        "on-background": "#191c1e",
+                        "outline": "#737688",
+                        "primary-fixed": "#dde1ff",
+                        "surface-container": "#eceef0",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-variant": "#e0e3e5",
+                        "on-primary-fixed": "#001452",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#0052ff",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "primary": "#003ec7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "lg": "32px",
+                        "gutter": "24px",
+                        "xl": "48px",
+                        "sm": "16px",
+                        "xs": "8px",
+                        "margin": "32px",
+                        "md": "24px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "tabular-nums": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopNavBar -->
+<header class="bg-surface-container-lowest dark:bg-surface-dim h-[64px] w-full sticky top-0 z-50 border-b border-outline-variant dark:border-outline shadow-sm dark:shadow-none">
+<div class="flex items-center justify-between px-lg w-full max-w-[1280px] mx-auto h-full gap-md">
+<div class="flex items-center gap-md">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Fly Courier</span>
+<nav class="hidden md:flex items-center gap-md ml-lg">
+<a class="text-primary dark:text-primary-fixed border-b-2 border-primary dark:border-primary-fixed pb-1 font-semibold font-body-md text-body-md transition-all active:scale-95" href="#">Dashboard</a>
+<a class="text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed font-body-md text-body-md transition-all active:scale-95" href="#">Shipments</a>
+<a class="text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed font-body-md text-body-md transition-all active:scale-95" href="#">Fleet</a>
+<a class="text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed font-body-md text-body-md transition-all active:scale-95" href="#">Invoices</a>
+</nav>
+</div>
+<!-- Global Search -->
+<div class="flex-1 max-w-[600px] relative hidden md:block">
+<div class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full bg-surface-container-low border-none rounded-lg py-2 pl-10 pr-4 text-body-md focus:ring-2 focus:ring-primary-container transition-all" placeholder="Search shipments, fleet, or customers..." type="text"/>
+</div>
+<div class="flex items-center gap-sm">
+<button class="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+<button class="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">help</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfrNw28bnjOpyL4SHcMjfqmNhg7QBnJKqapM_h5C3zx3d5rE6Z5n4tjx3m8K_a76ZNxy2jckgp4horBbe2E4FsHFoVO_tf4yseSLswpo7i_TOJiMMvUd0WDOE85ise7nFUgWWIq6vse8UJhz4ldxJgfUxapUCp5B-uyNal8PFmEE4NMEi0EcObkIkmRWrj9SJGdWqxUV0-CXKgJuGONLqVh17oIWYfdYl2eVZFAcDwLvyMjIWw5vKCvDDsk7Oi8k9Fq6oOd8VtHnY"/>
+</div>
+</div>
+</div>
+</header>
+<div class="flex min-h-[calc(100vh-64px)] max-w-[1280px] mx-auto">
+<!-- SideNavBar -->
+<aside class="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-outline-variant dark:border-outline bg-surface dark:bg-surface-dim">
+<div class="mb-lg p-sm">
+<button class="w-full bg-primary-container text-on-primary-container py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-xs hover:opacity-90 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined">add</span>
+                    New Shipment
+                </button>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-md p-sm bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed font-bold rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Overview</span>
+</a>
+<a class="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="local_shipping">local_shipping</span>
+<span class="font-label-md text-label-md">Booking</span>
+</a>
+<a class="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="location_on">location_on</span>
+<span class="font-label-md text-label-md">Tracking</span>
+</a>
+<a class="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-label-md text-label-md">Load Sheets</span>
+</a>
+<a class="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-md text-label-md">Customers</span>
+</a>
+<a class="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto p-sm">
+<div class="bg-surface-container-low rounded-xl p-md border border-outline-variant">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Storage Status</p>
+<div class="w-full bg-surface-container-highest h-1.5 rounded-full mb-2">
+<div class="bg-primary w-3/4 h-full rounded-full"></div>
+</div>
+<p class="text-[10px] font-medium text-outline">75% capacity reached</p>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 p-lg overflow-y-auto custom-scrollbar bg-slate-50">
+<!-- Page Header & Filters -->
+<header class="flex flex-col md:flex-row md:items-center justify-between mb-lg gap-md">
+<div>
+<h1 class="font-display-lg text-display-lg text-on-surface">Logistics Mastery</h1>
+<p class="text-on-surface-variant font-body-md text-body-md">Real-time oversight of global operations</p>
+</div>
+<div class="flex items-center gap-sm">
+<div class="flex bg-white rounded-lg border border-outline-variant p-1 shadow-sm">
+<button class="px-3 py-1.5 rounded text-label-md font-label-md bg-secondary-container text-on-secondary-container">24h</button>
+<button class="px-3 py-1.5 rounded text-label-md font-label-md hover:bg-surface-container-low">7d</button>
+<button class="px-3 py-1.5 rounded text-label-md font-label-md hover:bg-surface-container-low">30d</button>
+</div>
+<div class="relative">
+<button class="flex items-center gap-2 bg-white border border-outline-variant px-4 py-2 rounded-lg text-body-md font-medium shadow-sm active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>May 14, 2026</span>
+</button>
+</div>
+<div class="relative">
+<button class="flex items-center gap-2 bg-white border border-outline-variant px-4 py-2 rounded-lg text-body-md font-medium shadow-sm active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">location_city</span>
+<span>Karachi</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Stat Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mb-xl">
+<!-- Total Shipments -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-sm">
+<div class="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">sailing</span>
+</div>
+<span class="text-emerald-600 flex items-center font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">+12.5%</span>
+</div>
+<h3 class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Total Shipments</h3>
+<p class="font-display-lg text-display-lg mt-1 tabular-nums">4,821</p>
+</div>
+<!-- Not Arrived -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-sm">
+<div class="p-2 rounded-lg bg-tertiary-container/10 text-tertiary group-hover:bg-tertiary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">schedule</span>
+</div>
+<span class="text-on-surface-variant font-tabular-nums text-[12px] bg-surface-container-high px-2 py-0.5 rounded-full">Pending</span>
+</div>
+<h3 class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Not Arrived</h3>
+<p class="font-display-lg text-display-lg mt-1 tabular-nums text-tertiary">342</p>
+</div>
+<!-- Arrived -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-sm">
+<div class="p-2 rounded-lg bg-secondary-container/50 text-on-secondary-container group-hover:bg-secondary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined" data-weight="fill">inventory</span>
+</div>
+<span class="text-secondary font-tabular-nums text-[12px] bg-secondary-container/30 px-2 py-0.5 rounded-full">In Transit</span>
+</div>
+<h3 class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Arrived</h3>
+<p class="font-display-lg text-display-lg mt-1 tabular-nums text-secondary">1,208</p>
+</div>
+<!-- Delivered -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-sm">
+<div class="p-2 rounded-lg bg-primary-container text-white group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<span class="text-emerald-600 font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">98% Goal</span>
+</div>
+<h3 class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Delivered</h3>
+<p class="font-display-lg text-display-lg mt-1 tabular-nums text-primary-container">3,271</p>
+</div>
+</div>
+<!-- Bento Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+<!-- Active Fleet Map / Visualization -->
+<div class="lg:col-span-2 bg-white rounded-xl border border-outline-variant overflow-hidden shadow-[0px_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-[500px]">
+<div class="p-md border-b border-outline-variant flex justify-between items-center bg-white/50 backdrop-blur-sm sticky top-0">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Fleet Geographic Distribution</h2>
+<p class="text-on-surface-variant font-body-md text-body-md">Live monitoring across 42 routes</p>
+</div>
+<button class="text-primary font-label-md text-label-md flex items-center gap-1 hover:underline">
+                            Open Map <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex-1 bg-surface-container-low relative">
+<img alt="Fleet status" class="w-full h-full object-cover grayscale-[0.2]" data-alt="A sophisticated logistics dashboard interface displayed on a large high-resolution monitor. The UI features a clean, professional corporate aesthetic with a white and light gray background, accented by a deep navy blue and vibrant electric blue color scheme. It includes high-density data tables, real-time shipment status cards, and a subtle geographic map visualization. The lighting is bright and even, reflecting a high-performance office environment with a focus on technological efficiency and logistical precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFAeu2cWS7G_K0P_RS6myAyueOr2IZpR7W1KsMQtrziBRcMziYLcwGtLuX1JoCYhmoKmd6It_KjxrOXwEmtbZMS0Y33VAciUnLgyPSHzRnuc2FtftwaqzaQSupQi0EVuhpPPL0Grvkpj_ZPxGKwwzrX0m84v-nQ0Sbp-3ObWF1J0aUDtcAqP-lJpabWeirDha-zbSpvZZuJYZhz7FvNY8tKVE8p9bw8B8WQH8fkOPfNUaF6WhwlI7uPantqPFUC5Zj73A8peoVUtw"/>
+<!-- Simulated Overlay Markers -->
+<div class="absolute top-1/4 left-1/3 w-4 h-4 bg-primary rounded-full ring-4 ring-primary/20 animate-pulse"></div>
+<div class="absolute top-1/2 left-2/3 w-4 h-4 bg-primary rounded-full ring-4 ring-primary/20 animate-pulse"></div>
+<div class="absolute bottom-1/3 left-1/2 w-4 h-4 bg-tertiary rounded-full ring-4 ring-tertiary/20"></div>
+</div>
+</div>
+<!-- Live Feed / Notifications -->
+<div class="bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-[500px]">
+<div class="p-md border-b border-outline-variant bg-white/50 backdrop-blur-sm sticky top-0">
+<h2 class="font-headline-md text-headline-md text-on-surface">Live Operations Feed</h2>
+</div>
+<div class="flex-1 overflow-y-auto p-md custom-scrollbar flex flex-col gap-md">
+<!-- Feed Item -->
+<div class="flex gap-md group">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+</div>
+<div class="absolute top-8 left-1/2 w-[1px] h-full bg-outline-variant"></div>
+</div>
+<div class="pb-md">
+<p class="font-body-md text-body-md font-semibold text-on-surface">Shipment #2394 Delivered</p>
+<p class="text-on-surface-variant font-body-md text-body-md">KHI-82 to Blue Area, Islamabad</p>
+<p class="text-outline text-[12px] font-medium mt-1">2 mins ago</p>
+</div>
+</div>
+<!-- Feed Item -->
+<div class="flex gap-md group">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+</div>
+<div class="absolute top-8 left-1/2 w-[1px] h-full bg-outline-variant"></div>
+</div>
+<div class="pb-md">
+<p class="font-body-md text-body-md font-semibold text-on-surface">Weather Delay Warning</p>
+<p class="text-on-surface-variant font-body-md text-body-md">Route Lahore-Faisalabad affected by heavy rain.</p>
+<p class="text-outline text-[12px] font-medium mt-1">15 mins ago</p>
+</div>
+</div>
+<!-- Feed Item -->
+<div class="flex gap-md group">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+</div>
+<div class="absolute top-8 left-1/2 w-[1px] h-full bg-outline-variant"></div>
+</div>
+<div class="pb-md">
+<p class="font-body-md text-body-md font-semibold text-on-surface">Bulk Load Sheet Generated</p>
+<p class="text-on-surface-variant font-body-md text-body-md">Warehouse A - Unit 4: 128 new items ready for dispatch.</p>
+<p class="text-outline text-[12px] font-medium mt-1">42 mins ago</p>
+</div>
+</div>
+<!-- Feed Item -->
+<div class="flex gap-md group">
+<div class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">person_add</span>
+</div>
+<div class="">
+<p class="font-body-md text-body-md font-semibold text-on-surface">New Fleet Partner</p>
+<p class="text-on-surface-variant font-body-md text-body-md">Swift Movers Ltd added to vendor network.</p>
+<p class="text-outline text-[12px] font-medium mt-1">1 hour ago</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Detailed Shipments Table Section -->
+<section class="mt-lg bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
+<div class="p-md border-b border-outline-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
+<h2 class="font-headline-md text-headline-md text-on-surface">Active Operations Detail</h2>
+<div class="flex items-center gap-sm w-full md:w-auto">
+<div class="relative flex-1 md:w-64">
+<input class="w-full text-body-md border-outline-variant rounded-lg py-1.5 pl-9 bg-slate-50 focus:bg-white transition-all" placeholder="Filter by ID or City..." type="text"/>
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">filter_list</span>
+</div>
+<button class="bg-surface-container-high px-4 py-2 rounded-lg text-label-md font-label-md hover:bg-surface-container-highest transition-colors active:scale-95">Export CSV</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-slate-50 text-on-surface-variant">
+<tr>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Tracking ID</th>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Customer</th>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Origin / Destination</th>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Status</th>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant text-right">ETA</th>
+<th class="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer group">
+<td class="px-md py-4 font-tabular-nums text-primary font-semibold">#FLY-92841</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center text-primary text-[10px] font-bold">AS</div>
+<span class="font-body-md text-body-md text-on-surface font-medium">Ahmed Sheikh</span>
+</div>
+</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-md text-body-md">
+<span>Karachi</span>
+<span class="material-symbols-outlined text-[16px] text-outline">arrow_forward</span>
+<span>Islamabad</span>
+</div>
+</td>
+<td class="px-md py-4">
+<span class="bg-primary/10 text-primary px-3 py-1 rounded-full text-[12px] font-semibold border border-primary/20">In Transit</span>
+</td>
+<td class="px-md py-4 text-right font-tabular-nums font-body-md text-body-md text-on-surface">Today, 18:45</td>
+<td class="px-md py-4">
+<button class="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer group">
+<td class="px-md py-4 font-tabular-nums text-primary font-semibold">#FLY-92842</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary text-[10px] font-bold">MK</div>
+<span class="font-body-md text-body-md text-on-surface font-medium">Maryam Khan</span>
+</div>
+</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-md text-body-md">
+<span>Lahore</span>
+<span class="material-symbols-outlined text-[16px] text-outline">arrow_forward</span>
+<span>Multan</span>
+</div>
+</td>
+<td class="px-md py-4">
+<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[12px] font-semibold border border-emerald-200">Delivered</span>
+</td>
+<td class="px-md py-4 text-right font-tabular-nums font-body-md text-body-md text-on-surface">May 14, 09:20</td>
+<td class="px-md py-4">
+<button class="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer group">
+<td class="px-md py-4 font-tabular-nums text-primary font-semibold">#FLY-92843</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary text-[10px] font-bold">JD</div>
+<span class="font-body-md text-body-md text-on-surface font-medium">Javeria Dawood</span>
+</div>
+</td>
+<td class="px-md py-4">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-md text-body-md">
+<span>Quetta</span>
+<span class="material-symbols-outlined text-[16px] text-outline">arrow_forward</span>
+<span>Karachi</span>
+</div>
+</td>
+<td class="px-md py-4">
+<span class="bg-surface-container-high text-on-surface-variant px-3 py-1 rounded-full text-[12px] font-semibold border border-outline-variant">Booked</span>
+</td>
+<td class="px-md py-4 text-right font-tabular-nums font-body-md text-body-md text-on-surface">Tomorrow, 14:00</td>
+<td class="px-md py-4">
+<button class="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-md flex justify-between items-center bg-slate-50/50">
+<p class="text-label-md font-label-md text-on-surface-variant">Showing 1-15 of 248 items</p>
+<div class="flex gap-2">
+<button class="p-2 border border-outline-variant rounded bg-white hover:bg-slate-100 disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<button class="p-2 border border-outline-variant rounded bg-white hover:bg-slate-100">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Mobile Bottom NavBar -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-outline-variant flex items-center justify-around z-50">
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined" data-weight="fill">dashboard</span>
+<span class="text-[10px] font-semibold">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">local_shipping</span>
+<span class="text-[10px] font-medium">Ships</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">location_on</span>
+<span class="text-[10px] font-medium">Track</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-medium">Cust</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium">More</span>
+</button>
+</nav>
+<!-- FAB for Quick Actions -->
+<button class="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</button>
+<script>
+        // Simple micro-interaction for cards
+        document.querySelectorAll('.group').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-2px)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'translateY(0px)';
+            });
+        });
+
+        // Search bar focus effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput?.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('max-w-[700px]');
+        });
+        searchInput?.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('max-w-[700px]');
+        });
+    </script>
+</body></html>
