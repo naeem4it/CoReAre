@@ -18,7 +18,7 @@ export default function ErrorBoundary({ error, reset }: ErrorProps) {
 
   return (
     <main className="min-h-[80vh] w-full flex items-center justify-center p-md bg-background text-on-surface">
-      <div className="w-full max-w-[520px] bg-white dark:bg-surface-container-lowest rounded-2xl border border-error-container p-xl shadow-lg flex flex-col gap-md">
+      <div className="w-full max-w-[720px] bg-white dark:bg-surface-container-lowest rounded-2xl border border-error-container p-xl shadow-lg flex flex-col gap-md">
         {/* Header Alert */}
         <div className="flex items-center gap-md">
           <div className="w-12 h-12 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0">

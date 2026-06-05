@@ -607,6 +607,36 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCityCity extends Struct.CollectionTypeSchema {
+  collectionName: 'cities';
+  info: {
+    displayName: 'City';
+    pluralName: 'cities';
+    singularName: 'city';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    Active: Schema.Attribute.Boolean;
+    CityName: Schema.Attribute.String;
+    courier_cities: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::courier-city.courier-city'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::city.city'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCodSettlementCodSettlement
   extends Struct.CollectionTypeSchema {
   collectionName: 'cod_settlements';
@@ -645,6 +675,36 @@ export interface ApiCodSettlementCodSettlement
   };
 }
 
+export interface ApiCourierCityCourierCity extends Struct.CollectionTypeSchema {
+  collectionName: 'courier_cities';
+  info: {
+    displayName: 'CourierCity';
+    pluralName: 'courier-cities';
+    singularName: 'courier-city';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    cities: Schema.Attribute.Relation<'manyToMany', 'api::city.city'>;
+    couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::courier-city.courier-city'
+    > &
+      Schema.Attribute.Private;
+    parcel: Schema.Attribute.Relation<'oneToOne', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
   collectionName: 'couriers';
   info: {
@@ -659,6 +719,10 @@ export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
   attributes: {
     api_enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     contact_info: Schema.Attribute.JSON;
+    courier_cities: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::courier-city.courier-city'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -669,6 +733,7 @@ export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    parcel: Schema.Attribute.Relation<'oneToOne', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
@@ -897,6 +962,11 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
   };
   attributes: {
     cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    courier: Schema.Attribute.Relation<'oneToOne', 'api::courier.courier'>;
+    courier_city: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::courier-city.courier-city'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2050,7 +2120,9 @@ declare module '@strapi/strapi' {
       'api::author.author': ApiAuthorAuthor;
       'api::bag.bag': ApiBagBag;
       'api::category.category': ApiCategoryCategory;
+      'api::city.city': ApiCityCity;
       'api::cod-settlement.cod-settlement': ApiCodSettlementCodSettlement;
+      'api::courier-city.courier-city': ApiCourierCityCourierCity;
       'api::courier.courier': ApiCourierCourier;
       'api::delivery-attempt.delivery-attempt': ApiDeliveryAttemptDeliveryAttempt;
       'api::dispute.dispute': ApiDisputeDispute;

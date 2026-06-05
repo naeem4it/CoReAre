@@ -19,8 +19,16 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["created", "picked", "in_hub", "in_transit", "delivered", "failed", "returned"],
-      "default": "created"
+      "default": "created",
+      "enum": [
+        "created",
+        "picked",
+        "in_hub",
+        "in_transit",
+        "delivered",
+        "failed",
+        "returned"
+      ]
     },
     "cod_amount": {
       "type": "decimal",
@@ -45,6 +53,18 @@
     "recipient_address": {
       "type": "text",
       "required": true
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::courier.courier",
+      "mappedBy": "parcel"
+    },
+    "courier_city": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::courier-city.courier-city",
+      "mappedBy": "parcel"
     }
   }
 }

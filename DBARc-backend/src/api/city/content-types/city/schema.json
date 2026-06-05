@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cities",
+  "info": {
+    "singularName": "city",
+    "pluralName": "cities",
+    "displayName": "City"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "CityName": {
+      "type": "string"
+    },
+    "Active": {
+      "type": "boolean"
+    },
+    "courier_cities": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::courier-city.courier-city",
+      "mappedBy": "cities"
+    }
+  }
+}
