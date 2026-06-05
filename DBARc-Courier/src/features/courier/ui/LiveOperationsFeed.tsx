@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
+import { Parcel } from '@/types/generated/parcel.types';
+import { StrapiCollectionResponse } from '@/types/strapi.types';
 
 type FeedItem = {
   id: string | number;
@@ -58,22 +60,23 @@ export const LiveOperationsFeed = () => {
   React.useEffect(() => {
     const fetchRecentActivities = async () => {
       try {
-        const response = await apiClient.get('/parcels?sort[0]=createdAt:desc&pagination[limit]=4');
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?sort[0]=createdAt:desc&pagination[limit]=4');
         const parcels = response.data?.data || [];
         
         if (parcels.length > 0) {
-          const dynamicItems: FeedItem[] = parcels.map((p: any) => {
-            const timeDiff = Date.now() - new Date(p.createdAt || p.updatedAt || Date.now()).getTime();
+          const dynamicItems: FeedItem[] = parcels.map((p: Parcel) => {
+            const timeDiff = Date.now() - new Date(p.createdAt || Date.now()).getTime();
             const minutes = Math.max(1, Math.floor(timeDiff / 60000));
             const timeStr = minutes < 60 ? `${minutes} mins ago` : `${Math.floor(minutes / 60)} hours ago`;
             
             const isDelivered = p.status === 'delivered';
             const trackingNum = p.tracking_number;
+            const statusStr = p.status ? p.status.replace('_', ' ') : 'unknown';
             
             return {
               id: p.id,
               title: isDelivered ? `Shipment #${trackingNum} Delivered` : `Shipment #${trackingNum} Updated`,
-              detail: `Recipient: ${p.recipient_name || 'N/A'}, status: ${p.status.replace('_', ' ')}`,
+              detail: `Recipient: ${p.recipient_name || 'N/A'}, status: ${statusStr}`,
               time: timeStr,
               icon: isDelivered ? 'check_circle' : 'inventory_2',
               bgColor: isDelivered ? 'bg-emerald-100' : 'bg-primary/10',

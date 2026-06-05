@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
+import { Parcel } from '@/types/generated/parcel.types';
+import { StrapiCollectionResponse } from '@/types/strapi.types';
 
 type ShipmentRow = {
   id: number | string;
@@ -56,11 +58,11 @@ export const CourierShipmentsTable = () => {
   React.useEffect(() => {
     const fetchParcels = async () => {
       try {
-        const response = await apiClient.get('/parcels?populate=*');
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*');
         const parcels = response.data?.data || [];
         
         if (parcels.length > 0) {
-          const mapped: ShipmentRow[] = parcels.map((item: any) => {
+          const mapped: ShipmentRow[] = parcels.map((item: Parcel) => {
             const customerName = item.recipient_name || 'Ahmed Sheikh';
             const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'AS';
             
@@ -68,8 +70,14 @@ export const CourierShipmentsTable = () => {
             const destination = item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
             
             // Map Strapi status (created, picked, in_hub, in_transit, delivered, failed, returned) to UI status
-            let uiStatus = item.status;
-            if (uiStatus === 'created') uiStatus = 'booked';
+            let uiStatus: ShipmentRow['status'] = 'booked';
+            if (item.status) {
+              if (item.status === 'created') {
+                uiStatus = 'booked';
+              } else {
+                uiStatus = item.status;
+              }
+            }
             
             return {
               id: item.id,

@@ -1,0 +1,176 @@
+'use client';
+
+import * as React from 'react';
+import { useFormContext, FieldValues, Path } from 'react-hook-form';
+import { FormLabel } from './form-primitives';
+import { cn } from '@/shared/lib/utils';
+
+// ==========================================
+// TextBox Component
+// ==========================================
+export interface TextBoxProps<TFieldValues extends FieldValues>
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name'> {
+  name: Path<TFieldValues>;
+  label?: string;
+  icon?: string;
+  rightElement?: React.ReactNode;
+  required?: boolean;
+  optional?: boolean;
+}
+
+export function TextBox<TFieldValues extends FieldValues>({
+  name,
+  label,
+  icon,
+  rightElement,
+  required,
+  optional,
+  className = '',
+  disabled,
+  id,
+  ...props
+}: TextBoxProps<TFieldValues>) {
+  const {
+    register,
+    formState: { errors },
+  } = useFormContext<TFieldValues>();
+
+  const error = errors[name];
+  const errorMessage = error?.message as string | undefined;
+  const inputId = id || (name as string);
+
+  return (
+    <div className="flex flex-col gap-xs w-full">
+      {label && (
+        <FormLabel htmlFor={inputId} required={required} optional={optional}>
+          {label}
+        </FormLabel>
+      )}
+      <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
+        {icon && (
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors select-none" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+        <input
+          id={inputId}
+          disabled={disabled}
+          aria-invalid={errorMessage ? 'true' : 'false'}
+          aria-describedby={errorMessage ? `${inputId}-error` : undefined}
+          className={cn(
+            "w-full h-10 bg-white border rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface disabled:opacity-50 disabled:cursor-not-allowed",
+            icon ? "pl-10" : "pl-4",
+            rightElement ? "pr-12" : "pr-4",
+            errorMessage 
+              ? "border-error/50 focus:border-error focus:ring-1 focus:ring-error" 
+              : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary",
+            className
+          )}
+          {...register(name)}
+          {...props}
+        />
+        {rightElement && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+            {rightElement}
+          </div>
+        )}
+      </div>
+      {errorMessage && (
+        <span id={`${inputId}-error`} className="text-[12px] font-semibold text-error flex items-center gap-1 mt-0.5" role="alert">
+          <span className="material-symbols-outlined text-[14px]">error</span>
+          {errorMessage}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// SearchableInputText (Datalist Autocomplete) Component
+// ==========================================
+export interface SearchableInputTextProps<TFieldValues extends FieldValues>
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name' | 'list'> {
+  name: Path<TFieldValues>;
+  label?: string;
+  icon?: string;
+  rightElement?: React.ReactNode;
+  required?: boolean;
+  optional?: boolean;
+  suggestions: string[];
+}
+
+export function SearchableInputText<TFieldValues extends FieldValues>({
+  name,
+  label,
+  icon,
+  rightElement,
+  required,
+  optional,
+  suggestions,
+  className = '',
+  disabled,
+  id,
+  ...props
+}: SearchableInputTextProps<TFieldValues>) {
+  const {
+    register,
+    formState: { errors },
+  } = useFormContext<TFieldValues>();
+
+  const error = errors[name];
+  const errorMessage = error?.message as string | undefined;
+  const inputId = id || (name as string);
+  const datalistId = `${inputId}-datalist`;
+
+  return (
+    <div className="flex flex-col gap-xs w-full">
+      {label && (
+        <FormLabel htmlFor={inputId} required={required} optional={optional}>
+          {label}
+        </FormLabel>
+      )}
+      <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
+        {icon && (
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors select-none" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+        <input
+          id={inputId}
+          list={datalistId}
+          disabled={disabled}
+          aria-invalid={errorMessage ? 'true' : 'false'}
+          aria-describedby={errorMessage ? `${inputId}-error` : undefined}
+          autoComplete="off"
+          className={cn(
+            "w-full h-10 bg-white border rounded-lg font-body-md text-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface disabled:opacity-50 disabled:cursor-not-allowed",
+            icon ? "pl-10" : "pl-4",
+            rightElement ? "pr-12" : "pr-4",
+            errorMessage 
+              ? "border-error/50 focus:border-error focus:ring-1 focus:ring-error" 
+              : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary",
+            className
+          )}
+          {...register(name)}
+          {...props}
+        />
+        <datalist id={datalistId}>
+          {suggestions.map((suggestion, index) => (
+            <option key={`${suggestion}-${index}`} value={suggestion} />
+          ))}
+        </datalist>
+        {rightElement && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+            {rightElement}
+          </div>
+        )}
+      </div>
+      {errorMessage && (
+        <span id={`${inputId}-error`} className="text-[12px] font-semibold text-error flex items-center gap-1 mt-0.5" role="alert">
+          <span className="material-symbols-outlined text-[14px]">error</span>
+          {errorMessage}
+        </span>
+      )}
+    </div>
+  );
+}

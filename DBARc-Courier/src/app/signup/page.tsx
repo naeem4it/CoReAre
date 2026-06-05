@@ -3,22 +3,43 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiClient } from '@/shared/api/api-client';
+import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { AxiosError } from 'axios';
+import { useMutation } from '@tanstack/react-query';
+
+import { AuthService } from '@/services/api';
+import { RegisterRequest, RegisterResponse } from '@/types/auth.types';
+import { User } from '@/types/generated/user.types';
+import { StrapiErrorResponse } from '@/types/strapi.types';
+import { TextBox } from '@/components/ui/form/text-box';
+
+const signupSchema = z.object({
+  fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+  businessName: z.string().optional(),
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+type SignupFormInputs = z.infer<typeof signupSchema>;
 
 export default function SignupPage() {
   const router = useRouter();
 
-  // Form states
-  const [fullName, setFullName] = React.useState('');
-  const [businessName, setBusinessName] = React.useState('');
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
   const [agreeTerms, setAgreeTerms] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-
-  // Status states
   const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
+
+  const methods = useForm<SignupFormInputs>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      fullName: '',
+      businessName: '',
+      email: '',
+      password: '',
+    },
+  });
 
   // Parallax effect for visual side
   React.useEffect(() => {
@@ -42,60 +63,61 @@ export default function SignupPage() {
     };
   }, []);
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fullName || !email || !password) {
-      setError('Please fill in all required fields');
-      return;
-    }
+  const signupMutation = useMutation<RegisterResponse, AxiosError<StrapiErrorResponse>, RegisterRequest>({
+    mutationFn: AuthService.register,
+    onSuccess: async (data, variables) => {
+      localStorage.setItem('token', data.jwt);
+      localStorage.setItem('dbarc-token', data.jwt);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      // 2. Call user update API to store additional fields if required
+      try {
+        const updatePayload: Partial<User> = {};
+        if (variables.fullName) {
+          updatePayload.username = variables.fullName;
+        }
+        if (variables.businessName !== undefined && variables.businessName !== '') {
+          updatePayload.businessName = variables.businessName;
+        }
+        await AuthService.updateUser(data.user.id, updatePayload);
+      } catch (updateErr) {
+        console.warn('Profile update warning:', updateErr);
+      }
+
+      // Redirect to dashboard
+      router.push('/');
+    },
+    onError: (err) => {
+      console.error('Registration error:', err);
+      let message = 'Failed to register account. Please try again.';
+      if (err.response?.data?.error?.message) {
+        message = err.response.data.error.message;
+      }
+      setError(message);
+    },
+  });
+
+  const handleSignupSubmit = (data: SignupFormInputs) => {
     if (!agreeTerms) {
       setError('You must agree to the Terms of Service and Privacy Policy');
       return;
     }
-
-    setLoading(true);
     setError(null);
 
-    try {
-      // 1. Call registration API
-      const registerRes = await apiClient.post('/auth/local/register', {
-        username: email, // Use email as unique username identifier
-        email: email,
-        password: password,
-        fullName: fullName,
-        businessName: businessName,
-      });
-
-      const { jwt, user } = registerRes.data;
-
-      if (jwt) {
-        localStorage.setItem('token', jwt);
-        localStorage.setItem('dbarc-token', jwt);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        // 2. Call user update API to store additional fields if required
-        try {
-          await apiClient.put(`/users/${user.id}`, {
-            username: fullName, // update display username to Full Name
-            businessName: businessName,
-          });
-        } catch (updateErr) {
-          console.warn('Profile update warning:', updateErr);
-        }
-
-        // Redirect to dashboard
-        router.push('/');
-      } else {
-        setError('Registration succeeded but token was not returned.');
-      }
-    } catch (err: any) {
-      console.error('Registration error:', err);
-      const message = err.response?.data?.error?.message || 'Failed to register account. Please try again.';
-      setError(message);
-    } finally {
-      setLoading(false);
+    const registerPayload: RegisterRequest = {
+      username: data.email, // Use email as unique username identifier
+      email: data.email,
+      password: data.password,
+      fullName: data.fullName,
+    };
+    if (data.businessName !== undefined && data.businessName !== '') {
+      registerPayload.businessName = data.businessName;
     }
+
+    signupMutation.mutate(registerPayload);
   };
+
+  const loading = signupMutation.isPending;
 
   return (
     <main className="flex min-h-screen w-full bg-background text-on-surface">
@@ -117,7 +139,6 @@ export default function SignupPage() {
 
       {/* Visual Side (Split Screen) */}
       <section id="visual-side" className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-xl overflow-hidden bg-primary-container min-h-screen">
-        {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
           <img
             alt="Fly Courier Global Operations"
@@ -184,7 +205,6 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {/* Error Container */}
           {error && (
             <div className="mb-md p-sm bg-error-container text-on-error-container text-body-md rounded-lg flex items-center gap-xs border border-error/20">
               <span className="material-symbols-outlined text-[20px]">error</span>
@@ -192,146 +212,106 @@ export default function SignupPage() {
             </div>
           )}
 
-          {/* Form */}
-          <form className="space-y-md" onSubmit={handleSignup}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <div className="flex flex-col gap-xs">
-                <label className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                  Full Name
-                </label>
-                <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
-                    person
-                  </span>
+          <FormProvider {...methods}>
+            <form className="space-y-md" onSubmit={methods.handleSubmit(handleSignupSubmit)}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                <TextBox<SignupFormInputs>
+                  name="fullName"
+                  label="Full Name"
+                  placeholder="John Doe"
+                  type="text"
+                  icon="person"
+                  disabled={loading}
+                />
+
+                <TextBox<SignupFormInputs>
+                  name="businessName"
+                  label="Business Name"
+                  placeholder="Fly Courier Ltd."
+                  type="text"
+                  icon="corporate_fare"
+                  disabled={loading}
+                />
+              </div>
+
+              <TextBox<SignupFormInputs>
+                name="email"
+                label="Email Address"
+                placeholder="operations@flycourier.com"
+                type="email"
+                icon="mail"
+                disabled={loading}
+              />
+
+              <TextBox<SignupFormInputs>
+                name="password"
+                label="Password"
+                placeholder="••••••••••••"
+                type={showPassword ? 'text' : 'password'}
+                icon="lock"
+                disabled={loading}
+                rightElement={
+                  <button
+                    className="text-outline hover:text-on-surface transition-colors cursor-pointer flex items-center justify-center"
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {showPassword ? 'visibility_off' : 'visibility'}
+                    </span>
+                  </button>
+                }
+              />
+
+              <div className="flex items-start gap-sm py-xs">
+                <div className="flex items-center h-5">
                   <input
-                    className="w-full h-10 pl-10 pr-4 bg-surface-container-low border border-outline-variant rounded-lg font-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
-                    placeholder="John Doe"
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    id="terms"
+                    className="w-5 h-5 text-primary border-outline-variant rounded-md focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                    type="checkbox"
+                    checked={agreeTerms}
+                    onChange={(e) => setAgreeTerms(e.target.checked)}
                     required
                     disabled={loading}
                   />
                 </div>
-              </div>
-
-              <div className="flex flex-col gap-xs">
-                <label className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                  Business Name
-                </label>
-                <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
-                    corporate_fare
-                  </span>
-                  <input
-                    className="w-full h-10 pl-10 pr-4 bg-surface-container-low border border-outline-variant rounded-lg font-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
-                    placeholder="Fly Courier Ltd."
-                    type="text"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    disabled={loading}
-                  />
+                <div className="ml-1 text-label-md">
+                  <label className="font-body-md text-on-surface-variant cursor-pointer select-none" htmlFor="terms">
+                    I agree to the{' '}
+                    <a className="text-primary font-bold hover:underline decoration-2 underline-offset-4 transition-all" href="#">
+                      Terms of Service
+                    </a>{' '}
+                    and{' '}
+                    <a className="text-primary font-bold hover:underline decoration-2 underline-offset-4 transition-all" href="#">
+                      Privacy Policy
+                    </a>
+                    .
+                  </label>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-xs">
-              <label className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                Email Address
-              </label>
-              <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
-                  mail
-                </span>
-                <input
-                  className="w-full h-10 pl-10 pr-md bg-surface-container-low border border-outline-variant rounded-lg font-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
-                  placeholder="operations@flycourier.com"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-xs">
-              <label className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                Password
-              </label>
-              <div className="relative group transition-transform duration-200 focus-within:scale-[1.01]">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
-                  lock
-                </span>
-                <input
-                  className="w-full h-10 pl-10 pr-12 bg-surface-container-low border border-outline-variant rounded-lg font-body-md focus:outline-none transition-all placeholder:text-outline/50 text-on-surface"
-                  placeholder="••••••••••••"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
-                />
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors cursor-pointer"
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  <span className="material-symbols-outlined">
-                    {showPassword ? 'visibility_off' : 'visibility'}
+              <button
+                className="w-full h-12 bg-primary-container text-on-primary-container font-headline-md text-headline-md rounded-xl hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creating Account...
                   </span>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-sm py-xs">
-              <div className="flex items-center h-5">
-                <input
-                  id="terms"
-                  className="w-5 h-5 text-primary border-outline-variant rounded-md focus:ring-primary focus:ring-offset-0 cursor-pointer"
-                  type="checkbox"
-                  checked={agreeTerms}
-                  onChange={(e) => setAgreeTerms(e.target.checked)}
-                  required
-                  disabled={loading}
-                />
-              </div>
-              <div className="ml-1 text-label-md">
-                <label className="font-body-md text-on-surface-variant cursor-pointer select-none" htmlFor="terms">
-                  I agree to the{' '}
-                  <a className="text-primary font-bold hover:underline decoration-2 underline-offset-4 transition-all" href="#">
-                    Terms of Service
-                  </a>{' '}
-                  and{' '}
-                  <a className="text-primary font-bold hover:underline decoration-2 underline-offset-4 transition-all" href="#">
-                    Privacy Policy
-                  </a>
-                  .
-                </label>
-              </div>
-            </div>
-
-            <button
-              className="w-full h-12 bg-primary-container text-on-primary-container font-headline-md text-headline-md rounded-xl hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating Account...
-                </span>
-              ) : (
-                <>
-                  Create Account
-                  <span className="material-symbols-outlined">arrow_forward</span>
-                </>
-              )}
-            </button>
-          </form>
+                ) : (
+                  <>
+                    Create Account
+                    <span className="material-symbols-outlined">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </FormProvider>
 
           <div className="mt-lg pt-lg border-t border-outline-variant flex flex-col items-center gap-md">
             <p className="font-body-md text-on-surface-variant">

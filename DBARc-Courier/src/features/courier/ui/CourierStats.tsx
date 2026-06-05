@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
+import { Parcel } from '@/types/generated/parcel.types';
+import { StrapiCollectionResponse } from '@/types/strapi.types';
 
 type StatsData = {
   totalShipments: number;
@@ -22,16 +24,16 @@ export const CourierStats = () => {
   React.useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await apiClient.get('/parcels?populate=*');
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*');
         const parcels = response.data?.data || [];
         
         if (parcels.length > 0) {
           const total = parcels.length;
-          const pending = parcels.filter((p: any) => 
+          const pending = parcels.filter((p: Parcel) => 
             p.status === 'created' || p.status === 'picked' || p.status === 'in_hub'
           ).length;
-          const inTransit = parcels.filter((p: any) => p.status === 'in_transit').length;
-          const deliveredCount = parcels.filter((p: any) => p.status === 'delivered').length;
+          const inTransit = parcels.filter((p: Parcel) => p.status === 'in_transit').length;
+          const deliveredCount = parcels.filter((p: Parcel) => p.status === 'delivered').length;
 
           setStats({
             totalShipments: total,

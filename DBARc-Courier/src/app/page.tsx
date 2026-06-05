@@ -41,21 +41,19 @@ export default function Dashboard() {
             <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Fly Courier</span>
             <nav className="hidden md:flex items-center gap-md ml-lg">
               <a
-                className={`pb-1 font-semibold font-body-md text-body-md transition-all active:scale-95 cursor-pointer ${
-                  activeTab === 'Overview'
+                className={`pb-1 font-semibold font-body-md text-body-md transition-all active:scale-95 cursor-pointer ${activeTab === 'Overview'
                     ? 'text-primary dark:text-primary-fixed border-b-2 border-primary dark:border-primary-fixed'
                     : 'text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed'
-                }`}
+                  }`}
                 onClick={() => setActiveTab('Overview')}
               >
                 Dashboard
               </a>
               <a
-                className={`pb-1 font-semibold font-body-md text-body-md transition-all active:scale-95 cursor-pointer ${
-                  activeTab === 'Shipments'
+                className={`pb-1 font-semibold font-body-md text-body-md transition-all active:scale-95 cursor-pointer ${activeTab === 'Shipments'
                     ? 'text-primary dark:text-primary-fixed border-b-2 border-primary dark:border-primary-fixed'
                     : 'text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed'
-                }`}
+                  }`}
                 onClick={() => setActiveTab('Shipments')}
               >
                 Shipments
@@ -111,11 +109,10 @@ export default function Dashboard() {
           <nav className="flex flex-col gap-1">
             <a
               onClick={() => setActiveTab('Overview')}
-              className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                activeTab === 'Overview'
+              className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${activeTab === 'Overview'
                   ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
                   : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">dashboard</span>
               <span className="font-label-md text-label-md">Overview</span>
@@ -123,11 +120,10 @@ export default function Dashboard() {
 
             <a
               onClick={() => setActiveTab('Shipments')}
-              className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                activeTab === 'Shipments'
+              className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${activeTab === 'Shipments'
                   ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
                   : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">local_shipping</span>
               <span className="font-label-md text-label-md">Booking</span>
@@ -173,31 +169,28 @@ export default function Dashboard() {
                 <div className="flex items-center gap-sm">
                   <div className="flex bg-white rounded-lg border border-outline-variant p-1 shadow-sm">
                     <button
-                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${
-                        activeTimeframe === '24h'
+                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${activeTimeframe === '24h'
                           ? 'bg-secondary-container text-on-secondary-container font-semibold'
                           : 'hover:bg-surface-container-low'
-                      }`}
+                        }`}
                       onClick={() => setActiveTimeframe('24h')}
                     >
                       24h
                     </button>
                     <button
-                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${
-                        activeTimeframe === '7d'
+                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${activeTimeframe === '7d'
                           ? 'bg-secondary-container text-on-secondary-container font-semibold'
                           : 'hover:bg-surface-container-low'
-                      }`}
+                        }`}
                       onClick={() => setActiveTimeframe('7d')}
                     >
                       7d
                     </button>
                     <button
-                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${
-                        activeTimeframe === '30d'
+                      className={`px-3 py-1.5 rounded text-label-md font-label-md cursor-pointer ${activeTimeframe === '30d'
                           ? 'bg-secondary-container text-on-secondary-container font-semibold'
                           : 'hover:bg-surface-container-low'
-                      }`}
+                        }`}
                       onClick={() => setActiveTimeframe('30d')}
                     >
                       30d
@@ -245,18 +238,16 @@ export default function Dashboard() {
       {/* Mobile Bottom NavBar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-outline-variant flex items-center justify-around z-50">
         <button
-          className={`flex flex-col items-center gap-1 cursor-pointer ${
-            activeTab === 'Overview' ? 'text-primary' : 'text-on-surface-variant'
-          }`}
+          className={`flex flex-col items-center gap-1 cursor-pointer ${activeTab === 'Overview' ? 'text-primary' : 'text-on-surface-variant'
+            }`}
           onClick={() => setActiveTab('Overview')}
         >
           <span className="material-symbols-outlined">dashboard</span>
           <span className="text-[10px] font-semibold">Home</span>
         </button>
         <button
-          className={`flex flex-col items-center gap-1 cursor-pointer ${
-            activeTab === 'Shipments' ? 'text-primary' : 'text-on-surface-variant'
-          }`}
+          className={`flex flex-col items-center gap-1 cursor-pointer ${activeTab === 'Shipments' ? 'text-primary' : 'text-on-surface-variant'
+            }`}
           onClick={() => setActiveTab('Shipments')}
         >
           <span className="material-symbols-outlined">local_shipping</span>

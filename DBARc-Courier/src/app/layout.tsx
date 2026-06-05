@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "Fly Courier - Logistics Dashboard",
@@ -20,7 +21,9 @@ export default function RootLayout({
 
       </head>
       <body className="min-h-full flex flex-col bg-background text-on-surface">
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
