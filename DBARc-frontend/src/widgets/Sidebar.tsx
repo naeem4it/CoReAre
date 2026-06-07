@@ -42,6 +42,11 @@ const MERCHANT_SUBMENU: NavItem[] = [
   { label: 'APIs Docs', href: '/merchant/apis-docs', icon: ShieldCheck },
 ];
 
+const COURIER_SHIPMENTS_SUBMENU: NavItem[] = [
+  { label: 'Shipments List', href: '/courier/shipments', icon: Package },
+  { label: 'Book Shipment', href: '/courier/shipments/book', icon: Package },
+];
+
 const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   SUPER_ADMIN: [
     { label: 'System Overview', href: '/admin', icon: LayoutDashboard },
@@ -54,8 +59,9 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   ],
   TENANT_ADMIN: [
     { label: 'Dashboard', href: '/courier', icon: LayoutDashboard },
-    { label: 'Shipments', href: '/courier/shipments', icon: Package },
+    { label: 'Shipments', href: '/courier/shipments', icon: Package, children: COURIER_SHIPMENTS_SUBMENU },
     { label: 'Settlements', href: '/courier/settlements', icon: BadgeDollarSign },
+
     { label: 'Riders', href: '/courier/riders', icon: Truck },
     { label: 'Clients', href: '/courier/clients', icon: Users },
     { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },

@@ -65,6 +65,23 @@
       "relation": "oneToOne",
       "target": "api::courier-city.courier-city",
       "mappedBy": "parcel"
+    },
+    "consignee_email": {
+      "type": "string"
+    },
+    "consignee_alt_phone": {
+      "type": "string"
+    },
+    "allow_to_open": {
+      "type": "enumeration",
+      "enum": [
+        "Yes",
+        "No"
+      ],
+      "default": "No"
+    },
+    "comments": {
+      "type": "text"
     }
   }
 }

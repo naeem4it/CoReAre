@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
-import { Package, Truck, Users, BarChart3 } from 'lucide-react';
+import { Package, Truck, Users, BarChart3, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { Button } from '@/shared/ui/Button';
 
 export default function CourierDashboard() {
   const stats = [
@@ -11,9 +13,16 @@ export default function CourierDashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Courier Dashboard</h1>
-        <p className="text-slate-500">Manage your logistics operations and rider fleet.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Courier Dashboard</h1>
+          <p className="text-slate-500">Manage your logistics operations and rider fleet.</p>
+        </div>
+        <Link href="/courier/shipments/book">
+          <Button className="rounded-xl shadow-lg shadow-primary-600/20">
+            <Plus className="h-5 w-5 mr-2" /> Book Shipment
+          </Button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

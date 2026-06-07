@@ -10,13 +10,20 @@ export const apiClient = axios.create({
   },
 });
 
-// Request Interceptor: Attach Bearer Token
+// Request Interceptor: Attach Bearer Token and Tenant Context
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = useAuthStore.getState().accessToken;
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Resolve tenant ID: environment variable first, then auth store session
+    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || useAuthStore.getState().user?.tenantId;
+    if (tenantId && config.headers) {
+      config.headers['x-tenant-id'] = tenantId;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

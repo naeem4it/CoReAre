@@ -961,7 +961,12 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    allow_to_open: Schema.Attribute.Enumeration<['Yes', 'No']> &
+      Schema.Attribute.DefaultTo<'No'>;
     cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    comments: Schema.Attribute.Text;
+    consignee_alt_phone: Schema.Attribute.String;
+    consignee_email: Schema.Attribute.String;
     courier: Schema.Attribute.Relation<'oneToOne', 'api::courier.courier'>;
     courier_city: Schema.Attribute.Relation<
       'oneToOne',
@@ -1168,6 +1173,43 @@ export interface ApiRegionRegion extends Struct.CollectionTypeSchema {
     parent: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
     publishedAt: Schema.Attribute.DateTime;
     type: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiReplacementReplacement extends Struct.CollectionTypeSchema {
+  collectionName: 'replacements';
+  info: {
+    description: 'Links new shipment order bookings to older shipments for replacements.';
+    displayName: 'Replacement';
+    pluralName: 'replacements';
+    singularName: 'replacement';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    collect_replacement: Schema.Attribute.Enumeration<['Yes', 'No']> &
+      Schema.Attribute.DefaultTo<'No'>;
+    collect_rs: Schema.Attribute.Decimal;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::replacement.replacement'
+    > &
+      Schema.Attribute.Private;
+    orderid: Schema.Attribute.Relation<'manyToOne', 'api::parcel.parcel'>;
+    parcel_detail: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    replacementorderid: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::parcel.parcel'
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2092,6 +2134,7 @@ export interface PluginUsersPermissionsUser
       'manyToOne',
       'plugin::users-permissions.role'
     >;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2136,6 +2179,7 @@ declare module '@strapi/strapi' {
       'api::rating.rating': ApiRatingRating;
       'api::region-coverage-rule.region-coverage-rule': ApiRegionCoverageRuleRegionCoverageRule;
       'api::region.region': ApiRegionRegion;
+      'api::replacement.replacement': ApiReplacementReplacement;
       'api::rider-assignment.rider-assignment': ApiRiderAssignmentRiderAssignment;
       'api::rider-location-history.rider-location-history': ApiRiderLocationHistoryRiderLocationHistory;
       'api::rider.rider': ApiRiderRider;

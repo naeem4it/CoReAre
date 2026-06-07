@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "replacements",
+  "info": {
+    "singularName": "replacement",
+    "pluralName": "replacements",
+    "displayName": "Replacement",
+    "description": "Links new shipment order bookings to older shipments for replacements."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "parcel_detail": {
+      "type": "string"
+    },
+    "collect_rs": {
+      "type": "decimal"
+    },
+    "collect_replacement": {
+      "type": "enumeration",
+      "enum": [
+        "Yes",
+        "No"
+      ],
+      "default": "No"
+    },
+    "orderid": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::parcel.parcel"
+    },
+    "replacementorderid": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::parcel.parcel"
+    }
+  }
+}
