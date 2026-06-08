@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const BACKEND_API_DIR = 'c:/CoReAre/DBARc-backend/src/api';
-const FRONTEND_TYPES_DIR = 'c:/CoReAre/DBARc-Courier/src/types/generated';
+const BACKEND_API_DIR = path.join(__dirname, '../DBARc-backend/src/api');
+const FRONTEND_TYPES_DIR = path.join(__dirname, 'src/types/generated');
 
 // Ensure output directory exists
 fs.mkdirSync(FRONTEND_TYPES_DIR, { recursive: true });

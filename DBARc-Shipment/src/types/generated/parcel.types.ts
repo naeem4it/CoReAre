@@ -1,4 +1,6 @@
 // Generated automatically from Strapi Schema. Do not edit manually.
+import { Courier } from './courier.types';
+import { CourierCity } from './courier-city.types';
 
 export interface Parcel {
   id: number;
@@ -11,6 +13,12 @@ export interface Parcel {
   recipient_name: string;
   recipient_phone: string;
   recipient_address: string;
+  courier?: Courier | null;
+  courier_city?: CourierCity | null;
+  consignee_email?: string;
+  consignee_alt_phone?: string;
+  allow_to_open?: 'Yes' | 'No';
+  comments?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -25,6 +33,12 @@ export interface CreateParcelRequest {
   recipient_name: string;
   recipient_phone: string;
   recipient_address: string;
+  courier?: Courier | null;
+  courier_city?: CourierCity | null;
+  consignee_email?: string;
+  consignee_alt_phone?: string;
+  allow_to_open?: 'Yes' | 'No';
+  comments?: string;
 }
 
 export interface UpdateParcelRequest extends Partial<CreateParcelRequest> {}

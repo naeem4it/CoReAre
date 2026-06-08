@@ -1,5 +1,7 @@
 // Generated automatically from Strapi Schema. Do not edit manually.
 import { Tenant } from './tenant.types';
+import { CourierCity } from './courier-city.types';
+import { Parcel } from './parcel.types';
 
 export interface Courier {
   id: number;
@@ -9,6 +11,8 @@ export interface Courier {
   contact_info?: any;
   api_enabled?: boolean;
   status?: string;
+  courier_cities?: CourierCity[];
+  parcel?: Parcel | null;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -20,6 +24,8 @@ export interface CreateCourierRequest {
   contact_info?: any;
   api_enabled?: boolean;
   status?: string;
+  courier_cities?: CourierCity[];
+  parcel?: Parcel | null;
 }
 
 export interface UpdateCourierRequest extends Partial<CreateCourierRequest> {}
