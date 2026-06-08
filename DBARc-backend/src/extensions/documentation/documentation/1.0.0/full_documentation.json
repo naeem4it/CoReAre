@@ -14,7 +14,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "x-generation-date": "2026-06-08T07:03:00.894Z"
+    "x-generation-date": "2026-06-08T07:53:41.490Z"
   },
   "x-strapi-config": {
     "plugins": [
@@ -24346,6 +24346,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -28522,6 +28528,12 @@
                                     }
                                   }
                                 },
+                                "fullName": {
+                                  "type": "string"
+                                },
+                                "businessName": {
+                                  "type": "string"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -30508,6 +30520,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -32822,6 +32840,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -34895,6 +34919,12 @@
                                 "type": "string"
                               }
                             }
+                          },
+                          "fullName": {
+                            "type": "string"
+                          },
+                          "businessName": {
+                            "type": "string"
                           },
                           "createdAt": {
                             "type": "string",
@@ -37003,6 +37033,12 @@
                                   "type": "string"
                                 }
                               }
+                            },
+                            "fullName": {
+                              "type": "string"
+                            },
+                            "businessName": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -39167,6 +39203,12 @@
                                 }
                               }
                             },
+                            "fullName": {
+                              "type": "string"
+                            },
+                            "businessName": {
+                              "type": "string"
+                            },
                             "createdAt": {
                               "type": "string",
                               "format": "date-time"
@@ -41211,6 +41253,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -45087,6 +45135,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -47321,6 +47375,12 @@
                             }
                           }
                         },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "businessName": {
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -49433,6 +49493,12 @@
                                   "type": "string"
                                 }
                               }
+                            },
+                            "fullName": {
+                              "type": "string"
+                            },
+                            "businessName": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -51863,6 +51929,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -54153,6 +54225,12 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "businessName": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -56450,6 +56528,12 @@
                                   "type": "string"
                                 }
                               }
+                            },
+                            "fullName": {
+                              "type": "string"
+                            },
+                            "businessName": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -59490,6 +59574,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -61920,6 +62010,12 @@
                                 }
                               }
                             },
+                            "fullName": {
+                              "type": "string"
+                            },
+                            "businessName": {
+                              "type": "string"
+                            },
                             "createdAt": {
                               "type": "string",
                               "format": "date-time"
@@ -64015,6 +64111,12 @@
                         }
                       }
                     },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66049,6 +66151,12 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "businessName": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -68188,6 +68296,12 @@
                             }
                           }
                         },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "businessName": {
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -70244,6 +70358,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -72353,6 +72473,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -74511,6 +74637,12 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "businessName": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -77531,6 +77663,12 @@
                       }
                     }
                   }
+                },
+                "fullName": {
+                  "type": "string"
+                },
+                "businessName": {
+                  "type": "string"
                 },
                 "createdAt": {
                   "type": "string",
@@ -82985,6 +83123,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "fullName": {
+                      "type": "string"
+                    },
+                    "businessName": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",

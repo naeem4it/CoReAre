@@ -70,6 +70,12 @@
       "relation": "manyToOne",
       "target": "api::tenant.tenant",
       "inversedBy": "users"
+    },
+    "fullName": {
+      "type": "string"
+    },
+    "businessName": {
+      "type": "string"
     }
   }
 }
