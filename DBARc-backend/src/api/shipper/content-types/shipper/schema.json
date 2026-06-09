@@ -17,10 +17,11 @@
       "relation": "manyToOne",
       "target": "api::tenant.tenant"
     },
-    "courier": {
+    "couriers": {
       "type": "relation",
-      "relation": "manyToOne",
-      "target": "api::courier.courier"
+      "relation": "manyToMany",
+      "target": "api::courier.courier",
+      "inversedBy": "shippers"
     },
     "name": {
       "type": "string",

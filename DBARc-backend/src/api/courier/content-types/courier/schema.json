@@ -17,6 +17,12 @@
       "relation": "manyToOne",
       "target": "api::tenant.tenant"
     },
+    "shippers": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::shipper.shipper",
+      "mappedBy": "couriers"
+    },
     "name": {
       "type": "string",
       "required": true

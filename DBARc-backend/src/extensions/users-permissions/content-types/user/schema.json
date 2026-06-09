@@ -76,6 +76,21 @@
     },
     "businessName": {
       "type": "string"
+    },
+    "role_definition": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::role-definition.role-definition"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier.courier"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
     }
   }
 }

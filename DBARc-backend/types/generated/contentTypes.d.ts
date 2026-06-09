@@ -735,6 +735,7 @@ export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     parcel: Schema.Attribute.Relation<'oneToOne', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
+    shippers: Schema.Attribute.Relation<'manyToMany', 'api::shipper.shipper'>;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -1393,7 +1394,7 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
   attributes: {
     api_key: Schema.Attribute.String & Schema.Attribute.Unique;
     business_type: Schema.Attribute.String;
-    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
+    couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2109,6 +2110,7 @@ export interface PluginUsersPermissionsUser
     businessName: Schema.Attribute.String;
     confirmationToken: Schema.Attribute.String & Schema.Attribute.Private;
     confirmed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2136,6 +2138,11 @@ export interface PluginUsersPermissionsUser
       'manyToOne',
       'plugin::users-permissions.role'
     >;
+    role_definition: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::role-definition.role-definition'
+    >;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
