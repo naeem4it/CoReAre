@@ -96,6 +96,7 @@ export default {
       // Find the Roles
       const roles = await strapi.db.query('plugin::users-permissions.role').findMany();
       const authenticatedRole = roles.find((r: any) => r.type === 'authenticated');
+      const superAdminRole = roles.find((r: any) => r.type === 'super_admin');
       const publicRole = roles.find((r: any) => r.type === 'public');
 
       if (!authenticatedRole || !publicRole) {
@@ -131,6 +132,8 @@ export default {
         'plugin::users-permissions.user.me',
         'plugin::users-permissions.user.createEmployee',
         'plugin::users-permissions.user.updateEmployee',
+        'plugin::users-permissions.role.find',
+        'plugin::users-permissions.role.findOne',
       ];
 
       const publicPermissions: string[] = [
@@ -156,6 +159,9 @@ export default {
 
       // Grant permissions
       await grantPermissions(authenticatedRole.id, authenticatedPermissions);
+      if (superAdminRole) {
+        await grantPermissions(superAdminRole.id, authenticatedPermissions);
+      }
       await grantPermissions(publicRole.id, publicPermissions);
 
       console.log('All permissions successfully bootstrapped!');
