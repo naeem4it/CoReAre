@@ -1,4 +1,5 @@
-// import type { Core } from '@strapi/strapi';
+import { errors } from '@strapi/utils';
+const { ForbiddenError, UnauthorizedError } = errors;
 
 export default {
   /**
@@ -7,7 +8,79 @@ export default {
    *
    * This gives you an opportunity to extend code.
    */
-  register(/* { strapi }: { strapi: Core.Strapi } */) {},
+  register({ strapi }: { strapi: any }) {
+    strapi.get('auth').register('content-api', {
+      name: 'admin-jwt-strategy',
+      async authenticate(ctx: any) {
+        const authHeader = ctx.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return { authenticated: false };
+        }
+        const token = authHeader.split(' ')[1];
+        try {
+          const decoded = await strapi.service('admin::jwt').verify(token);
+          if (decoded && decoded.id) {
+            const admin = await strapi.db.query('admin::user').findOne({
+              where: { id: decoded.id },
+              populate: ['roles', 'tenant'],
+            });
+            if (admin) {
+              const isSuperAdmin = admin.roles?.some((r: any) => r.code === 'strapi-super-admin');
+              
+              const roles = await strapi.db.query('plugin::users-permissions.role').findMany();
+              const authenticatedRole = roles.find((r: any) => r.type === 'authenticated');
+              const superAdminRole = roles.find((r: any) => r.type === 'super_admin') || authenticatedRole;
+              const targetRole = isSuperAdmin ? superAdminRole : authenticatedRole;
+
+              let ability = null;
+              if (targetRole) {
+                const permissions = await strapi.plugin('users-permissions').service('permission').findRolePermissions(targetRole.id);
+                const mappedPermissions = permissions.map((p: any) => strapi.plugin('users-permissions').service('permission').toContentAPIPermission(p));
+                ability = await strapi.contentAPI.permissions.engine.generateAbility(mappedPermissions);
+              }
+
+              const mockUser = {
+                id: admin.id,
+                username: admin.username || `${admin.firstname}_${admin.lastname}`,
+                email: admin.email,
+                tenant: admin.tenant,
+                role: targetRole,
+                isAdminUser: true,
+                adminUser: admin,
+              };
+
+              return {
+                authenticated: true,
+                credentials: mockUser,
+                ability,
+              };
+            }
+          }
+        } catch (err) {
+          return { authenticated: false };
+        }
+        return { authenticated: false };
+      },
+      async verify(auth: any, config: any) {
+        const { credentials: user, ability } = auth;
+        if (!config.scope) {
+          if (!user) {
+            throw new UnauthorizedError();
+          }
+          return;
+        }
+        if (!ability) {
+          throw new UnauthorizedError();
+        }
+        
+        const scopes = Array.isArray(config.scope) ? config.scope : [config.scope];
+        const isAllowed = scopes.every((scope: string) => ability.can(scope));
+        if (!isAllowed) {
+          throw new ForbiddenError();
+        }
+      }
+    });
+  },
 
   /**
    * An asynchronous bootstrap function that runs before
@@ -56,6 +129,8 @@ export default {
         'plugin::users-permissions.user.findOne',
         'plugin::users-permissions.user.find',
         'plugin::users-permissions.user.me',
+        'plugin::users-permissions.user.createEmployee',
+        'plugin::users-permissions.user.updateEmployee',
       ];
 
       const publicPermissions: string[] = [

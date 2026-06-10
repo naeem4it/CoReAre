@@ -91,6 +91,9 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::shipper.shipper"
+    },
+    "phone": {
+      "type": "string"
     }
   }
 }

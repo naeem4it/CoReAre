@@ -1332,7 +1332,9 @@ export default function BookShipmentPage() {
                               {/* Row Index / Error Icon */}
                               <td className="px-4 py-3">
                                 {hasErrors ? (
-                                  <AlertCircle className="h-4 w-4 text-red-500 animate-pulse" title={Object.values(row.errors).join(', ')} />
+                                  <span title={Object.values(row.errors).join(', ')}>
+                                    <AlertCircle className="h-4 w-4 text-red-500 animate-pulse" />
+                                  </span>
                                 ) : (
                                   index + 1
                                 )}

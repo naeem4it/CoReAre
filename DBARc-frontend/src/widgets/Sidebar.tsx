@@ -47,9 +47,25 @@ const COURIER_SHIPMENTS_SUBMENU: NavItem[] = [
   { label: 'Book Shipment', href: '/courier/shipments/book', icon: Package },
 ];
 
+const SUPER_ADMINISTRATION_SUBMENU: NavItem[] = [
+  { label: 'User Management', href: '/admin/users', icon: Users },
+  { label: 'Role Definition', href: '/admin/roles', icon: ShieldCheck },
+];
+
+const COURIER_ADMINISTRATION_SUBMENU: NavItem[] = [
+  { label: 'User Management', href: '/courier/users', icon: Users },
+  { label: 'Role Definition', href: '/courier/roles', icon: ShieldCheck },
+];
+
+const MERCHANT_ADMINISTRATION_SUBMENU: NavItem[] = [
+  { label: 'User Management', href: '/merchant/users', icon: Users },
+  { label: 'Role Definition', href: '/merchant/roles', icon: ShieldCheck },
+];
+
 const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   SUPER_ADMIN: [
     { label: 'System Overview', href: '/admin', icon: LayoutDashboard },
+    { label: 'Administration', href: '/admin/users', icon: ShieldCheck, children: SUPER_ADMINISTRATION_SUBMENU },
     { label: 'Tenants', href: '/admin/tenants', icon: Building2 },
     { label: 'Courier Portal', href: '/courier', icon: Truck },
     { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
@@ -59,6 +75,7 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   ],
   TENANT_ADMIN: [
     { label: 'Dashboard', href: '/courier', icon: LayoutDashboard },
+    { label: 'Administration', href: '/courier/roles', icon: ShieldCheck, children: COURIER_ADMINISTRATION_SUBMENU },
     { label: 'Shipments', href: '/courier/shipments', icon: Package, children: COURIER_SHIPMENTS_SUBMENU },
     { label: 'Settlements', href: '/courier/settlements', icon: BadgeDollarSign },
 
@@ -70,6 +87,7 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
   ],
   SHIPPER: [
     { label: 'Dashboard', href: '/merchant', icon: LayoutDashboard },
+    { label: 'Administration', href: '/merchant/roles', icon: ShieldCheck, children: MERCHANT_ADMINISTRATION_SUBMENU },
     { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
     { label: 'Create Order', href: '/merchant/new-order', icon: Package },
     { label: 'Order History', href: '/merchant/orders', icon: FileText },

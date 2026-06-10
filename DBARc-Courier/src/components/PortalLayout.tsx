@@ -218,6 +218,16 @@ function SideNavigation() {
         <span className="material-symbols-outlined">group</span>
         <span className="font-label-md text-label-md">Customers</span>
       </a>
+      <Link
+        href="/administration/employees"
+        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname.startsWith('/administration')
+            ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+            : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+          }`}
+      >
+        <span className="material-symbols-outlined">shield</span>
+        <span className="font-label-md text-label-md">Administration</span>
+      </Link>
       <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
         <span className="material-symbols-outlined">settings</span>
         <span className="font-label-md text-label-md">Settings</span>

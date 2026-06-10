@@ -14,7 +14,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "x-generation-date": "2026-06-09T08:11:01.965Z"
+    "x-generation-date": "2026-06-10T09:26:28.190Z"
   },
   "x-strapi-config": {
     "plugins": [
@@ -25177,6 +25177,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -29103,6 +29106,9 @@
                                     }
                                   }
                                 },
+                                "phone": {
+                                  "type": "string"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -31942,6 +31948,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -34447,6 +34456,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -36291,6 +36303,9 @@
                                 }
                               }
                             }
+                          },
+                          "phone": {
+                            "type": "string"
                           },
                           "createdAt": {
                             "type": "string",
@@ -38700,6 +38715,9 @@
                                   }
                                 }
                               }
+                            },
+                            "phone": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -41164,6 +41182,9 @@
                                   }
                                 }
                               }
+                            },
+                            "phone": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -44061,6 +44082,9 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "phone": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -48238,6 +48262,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -50221,6 +50248,9 @@
                               }
                             }
                           }
+                        },
+                        "phone": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -52635,6 +52665,9 @@
                                   }
                                 }
                               }
+                            },
+                            "phone": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -55917,6 +55950,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -58260,6 +58296,9 @@
                             }
                           }
                         },
+                        "phone": {
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -60309,6 +60348,9 @@
                                   }
                                 }
                               }
+                            },
+                            "phone": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -64201,6 +64243,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66380,6 +66425,9 @@
                                   }
                                 }
                               }
+                            },
+                            "phone": {
+                              "type": "string"
                             },
                             "createdAt": {
                               "type": "string",
@@ -69328,6 +69376,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -71663,6 +71714,9 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "phone": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -74103,6 +74157,9 @@
                             }
                           }
                         },
+                        "phone": {
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -76461,6 +76518,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -78780,6 +78840,9 @@
                         }
                       }
                     },
+                    "phone": {
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -80992,6 +81055,9 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "phone": {
+                          "type": "string"
                         },
                         "createdAt": {
                           "type": "string",
@@ -83786,6 +83852,9 @@
                       "type": "string"
                     }
                   }
+                },
+                "phone": {
+                  "type": "string"
                 },
                 "createdAt": {
                   "type": "string",
@@ -90071,6 +90140,9 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "phone": {
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
