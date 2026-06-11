@@ -983,11 +983,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       'api::parcel.parcel'
     > &
       Schema.Attribute.Private;
-    publishedAt: Schema.Attribute.DateTime;
-    recipient_address: Schema.Attribute.Text & Schema.Attribute.Required;
-    recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
-    recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
-    status: Schema.Attribute.Enumeration<
+    parcel_status: Schema.Attribute.Enumeration<
       [
         'Total Booking',
         'Not Arrived',
@@ -1002,6 +998,10 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       ]
     > &
       Schema.Attribute.DefaultTo<'Total Booking'>;
+    publishedAt: Schema.Attribute.DateTime;
+    recipient_address: Schema.Attribute.Text & Schema.Attribute.Required;
+    recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
+    recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
     tracking_number: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
@@ -1581,7 +1581,7 @@ export interface ApiTplStatusMappingTplStatusMapping
         'Not Arrived',
         'Arrived',
         'Arrived At Destination',
-        "Out For delivery",
+        'Out For delivery',
         'Delivered',
         'Failed Attempt',
         'Ready To Return',

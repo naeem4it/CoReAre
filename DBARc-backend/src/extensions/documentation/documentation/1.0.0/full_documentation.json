@@ -14,7 +14,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "x-generation-date": "2026-06-10T09:38:18.224Z"
+    "x-generation-date": "2026-06-11T08:51:20.894Z"
   },
   "x-strapi-config": {
     "plugins": [
@@ -24833,16 +24833,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -29205,16 +29208,19 @@
                                 "tracking_number": {
                                   "type": "string"
                                 },
-                                "status": {
+                                "parcel_status": {
                                   "type": "string",
                                   "enum": [
-                                    "created",
-                                    "picked",
-                                    "in_hub",
-                                    "in_transit",
-                                    "delivered",
-                                    "failed",
-                                    "returned"
+                                    "Total Booking",
+                                    "Not Arrived",
+                                    "Arrived",
+                                    "Arrived At Destination",
+                                    "Out For delivery",
+                                    "Delivered",
+                                    "Failed Attempt",
+                                    "Ready To Return",
+                                    "Return Dispatched",
+                                    "Return to Shipper"
                                   ]
                                 },
                                 "cod_amount": {
@@ -31604,16 +31610,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -34112,16 +34121,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -36403,16 +36415,19 @@
                           "tracking_number": {
                             "type": "string"
                           },
-                          "status": {
+                          "parcel_status": {
                             "type": "string",
                             "enum": [
-                              "created",
-                              "picked",
-                              "in_hub",
-                              "in_transit",
-                              "delivered",
-                              "failed",
-                              "returned"
+                              "Total Booking",
+                              "Not Arrived",
+                              "Arrived",
+                              "Arrived At Destination",
+                              "Out For delivery",
+                              "Delivered",
+                              "Failed Attempt",
+                              "Ready To Return",
+                              "Return Dispatched",
+                              "Return to Shipper"
                             ]
                           },
                           "cod_amount": {
@@ -37414,16 +37429,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -39881,16 +39899,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -43739,16 +43760,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -47918,16 +47942,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -48793,16 +48820,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -48947,16 +48977,19 @@
           "tracking_number": {
             "type": "string"
           },
-          "status": {
+          "parcel_status": {
             "type": "string",
             "enum": [
-              "created",
-              "picked",
-              "in_hub",
-              "in_transit",
-              "delivered",
-              "failed",
-              "returned"
+              "Total Booking",
+              "Not Arrived",
+              "Arrived",
+              "Arrived At Destination",
+              "Out For delivery",
+              "Delivered",
+              "Failed Attempt",
+              "Ready To Return",
+              "Return Dispatched",
+              "Return to Shipper"
             ]
           },
           "cod_amount": {
@@ -50348,16 +50381,19 @@
                         "tracking_number": {
                           "type": "string"
                         },
-                        "status": {
+                        "parcel_status": {
                           "type": "string",
                           "enum": [
-                            "created",
-                            "picked",
-                            "in_hub",
-                            "in_transit",
-                            "delivered",
-                            "failed",
-                            "returned"
+                            "Total Booking",
+                            "Not Arrived",
+                            "Arrived",
+                            "Arrived At Destination",
+                            "Out For delivery",
+                            "Delivered",
+                            "Failed Attempt",
+                            "Ready To Return",
+                            "Return Dispatched",
+                            "Return to Shipper"
                           ]
                         },
                         "cod_amount": {
@@ -51364,16 +51400,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -55606,16 +55645,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -57952,16 +57994,19 @@
                                       "tracking_number": {
                                         "type": "string"
                                       },
-                                      "status": {
+                                      "parcel_status": {
                                         "type": "string",
                                         "enum": [
-                                          "created",
-                                          "picked",
-                                          "in_hub",
-                                          "in_transit",
-                                          "delivered",
-                                          "failed",
-                                          "returned"
+                                          "Total Booking",
+                                          "Not Arrived",
+                                          "Arrived",
+                                          "Arrived At Destination",
+                                          "Out For delivery",
+                                          "Delivered",
+                                          "Failed Attempt",
+                                          "Ready To Return",
+                                          "Return Dispatched",
+                                          "Return to Shipper"
                                         ]
                                       },
                                       "cod_amount": {
@@ -59047,16 +59092,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -63899,16 +63947,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -65124,16 +65175,19 @@
               "tracking_number": {
                 "type": "string"
               },
-              "status": {
+              "parcel_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "cod_amount": {
@@ -69032,16 +69086,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -71371,16 +71428,19 @@
                                       "tracking_number": {
                                         "type": "string"
                                       },
-                                      "status": {
+                                      "parcel_status": {
                                         "type": "string",
                                         "enum": [
-                                          "created",
-                                          "picked",
-                                          "in_hub",
-                                          "in_transit",
-                                          "delivered",
-                                          "failed",
-                                          "returned"
+                                          "Total Booking",
+                                          "Not Arrived",
+                                          "Arrived",
+                                          "Arrived At Destination",
+                                          "Out For delivery",
+                                          "Delivered",
+                                          "Failed Attempt",
+                                          "Ready To Return",
+                                          "Return Dispatched",
+                                          "Return to Shipper"
                                         ]
                                       },
                                       "cod_amount": {
@@ -73813,16 +73873,19 @@
                                       "tracking_number": {
                                         "type": "string"
                                       },
-                                      "status": {
+                                      "parcel_status": {
                                         "type": "string",
                                         "enum": [
-                                          "created",
-                                          "picked",
-                                          "in_hub",
-                                          "in_transit",
-                                          "delivered",
-                                          "failed",
-                                          "returned"
+                                          "Total Booking",
+                                          "Not Arrived",
+                                          "Arrived",
+                                          "Arrived At Destination",
+                                          "Out For delivery",
+                                          "Delivered",
+                                          "Failed Attempt",
+                                          "Ready To Return",
+                                          "Return Dispatched",
+                                          "Return to Shipper"
                                         ]
                                       },
                                       "cod_amount": {
@@ -76174,16 +76237,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -78496,16 +78562,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {
@@ -80712,16 +80781,19 @@
                                       "tracking_number": {
                                         "type": "string"
                                       },
-                                      "status": {
+                                      "parcel_status": {
                                         "type": "string",
                                         "enum": [
-                                          "created",
-                                          "picked",
-                                          "in_hub",
-                                          "in_transit",
-                                          "delivered",
-                                          "failed",
-                                          "returned"
+                                          "Total Booking",
+                                          "Not Arrived",
+                                          "Arrived",
+                                          "Arrived At Destination",
+                                          "Out For delivery",
+                                          "Delivered",
+                                          "Failed Attempt",
+                                          "Ready To Return",
+                                          "Return Dispatched",
+                                          "Return to Shipper"
                                         ]
                                       },
                                       "cod_amount": {
@@ -82819,16 +82891,19 @@
                           "tracking_number": {
                             "type": "string"
                           },
-                          "status": {
+                          "parcel_status": {
                             "type": "string",
                             "enum": [
-                              "created",
-                              "picked",
-                              "in_hub",
-                              "in_transit",
-                              "delivered",
-                              "failed",
-                              "returned"
+                              "Total Booking",
+                              "Not Arrived",
+                              "Arrived",
+                              "Arrived At Destination",
+                              "Out For delivery",
+                              "Delivered",
+                              "Failed Attempt",
+                              "Ready To Return",
+                              "Return Dispatched",
+                              "Return to Shipper"
                             ]
                           },
                           "cod_amount": {
@@ -87126,13 +87201,16 @@
               "internal_status": {
                 "type": "string",
                 "enum": [
-                  "created",
-                  "picked",
-                  "in_hub",
-                  "in_transit",
-                  "delivered",
-                  "failed",
-                  "returned"
+                  "Total Booking",
+                  "Not Arrived",
+                  "Arrived",
+                  "Arrived At Destination",
+                  "Out For delivery",
+                  "Delivered",
+                  "Failed Attempt",
+                  "Ready To Return",
+                  "Return Dispatched",
+                  "Return to Shipper"
                 ]
               },
               "locale": {
@@ -87961,13 +88039,16 @@
           "internal_status": {
             "type": "string",
             "enum": [
-              "created",
-              "picked",
-              "in_hub",
-              "in_transit",
-              "delivered",
-              "failed",
-              "returned"
+              "Total Booking",
+              "Not Arrived",
+              "Arrived",
+              "Arrived At Destination",
+              "Out For delivery",
+              "Delivered",
+              "Failed Attempt",
+              "Ready To Return",
+              "Return Dispatched",
+              "Return to Shipper"
             ]
           },
           "createdAt": {
@@ -88063,13 +88144,16 @@
                 "internal_status": {
                   "type": "string",
                   "enum": [
-                    "created",
-                    "picked",
-                    "in_hub",
-                    "in_transit",
-                    "delivered",
-                    "failed",
-                    "returned"
+                    "Total Booking",
+                    "Not Arrived",
+                    "Arrived",
+                    "Arrived At Destination",
+                    "Out For delivery",
+                    "Delivered",
+                    "Failed Attempt",
+                    "Ready To Return",
+                    "Return Dispatched",
+                    "Return to Shipper"
                   ]
                 },
                 "createdAt": {
@@ -89797,16 +89881,19 @@
                                   "tracking_number": {
                                     "type": "string"
                                   },
-                                  "status": {
+                                  "parcel_status": {
                                     "type": "string",
                                     "enum": [
-                                      "created",
-                                      "picked",
-                                      "in_hub",
-                                      "in_transit",
-                                      "delivered",
-                                      "failed",
-                                      "returned"
+                                      "Total Booking",
+                                      "Not Arrived",
+                                      "Arrived",
+                                      "Arrived At Destination",
+                                      "Out For delivery",
+                                      "Delivered",
+                                      "Failed Attempt",
+                                      "Ready To Return",
+                                      "Return Dispatched",
+                                      "Return to Shipper"
                                     ]
                                   },
                                   "cod_amount": {

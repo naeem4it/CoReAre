@@ -17,7 +17,7 @@
       "required": true,
       "unique": true
     },
-    "status": {
+    "parcel_status": {
       "type": "enumeration",
       "default": "Total Booking",
       "enum": [
@@ -77,11 +77,11 @@
     },
     "allow_to_open": {
       "type": "enumeration",
+      "default": "No",
       "enum": [
         "Yes",
         "No"
-      ],
-      "default": "No"
+      ]
     },
     "comments": {
       "type": "text"
