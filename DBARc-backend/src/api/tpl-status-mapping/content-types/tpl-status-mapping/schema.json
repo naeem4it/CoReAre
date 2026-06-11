@@ -24,13 +24,16 @@
     "internal_status": {
       "type": "enumeration",
       "enum": [
-        "created",
-        "picked",
-        "in_hub",
-        "in_transit",
-        "delivered",
-        "failed",
-        "returned"
+        "Total Booking",
+        "Not Arrived",
+        "Arrived",
+        "Arrived At Destination",
+        "Out For delivery",
+        "Delivered",
+        "Failed Attempt",
+        "Ready To Return",
+        "Return Dispatched",
+        "Return to Shipper"
       ],
       "required": true
     }

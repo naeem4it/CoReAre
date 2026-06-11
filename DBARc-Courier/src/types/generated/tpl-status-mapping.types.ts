@@ -6,7 +6,7 @@ export interface TPLStatusMapping {
   documentId: string;
   partner?: TPLPartner | null;
   external_status_code: string;
-  internal_status: 'created' | 'picked' | 'in_hub' | 'in_transit' | 'delivered' | 'failed' | 'returned';
+  internal_status: 'Total_Booking' | 'Not_Arrived' | 'Arrived' | 'Arrived_At_Destination' | 'Out_For_delivery' | 'Delivered' | 'Failed_Attempt' | 'Ready_To_Return' | 'Return_Dispatched' | 'Return_to_Shipper';
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -15,7 +15,7 @@ export interface TPLStatusMapping {
 export interface CreateTPLStatusMappingRequest {
   partner?: TPLPartner | null;
   external_status_code: string;
-  internal_status: 'created' | 'picked' | 'in_hub' | 'in_transit' | 'delivered' | 'failed' | 'returned';
+  internal_status:  'Total_Booking' | 'Not_Arrived' | 'Arrived' | 'Arrived_At_Destination' | 'Out_For_delivery' | 'Delivered' | 'Failed_Attempt' | 'Ready_To_Return' | 'Return_Dispatched' | 'Return_to_Shipper';
 }
 
 export interface UpdateTPLStatusMappingRequest extends Partial<CreateTPLStatusMappingRequest> {}

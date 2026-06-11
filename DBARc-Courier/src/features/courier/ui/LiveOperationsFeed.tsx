@@ -69,7 +69,7 @@ export const LiveOperationsFeed = () => {
             const minutes = Math.max(1, Math.floor(timeDiff / 60000));
             const timeStr = minutes < 60 ? `${minutes} mins ago` : `${Math.floor(minutes / 60)} hours ago`;
             
-            const isDelivered = p.status === 'delivered';
+            const isDelivered = p.status === 'Delivered';
             const trackingNum = p.tracking_number;
             const statusStr = p.status ? p.status.replace('_', ' ') : 'unknown';
             

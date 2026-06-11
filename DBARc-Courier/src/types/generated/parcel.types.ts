@@ -6,7 +6,7 @@ export interface Parcel {
   id: number;
   documentId: string;
   tracking_number: string;
-  status?: 'created' | 'picked' | 'in_hub' | 'in_transit' | 'delivered' | 'failed' | 'returned';
+  status?: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
   cod_amount?: number;
   weight: number;
   delivery_charges: number;
@@ -26,7 +26,7 @@ export interface Parcel {
 
 export interface CreateParcelRequest {
   tracking_number: string;
-  status?: 'created' | 'picked' | 'in_hub' | 'in_transit' | 'delivered' | 'failed' | 'returned';
+  status?: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
   cod_amount?: number;
   weight: number;
   delivery_charges: number;

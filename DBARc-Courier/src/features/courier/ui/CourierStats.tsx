@@ -30,10 +30,12 @@ export const CourierStats = () => {
         if (parcels.length > 0) {
           const total = parcels.length;
           const pending = parcels.filter((p: Parcel) => 
-            p.status === 'created' || p.status === 'picked' || p.status === 'in_hub'
+            p.status === 'Total Booking' || p.status === 'Not Arrived'
           ).length;
-          const inTransit = parcels.filter((p: Parcel) => p.status === 'in_transit').length;
-          const deliveredCount = parcels.filter((p: Parcel) => p.status === 'delivered').length;
+          const inTransit = parcels.filter((p: Parcel) => 
+            p.status === 'Arrived' || p.status === 'Arrived At Destination' || p.status === 'Out For delivery' || p.status === 'Ready To Return' || p.status === 'Return Dispatched'
+          ).length;
+          const deliveredCount = parcels.filter((p: Parcel) => p.status === 'Delivered').length;
 
           setStats({
             totalShipments: total,

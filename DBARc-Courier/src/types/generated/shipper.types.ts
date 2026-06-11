@@ -6,7 +6,7 @@ export interface Shipper {
   id: number;
   documentId: string;
   tenant?: Tenant | null;
-  courier?: Courier | null;
+  couriers?: Courier[];
   name: string;
   business_type?: string;
   api_key?: string;
@@ -19,7 +19,7 @@ export interface Shipper {
 
 export interface CreateShipperRequest {
   tenant?: Tenant | null;
-  courier?: Courier | null;
+  couriers?: Courier[];
   name: string;
   business_type?: string;
   api_key?: string;

@@ -284,7 +284,7 @@ function BookShipmentForm() {
       const parcelRes = await apiClient.post('/parcels', {
         data: {
           tracking_number: trackingId,
-          status: 'created',
+          status: 'Total Booking',
           cod_amount: data.codAmount,
           weight: data.weight,
           delivery_charges: pricing.total,
@@ -660,7 +660,7 @@ function BookShipmentForm() {
         const parcelRes = await apiClient.post('/parcels', {
           data: {
             tracking_number: trackingId,
-            status: 'created',
+            status: 'Total Booking',
             cod_amount: row.codAmount || 0,
             weight: row.weight || 0.5,
             delivery_charges: deliveryCharge,

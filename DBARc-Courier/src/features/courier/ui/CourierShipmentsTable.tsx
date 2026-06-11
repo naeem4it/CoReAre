@@ -12,7 +12,7 @@ type ShipmentRow = {
   avatar: string;
   origin: string;
   destination: string;
-  status: 'created' | 'picked' | 'in_hub' | 'in_transit' | 'delivered' | 'failed' | 'returned' | 'booked';
+  status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked';
   eta: string;
 };
 
@@ -24,7 +24,7 @@ const FALLBACK_ROWS: ShipmentRow[] = [
     avatar: 'AS',
     origin: 'Karachi',
     destination: 'Islamabad',
-    status: 'in_transit',
+    status: 'Out For delivery',
     eta: 'Today, 18:45',
   },
   {
@@ -34,7 +34,7 @@ const FALLBACK_ROWS: ShipmentRow[] = [
     avatar: 'MK',
     origin: 'Lahore',
     destination: 'Multan',
-    status: 'delivered',
+    status: 'Delivered',
     eta: 'May 14, 09:20',
   },
   {
@@ -69,13 +69,13 @@ export const CourierShipmentsTable = () => {
             // Deduce origin and destination from recipient address or mock it cleanly
             const destination = item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
             
-            // Map Strapi status (created, picked, in_hub, in_transit, delivered, failed, returned) to UI status
+            // Map Strapi status to UI status
             let uiStatus: ShipmentRow['status'] = 'booked';
             if (item.status) {
-              if (item.status === 'created') {
+              if (item.status === 'Total Booking') {
                 uiStatus = 'booked';
               } else {
-                uiStatus = item.status;
+                uiStatus = item.status as any;
               }
             }
             
@@ -122,29 +122,29 @@ export const CourierShipmentsTable = () => {
 
   const getStatusBadge = (status: ShipmentRow['status']) => {
     switch (status) {
-      case 'in_transit':
+      case 'Out For delivery':
         return (
-          <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[12px] font-semibold border border-primary/20">
-            In Transit
+          <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[12px] font-semibold border border-yellow-200">
+            Out For Delivery
           </span>
         );
-      case 'delivered':
+      case 'Delivered':
         return (
           <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[12px] font-semibold border border-emerald-200">
             Delivered
           </span>
         );
       case 'booked':
-      case 'created':
+      case 'Total Booking':
         return (
           <span className="bg-surface-container-high text-on-surface-variant px-3 py-1 rounded-full text-[12px] font-semibold border border-outline-variant">
-            Booked
+            Total Booking
           </span>
         );
       default:
         return (
-          <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[12px] font-semibold border border-slate-200 capitalize">
-            {status.replace('_', ' ')}
+          <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[12px] font-semibold border border-slate-200">
+            {status}
           </span>
         );
     }

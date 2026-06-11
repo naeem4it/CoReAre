@@ -1,5 +1,6 @@
 // Generated automatically from Strapi Schema. Do not edit manually.
 import { Tenant } from './tenant.types';
+import { Shipper } from './shipper.types';
 import { CourierCity } from './courier-city.types';
 import { Parcel } from './parcel.types';
 
@@ -7,6 +8,7 @@ export interface Courier {
   id: number;
   documentId: string;
   tenant?: Tenant | null;
+  shippers?: Shipper[];
   name: string;
   contact_info?: any;
   api_enabled?: boolean;
@@ -20,6 +22,7 @@ export interface Courier {
 
 export interface CreateCourierRequest {
   tenant?: Tenant | null;
+  shippers?: Shipper[];
   name: string;
   contact_info?: any;
   api_enabled?: boolean;

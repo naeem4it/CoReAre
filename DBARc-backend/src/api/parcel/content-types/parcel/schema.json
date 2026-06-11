@@ -19,15 +19,18 @@
     },
     "status": {
       "type": "enumeration",
-      "default": "created",
+      "default": "Total Booking",
       "enum": [
-        "created",
-        "picked",
-        "in_hub",
-        "in_transit",
-        "delivered",
-        "failed",
-        "returned"
+        "Total Booking",
+        "Not Arrived",
+        "Arrived",
+        "Arrived At Destination",
+        "Out For delivery",
+        "Delivered",
+        "Failed Attempt",
+        "Ready To Return",
+        "Return Dispatched",
+        "Return to Shipper"
       ]
     },
     "cod_amount": {

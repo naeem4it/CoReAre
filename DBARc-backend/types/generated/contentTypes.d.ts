@@ -989,16 +989,19 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
       [
-        'created',
-        'picked',
-        'in_hub',
-        'in_transit',
-        'delivered',
-        'failed',
-        'returned',
+        'Total Booking',
+        'Not Arrived',
+        'Arrived',
+        'Arrived At Destination',
+        'Out For delivery',
+        'Delivered',
+        'Failed Attempt',
+        'Ready To Return',
+        'Return Dispatched',
+        'Return to Shipper',
       ]
     > &
-      Schema.Attribute.DefaultTo<'created'>;
+      Schema.Attribute.DefaultTo<'Total Booking'>;
     tracking_number: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
@@ -1574,13 +1577,16 @@ export interface ApiTplStatusMappingTplStatusMapping
     external_status_code: Schema.Attribute.String & Schema.Attribute.Required;
     internal_status: Schema.Attribute.Enumeration<
       [
-        'created',
-        'picked',
-        'in_hub',
-        'in_transit',
-        'delivered',
-        'failed',
-        'returned',
+        'Total Booking',
+        'Not Arrived',
+        'Arrived',
+        'Arrived At Destination',
+        "Out For delivery",
+        'Delivered',
+        'Failed Attempt',
+        'Ready To Return',
+        'Return Dispatched',
+        'Return to Shipper',
       ]
     > &
       Schema.Attribute.Required;
