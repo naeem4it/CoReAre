@@ -43,6 +43,18 @@
     },
     "geo_location": {
       "type": "json"
+    },
+    "shipper_advice": {
+      "type": "text"
+    },
+    "advice_status": {
+      "type": "enumeration",
+      "enum": [
+        "Awaiting advice",
+        "Resolved",
+        "Failed"
+      ],
+      "default": "Awaiting advice"
     }
   }
 }

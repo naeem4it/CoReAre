@@ -14,6 +14,8 @@ export interface DeliveryAttempt {
   recipient_relation?: string;
   failure_reason?: string;
   geo_location?: any;
+  shipper_advice?: string;
+  advice_status?: 'Awaiting advice' | 'Resolved' | 'Failed';
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -29,6 +31,8 @@ export interface CreateDeliveryAttemptRequest {
   recipient_relation?: string;
   failure_reason?: string;
   geo_location?: any;
+  shipper_advice?: string;
+  advice_status?: 'Awaiting advice' | 'Resolved' | 'Failed';
 }
 
 export interface UpdateDeliveryAttemptRequest extends Partial<CreateDeliveryAttemptRequest> {}

@@ -1,6 +1,8 @@
 // Generated automatically from Strapi Schema. Do not edit manually.
 import { Courier } from './courier.types';
 import { CourierCity } from './courier-city.types';
+import { PickupLocation } from './pickup-location.types';
+import { LoadSheet } from './load-sheet.types';
 
 export interface Parcel {
   id: number;
@@ -19,6 +21,14 @@ export interface Parcel {
   consignee_alt_phone?: string;
   allow_to_open?: 'Yes' | 'No';
   comments?: string;
+  pieces?: number;
+  service_type?: 'Overnight' | 'Second Day' | 'Rush' | 'Detained';
+  shipment_type?: 'Parcel' | 'Document' | 'Flyer';
+  reference_number?: string;
+  arrival_date?: string;
+  delivered_date?: string;
+  pickup_location?: PickupLocation | null;
+  load_sheet?: LoadSheet | null;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -39,6 +49,14 @@ export interface CreateParcelRequest {
   consignee_alt_phone?: string;
   allow_to_open?: 'Yes' | 'No';
   comments?: string;
+  pieces?: number;
+  service_type?: 'Overnight' | 'Second Day' | 'Rush' | 'Detained';
+  shipment_type?: 'Parcel' | 'Document' | 'Flyer';
+  reference_number?: string;
+  arrival_date?: string;
+  delivered_date?: string;
+  pickup_location?: PickupLocation | null;
+  load_sheet?: LoadSheet | null;
 }
 
 export interface UpdateParcelRequest extends Partial<CreateParcelRequest> {}

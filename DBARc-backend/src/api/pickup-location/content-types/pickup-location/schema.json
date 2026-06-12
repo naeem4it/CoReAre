@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pickup_locations",
+  "info": {
+    "singularName": "pickup-location",
+    "pluralName": "pickup-locations",
+    "displayName": "Pickup Location",
+    "description": "Shipper warehouse and dispatch sites"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "location_name": {
+      "type": "string",
+      "required": true
+    },
+    "address": {
+      "type": "text",
+      "required": true
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "email"
+    },
+    "city": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::city.city"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "status": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

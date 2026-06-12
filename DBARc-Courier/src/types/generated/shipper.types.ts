@@ -12,6 +12,7 @@ export interface Shipper {
   api_key?: string;
   webhook_url?: string;
   status?: string;
+  account_id?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -25,6 +26,7 @@ export interface CreateShipperRequest {
   api_key?: string;
   webhook_url?: string;
   status?: string;
+  account_id?: string;
 }
 
 export interface UpdateShipperRequest extends Partial<CreateShipperRequest> {}

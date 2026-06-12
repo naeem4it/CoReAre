@@ -35,6 +35,10 @@
       "relation": "manyToOne",
       "target": "api::tenant.tenant",
       "inversedBy": "riders"
+    },
+    "rider_code": {
+      "type": "string",
+      "unique": true
     }
   }
 }

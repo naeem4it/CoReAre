@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "delivery_sheets",
+  "info": {
+    "singularName": "delivery-sheet",
+    "pluralName": "delivery-sheets",
+    "displayName": "Delivery Sheet",
+    "description": "Rider run sheets and dispatch assignments"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sheet_number": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "sheet_date": {
+      "type": "date",
+      "required": true
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "route_code": {
+      "type": "string"
+    },
+    "custom_name": {
+      "type": "string"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::parcel.parcel"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "Pending",
+        "Out For Delivery",
+        "Completed"
+      ],
+      "default": "Pending"
+    }
+  }
+}

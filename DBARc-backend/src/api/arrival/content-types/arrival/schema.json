@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "arrivals",
+  "info": {
+    "singularName": "arrival",
+    "pluralName": "arrivals",
+    "displayName": "Arrival",
+    "description": "Log logs for arrived parcels checked in by riders"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "arrival_date": {
+      "type": "datetime",
+      "required": true
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::parcel.parcel"
+    },
+    "total_pieces": {
+      "type": "integer"
+    },
+    "total_weight": {
+      "type": "decimal"
+    }
+  }
+}

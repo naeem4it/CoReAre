@@ -17,7 +17,7 @@
       "required": true,
       "unique": true
     },
-    "parcel_status": {
+    "status": {
       "type": "enumeration",
       "default": "Total Booking",
       "enum": [
@@ -85,6 +85,49 @@
     },
     "comments": {
       "type": "text"
+    },
+    "pieces": {
+      "type": "integer",
+      "default": 1
+    },
+    "service_type": {
+      "type": "enumeration",
+      "enum": [
+        "Overnight",
+        "Second Day",
+        "Rush",
+        "Detained"
+      ],
+      "default": "Overnight"
+    },
+    "shipment_type": {
+      "type": "enumeration",
+      "enum": [
+        "Parcel",
+        "Document",
+        "Flyer"
+      ],
+      "default": "Parcel"
+    },
+    "reference_number": {
+      "type": "string"
+    },
+    "arrival_date": {
+      "type": "datetime"
+    },
+    "delivered_date": {
+      "type": "datetime"
+    },
+    "pickup_location": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::pickup-location.pickup-location"
+    },
+    "load_sheet": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::load-sheet.load-sheet",
+      "inversedBy": "parcels"
     }
   }
 }

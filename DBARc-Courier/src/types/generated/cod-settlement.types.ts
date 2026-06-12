@@ -11,6 +11,15 @@ export interface CODSettlement {
   net_payable: number;
   status?: 'calculated' | 'approved' | 'processing' | 'paid' | 'disputed';
   paid_at?: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  period_start?: string;
+  period_end?: string;
+  service_charges?: number;
+  ibft_charges?: number;
+  delivered_count?: number;
+  returned_count?: number;
+  statement_pdf?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -23,6 +32,15 @@ export interface CreateCODSettlementRequest {
   net_payable: number;
   status?: 'calculated' | 'approved' | 'processing' | 'paid' | 'disputed';
   paid_at?: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  period_start?: string;
+  period_end?: string;
+  service_charges?: number;
+  ibft_charges?: number;
+  delivered_count?: number;
+  returned_count?: number;
+  statement_pdf?: string;
 }
 
 export interface UpdateCODSettlementRequest extends Partial<CreateCODSettlementRequest> {}

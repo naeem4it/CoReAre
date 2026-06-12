@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "load_sheets",
+  "info": {
+    "singularName": "load-sheet",
+    "pluralName": "load-sheets",
+    "displayName": "Load Sheet",
+    "description": "Cargo distribution sheets for dispatched routes"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sheet_id": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "date_created": {
+      "type": "datetime",
+      "required": true
+    },
+    "origin_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "Pending",
+        "Dispatched",
+        "On-Route",
+        "Delivered"
+      ],
+      "default": "Pending"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::parcel.parcel",
+      "mappedBy": "load_sheet"
+    }
+  }
+}

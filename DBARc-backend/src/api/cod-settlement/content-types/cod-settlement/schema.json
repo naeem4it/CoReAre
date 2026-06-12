@@ -43,6 +43,36 @@
     },
     "paid_at": {
       "type": "datetime"
+    },
+    "invoice_number": {
+      "type": "string",
+      "unique": true
+    },
+    "invoice_date": {
+      "type": "date"
+    },
+    "period_start": {
+      "type": "date"
+    },
+    "period_end": {
+      "type": "date"
+    },
+    "service_charges": {
+      "type": "decimal",
+      "default": 0
+    },
+    "ibft_charges": {
+      "type": "decimal",
+      "default": 0
+    },
+    "delivered_count": {
+      "type": "integer"
+    },
+    "returned_count": {
+      "type": "integer"
+    },
+    "statement_pdf": {
+      "type": "string"
     }
   }
 }

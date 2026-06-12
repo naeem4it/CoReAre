@@ -9,6 +9,7 @@ export interface Rider {
   email?: string;
   status?: 'active' | 'inactive' | 'suspended';
   tenant?: Tenant | null;
+  rider_code?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -20,6 +21,7 @@ export interface CreateRiderRequest {
   email?: string;
   status?: 'active' | 'inactive' | 'suspended';
   tenant?: Tenant | null;
+  rider_code?: string;
 }
 
 export interface UpdateRiderRequest extends Partial<CreateRiderRequest> {}

@@ -40,6 +40,10 @@
     "status": {
       "type": "string",
       "default": "active"
+    },
+    "account_id": {
+      "type": "string",
+      "unique": true
     }
   }
 }
