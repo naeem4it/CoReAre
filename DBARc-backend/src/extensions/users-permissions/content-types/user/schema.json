@@ -79,7 +79,7 @@
     },
     "role_definition": {
       "type": "relation",
-      "relation": "manyToOne",
+      "relation": "manyToMany",
       "target": "api::role-definition.role-definition"
     },
     "courier": {
@@ -94,6 +94,9 @@
     },
     "phone": {
       "type": "string"
+    },
+    "shipper_roles": {
+      "type": "json"
     }
   }
 }

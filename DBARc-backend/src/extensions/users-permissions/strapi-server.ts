@@ -1,4 +1,5 @@
 declare const strapi: any;
+const jwt = require('jsonwebtoken');
 
 export default (plugin: any) => {
   // Save original controllers
@@ -108,6 +109,58 @@ export default (plugin: any) => {
     }
   };
 
+  // 4b. Custom Account Setup logic
+  plugin.controllers.user.setupAccount = async (ctx: any) => {
+    try {
+      const { token, password } = ctx.request.body;
+      if (!token || !password) {
+        return ctx.badRequest('Token and new password are required');
+      }
+
+      let decodedToken: any;
+      try {
+        const jwtSecret = strapi.config.get('plugin.users-permissions.jwtSecret');
+        decodedToken = jwt.verify(token, jwtSecret);
+      } catch (err: any) {
+        if (err.name === 'TokenExpiredError') {
+          return ctx.badRequest('EXPIRED_TOKEN');
+        }
+        return ctx.badRequest('INVALID_TOKEN');
+      }
+
+      const user = await strapi.db.query('plugin::users-permissions.user').findOne({
+        where: { id: decodedToken.id, confirmationToken: token }
+      });
+
+      if (!user) {
+        return ctx.badRequest('INVALID_TOKEN');
+      }
+
+      const userService = strapi.plugin('users-permissions').service('user');
+      const hashedPassword = await userService.hashPassword({ password });
+
+      const updatedUser = await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id: user.id },
+        data: {
+          password: hashedPassword,
+          confirmed: true,
+          confirmationToken: null,
+        }
+      });
+
+      // Issue JWT using Strapi service
+      const responseJwt = strapi.plugin('users-permissions').service('jwt').issue({ id: updatedUser.id });
+
+      stripTenantSuffix(updatedUser);
+      return ctx.send({
+        jwt: responseJwt,
+        user: updatedUser
+      });
+    } catch (err: any) {
+      return ctx.badRequest(err.message || 'An error occurred during account setup.');
+    }
+  };
+
   // 5. Intercept /users/me Profile Retrieval to populate relations
   plugin.controllers.user.me = async (ctx: any) => {
     const user = ctx.state.user;
@@ -208,6 +261,10 @@ export default (plugin: any) => {
         filters.tenant = null;
       }
 
+      if (!authContext.isSuperAdmin && authContext.shipperId) {
+        filters.shipper = authContext.shipperId;
+      }
+
       if (ctx.query.search) {
         const search = (ctx.query.search as string).trim();
         filters.$or = [
@@ -243,6 +300,9 @@ export default (plugin: any) => {
       const queryFilters: any = { id };
       if (!authContext.isSuperAdmin) {
         queryFilters.tenant = authContext.tenantId || null;
+        if (authContext.shipperId) {
+          queryFilters.shipper = authContext.shipperId;
+        }
       }
 
       const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
@@ -273,6 +333,7 @@ export default (plugin: any) => {
         fullName,
         phone,
         role_definition,
+        shipper_roles,
         confirmationType,
         password,
         isenable,
@@ -284,7 +345,29 @@ export default (plugin: any) => {
 
       const tenantId = authContext.isSuperAdmin ? tenant : authContext.tenantId;
       const courierId = authContext.isSuperAdmin ? courier : authContext.courierId;
-      const shipperId = authContext.isSuperAdmin ? shipper : authContext.shipperId;
+      
+      let shipperId = authContext.shipperId;
+      if (!shipperId && shipper_roles && shipper_roles.length > 0) {
+        // Automatically create a new Shipper record named after the user's fullName or username
+        const shipperName = fullName || username || `Shipper for ${email}`;
+        const newShipper = await strapi.db.query('api::shipper.shipper').create({
+          data: {
+            name: shipperName,
+            tenant: tenantId,
+            status: 'active'
+          }
+        });
+        shipperId = newShipper.id;
+        console.log(`Automatically created Shipper record: ${shipperName} (ID: ${shipperId})`);
+      } else if (!shipperId && shipper) {
+        // Allow courier/tenant admin to specify shipper if it belongs to their tenant
+        const targetShipper = await strapi.db.query('api::shipper.shipper').findOne({
+          where: { id: shipper, tenant: tenantId }
+        });
+        if (targetShipper) {
+          shipperId = targetShipper.id;
+        }
+      }
 
       if (!tenantId) {
         return ctx.badRequest('Tenant ID is required.');
@@ -338,6 +421,7 @@ export default (plugin: any) => {
         tenant: tenantId,
         role: targetRoleId,
         role_definition: role_definition || null,
+        shipper_roles: shipper_roles || null,
         courier: courierId,
         shipper: shipperId,
         blocked: isenable === false,
@@ -351,9 +435,28 @@ export default (plugin: any) => {
 
       if (!isNoConfirmation) {
         try {
-          await strapi.plugin('users-permissions').service('user').sendConfirmationEmail(newUser);
+          const jwtSecret = strapi.config.get('plugin.users-permissions.jwtSecret');
+          const confirmationToken = jwt.sign({ id: newUser.id, type: 'setup' }, jwtSecret, { expiresIn: '24h' });
+          
+          await strapi.db.query('plugin::users-permissions.user').update({
+            where: { id: newUser.id },
+            data: { confirmationToken }
+          });
+
+          const origin = ctx.request.header.origin || `http://${ctx.request.header.host}`;
+          const setupLink = `${origin}/auth/setup-account?token=${confirmationToken}`;
+          
+          console.log(`[Email Mock] Setup link for ${email}: ${setupLink}`);
+          
+          await strapi.plugin('email').service('email').send({
+            to: email,
+            from: 'no-reply@dbarc.com',
+            subject: 'Welcome! Setup your account',
+            text: `Please set up your account by clicking this link: ${setupLink}`,
+            html: `<p>Please set up your account by clicking this link: <a href="${setupLink}">${setupLink}</a></p>`,
+          });
         } catch (mailErr) {
-          console.error('Failed to send confirmation email:', mailErr);
+          console.error('Failed to send setup email:', mailErr);
         }
       }
 
@@ -375,11 +478,14 @@ export default (plugin: any) => {
       const queryFilters: any = { id };
       if (!authContext.isSuperAdmin) {
         queryFilters.tenant = authContext.tenantId || null;
+        if (authContext.shipperId) {
+          queryFilters.shipper = authContext.shipperId;
+        }
       }
 
       const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
         where: queryFilters,
-        populate: ['tenant'],
+        populate: ['tenant', 'shipper'],
       });
 
       if (!targetUser) {
@@ -392,6 +498,7 @@ export default (plugin: any) => {
         fullName,
         phone,
         role_definition,
+        shipper_roles,
         password,
         isenable,
         tenant,
@@ -405,9 +512,19 @@ export default (plugin: any) => {
       const updateData: any = {};
       if (username) updateData.username = getTenantScopedUsername(username, tenantId);
       if (email) updateData.email = getTenantScopedEmail(email, tenantId);
-      if (fullName !== undefined) updateData.fullName = fullName;
+      if (fullName !== undefined) {
+        updateData.fullName = fullName;
+        // Keep linked shipper record name in sync
+        if (targetUser.shipper?.id) {
+          await strapi.db.query('api::shipper.shipper').update({
+            where: { id: targetUser.shipper.id },
+            data: { name: fullName || targetUser.username }
+          });
+        }
+      }
       if (phone !== undefined) updateData.phone = phone;
       if (role_definition !== undefined) updateData.role_definition = role_definition;
+      if (shipper_roles !== undefined) updateData.shipper_roles = shipper_roles;
       if (isenable !== undefined) updateData.blocked = isenable === false;
       
       if (authContext.isSuperAdmin) {
@@ -419,6 +536,23 @@ export default (plugin: any) => {
           const matchedRole = roles.find((r: any) => r.id === Number(role) || r.type === role || r.name === role);
           if (matchedRole) {
             updateData.role = matchedRole.id;
+          }
+        }
+      } else {
+        if (authContext.shipperId) {
+          // Enforce shipper admin's shipper association for their employees
+          updateData.shipper = authContext.shipperId;
+        } else if (shipper !== undefined) {
+          // Allow tenant/courier admin to update shipper for users within their tenant
+          if (shipper === null) {
+            updateData.shipper = null;
+          } else {
+            const targetShipper = await strapi.db.query('api::shipper.shipper').findOne({
+              where: { id: shipper, tenant: tenantId }
+            });
+            if (targetShipper) {
+              updateData.shipper = targetShipper.id;
+            }
           }
         }
       }
@@ -437,8 +571,83 @@ export default (plugin: any) => {
     }
   };
 
+  plugin.controllers.user.resendInvite = async (ctx: any) => {
+    const authContext = await getAuthenticatedContext(ctx);
+    if (!authContext) return ctx.unauthorized();
+
+    try {
+      const { id } = ctx.params;
+      
+      const queryFilters: any = { id };
+      if (!authContext.isSuperAdmin) {
+        queryFilters.tenant = authContext.tenantId || null;
+        if (authContext.shipperId) {
+          queryFilters.shipper = authContext.shipperId;
+        }
+      }
+
+      const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+        where: queryFilters,
+      });
+
+      if (!targetUser) {
+        return ctx.notFound('User not found.');
+      }
+      
+      if (targetUser.confirmed) {
+        return ctx.badRequest('User is already confirmed.');
+      }
+
+      const jwtSecret = strapi.config.get('plugin.users-permissions.jwtSecret');
+      const confirmationToken = jwt.sign({ id: targetUser.id, type: 'setup' }, jwtSecret, { expiresIn: '24h' });
+      
+      await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id: targetUser.id },
+        data: { confirmationToken }
+      });
+
+      const origin = ctx.request.header.origin || `http://${ctx.request.header.host}`;
+      const setupLink = `${origin}/auth/setup-account?token=${confirmationToken}`;
+      
+      console.log(`[Email Mock] Resent Setup link for ${targetUser.email}: ${setupLink}`);
+      
+      try {
+        await strapi.plugin('email').service('email').send({
+          to: targetUser.email,
+          from: 'no-reply@dbarc.com',
+          subject: 'Welcome! Setup your account',
+          text: `Please set up your account by clicking this link: ${setupLink}`,
+          html: `<p>Please set up your account by clicking this link: <a href="${setupLink}">${setupLink}</a></p>`,
+        });
+      } catch (mailErr) {
+        console.error('Failed to send setup email:', mailErr);
+      }
+
+      return ctx.send({ message: 'Invitation resent successfully' });
+    } catch (err: any) {
+      return ctx.badRequest(err.message || 'An error occurred while resending invitation.');
+    }
+  };
+
   // Register Custom Routes
   plugin.routes['content-api'].routes.push(
+    {
+      method: 'POST',
+      path: '/tenant/users/:id/resend-invite',
+      handler: 'user.resendInvite',
+      config: {
+        prefix: '',
+      },
+    },
+    {
+      method: 'POST',
+      path: '/auth/setup-account',
+      handler: 'user.setupAccount',
+      config: {
+        prefix: '',
+        auth: false,
+      },
+    },
     {
       method: 'POST',
       path: '/tenant/users/create',

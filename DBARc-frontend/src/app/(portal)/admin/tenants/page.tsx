@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { apiClient } from '@/shared/api/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
@@ -19,7 +20,8 @@ import {
   CheckCircle2, 
   XCircle, 
   AlertTriangle,
-  Database
+  Database,
+  Mail
 } from 'lucide-react';
 
 interface Tenant {
@@ -107,7 +109,7 @@ const INITIAL_TENANTS: Tenant[] = [
 ];
 
 export default function AdminTenantsPage() {
-  const [tenants, setTenants] = React.useState<Tenant[]>(INITIAL_TENANTS);
+  const [tenants, setTenants] = React.useState<Tenant[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
   
@@ -129,6 +131,45 @@ export default function AdminTenantsPage() {
     doorstepDigitalPay: false,
     pakistanTaxEngine: false
   });
+
+  // Admin Credentials State
+  const [formAdminUsername, setFormAdminUsername] = React.useState('');
+  const [formAdminFullName, setFormAdminFullName] = React.useState('');
+  const [formAdminEmail, setFormAdminEmail] = React.useState('');
+  const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
+  const [formAdminPassword, setFormAdminPassword] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  const fetchTenants = async () => {
+    try {
+      const res = await apiClient.get('/tenants?populate=*');
+      const fetchedTenants = res.data.data.map((item: any) => ({
+        id: item.id.toString(),
+        name: item.attributes.name,
+        domain: item.attributes.domain,
+        plan: item.attributes.plan || 'Growth',
+        commissionPct: item.attributes.commissionPct || 2.0,
+        status: item.attributes.status || 'pending',
+        features: item.attributes.features || {
+          tplAggregation: false,
+          liveRiderTracking: false,
+          smsNotifications: false,
+          doorstepDigitalPay: false,
+          pakistanTaxEngine: false
+        },
+        createdAt: new Date(item.attributes.createdAt).toISOString().split('T')[0]
+      }));
+      setTenants(fetchedTenants);
+    } catch (err) {
+      console.error('Failed to fetch tenants', err);
+      // Fallback to initial tenants for UI demo purposes if backend isn't ready
+      setTenants(INITIAL_TENANTS);
+    }
+  };
 
   const handleOpenConfig = (tenant: Tenant) => {
     setSelectedTenant(tenant);
@@ -154,6 +195,11 @@ export default function AdminTenantsPage() {
       doorstepDigitalPay: false,
       pakistanTaxEngine: true
     });
+    setFormAdminUsername('');
+    setFormAdminFullName('');
+    setFormAdminEmail('');
+    setFormConfirmationType('no_confirmation');
+    setFormAdminPassword('');
     setIsCreateModalOpen(true);
   };
 
@@ -180,21 +226,43 @@ export default function AdminTenantsPage() {
     setSelectedTenant(null);
   };
 
-  const handleCreateTenant = (e: React.FormEvent) => {
+  const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newTenant: Tenant = {
-      id: `t-${tenants.length + 1}`,
-      name: formName,
-      domain: formDomain || `${formName.toLowerCase().replace(/[^a-z0-9]/g, '')}.dbarc.com`,
-      plan: formPlan,
-      commissionPct: Number(formCommission),
-      status: formStatus,
-      features: { ...formFeatures },
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        name: formName,
+        domain: formDomain || `${formName.toLowerCase().replace(/[^a-z0-9]/g, '')}.dbarc.com`,
+        plan: formPlan,
+        commissionPct: Number(formCommission),
+        status: formStatus,
+        features: { ...formFeatures },
+        adminUsername: formAdminUsername,
+        adminFullName: formAdminFullName,
+        adminEmail: formAdminEmail,
+        adminPassword: formAdminPassword,
+        confirmationType: formConfirmationType
+      };
 
-    setTenants((prev) => [newTenant, ...prev]);
-    setIsCreateModalOpen(false);
+      await apiClient.post('/tenant/provision', payload);
+      await fetchTenants();
+      setIsCreateModalOpen(false);
+    } catch (err: any) {
+      console.error('Failed to provision tenant', err);
+      alert(err.response?.data?.error?.message || 'Failed to provision workspace');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendAdminInvite = async (tenantId: string) => {
+    try {
+      await apiClient.post(`/tenant/${tenantId}/resend-admin-invite`);
+      alert('Admin setup invitation has been resent.');
+    } catch (err: any) {
+      console.error('Failed to resend admin invite', err);
+      alert(err.response?.data?.error?.message || 'Failed to resend admin invite.');
+    }
   };
 
   // Filter tenants
@@ -365,7 +433,15 @@ export default function AdminTenantsPage() {
                         <div className="text-xs text-slate-500 mt-0.5">Commission: {tenant.commissionPct.toFixed(2)}%</div>
                       </td>
                       <td className="px-6 py-4 text-slate-500 font-medium">{tenant.createdAt}</td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResendAdminInvite(tenant.id)}
+                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                        >
+                          <Mail className="h-3.5 w-3.5" /> Resend Invite
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -453,6 +529,66 @@ export default function AdminTenantsPage() {
             </div>
           </div>
 
+          {/* Tenant Admin Credentials */}
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Tenant Admin Credentials</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Admin Username"
+                value={formAdminUsername}
+                onChange={(e) => setFormAdminUsername(e.target.value)}
+                required
+              />
+              <Input
+                label="Admin Full Name"
+                value={formAdminFullName}
+                onChange={(e) => setFormAdminFullName(e.target.value)}
+                required
+              />
+              <Input
+                label="Admin Email"
+                type="email"
+                value={formAdminEmail}
+                onChange={(e) => setFormAdminEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="mt-4 space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Account Confirmation</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-xs font-semibold text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={formConfirmationType === 'email_confirmation'}
+                    onChange={() => setFormConfirmationType('email_confirmation')}
+                    className="w-4 h-4 text-primary focus:ring-0 border-slate-300 mr-2"
+                  />
+                  Require Email Confirmation
+                </label>
+                <label className="flex items-center gap-xs font-semibold text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={formConfirmationType === 'no_confirmation'}
+                    onChange={() => setFormConfirmationType('no_confirmation')}
+                    className="w-4 h-4 text-primary focus:ring-0 border-slate-300 mr-2"
+                  />
+                  No Email Confirmation
+                </label>
+              </div>
+            </div>
+            {formConfirmationType === 'no_confirmation' && (
+              <div className="mt-4">
+                <Input
+                  label="Initial Admin Password"
+                  type="password"
+                  value={formAdminPassword}
+                  onChange={(e) => setFormAdminPassword(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+          </div>
+
           {/* Features Toggles */}
           <div className="border-t border-slate-100 pt-4">
             <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Module Configurations</h4>
@@ -515,8 +651,8 @@ export default function AdminTenantsPage() {
             <Button variant="outline" type="button" onClick={() => setIsCreateModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit">
-              Provision Workspace
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Provisioning...' : 'Provision Workspace'}
             </Button>
           </div>
         </form>

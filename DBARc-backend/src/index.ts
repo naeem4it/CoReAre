@@ -93,6 +93,27 @@ export default {
     try {
       console.log('Bootstrapping default permissions...');
 
+      // Seed default courier roles for all existing tenants
+      const tenants = await strapi.db.query('api::tenant.tenant').findMany();
+      const defaultCourierRoles = ['Super Admin', 'Admin', 'Front desk', 'shipment Booker', 'Rider'];
+      for (const t of tenants) {
+        for (const roleName of defaultCourierRoles) {
+          const existingRole = await strapi.db.query('api::role-definition.role-definition').findOne({
+            where: { role_name: roleName, tenant: t.id }
+          });
+          if (!existingRole) {
+            await strapi.db.query('api::role-definition.role-definition').create({
+              data: {
+                role_name: roleName,
+                tenant: t.id,
+                permissions: []
+              }
+            });
+            console.log(`Seeded default courier role: ${roleName} for Tenant: ${t.name}`);
+          }
+        }
+      }
+
       // Find the Roles
       const roles = await strapi.db.query('plugin::users-permissions.role').findMany();
       const authenticatedRole = roles.find((r: any) => r.type === 'authenticated');

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
+import { useSearchParams } from 'next/navigation';
 
 interface RoleDefinition {
   id: number;
@@ -18,15 +19,95 @@ interface User {
   phone?: string;
   blocked?: boolean;
   confirmed?: boolean;
-  role_definition?: RoleDefinition | null;
+  role_definition?: RoleDefinition[];
+  shipper?: { id: number; name: string } | null;
+  shipper_roles?: string[];
 }
 
+const SHIPPER_ROLES = ['shipper admin', 'Finance', 'Shipment', 'Customer admin'];
+const COURIER_ROLE_NAMES = ['Super Admin', 'Admin', 'Front desk', 'shipment Booker', 'Rider'];
+
 export default function EmployeeManagementPage() {
+  const searchParams = useSearchParams();
+  const typeParam = searchParams?.get('type') || 'courier';
+
+  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setLoggedInUser(JSON.parse(userStr));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  const isLoggedShipper = !!loggedInUser?.shipper;
+  const effectiveType = isLoggedShipper ? 'shipper' : typeParam;
+
   const [employees, setEmployees] = React.useState<User[]>([]);
   const [roles, setRoles] = React.useState<RoleDefinition[]>([]);
+  const [shippers, setShippers] = React.useState<{ id: number; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'active' | 'quit'>('active');
   const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
+
+  // Multi-roles state (for Courier)
+  const [assignedRoleIds, setAssignedRoleIds] = React.useState<number[]>([]);
+  // Multi-roles state (for Shipper)
+  const [assignedShipperRoles, setAssignedShipperRoles] = React.useState<string[]>([]);
+  
+  // Selected Employee Type & Shipper for the active form
+  const [formEmployeeType, setFormEmployeeType] = React.useState<'courier' | 'shipper'>('courier');
+  const [formShipperId, setFormShipperId] = React.useState<number | ''>('');
+
+  const unassignedRoles = React.useMemo(() => {
+    if (formEmployeeType === 'shipper') {
+      return SHIPPER_ROLES.filter((role) => !assignedShipperRoles.includes(role)).map((role) => ({
+        id: role,
+        role_name: role,
+      }));
+    }
+    const filteredCourierRoles = roles.filter((role) => COURIER_ROLE_NAMES.includes(role.role_name));
+    return filteredCourierRoles.filter((role) => !assignedRoleIds.includes(role.id));
+  }, [formEmployeeType, roles, assignedRoleIds, assignedShipperRoles]);
+
+  const assignedRoles = React.useMemo(() => {
+    if (formEmployeeType === 'shipper') {
+      return SHIPPER_ROLES.filter((role) => assignedShipperRoles.includes(role)).map((role) => ({
+        id: role,
+        role_name: role,
+      }));
+    }
+    const filteredCourierRoles = roles.filter((role) => COURIER_ROLE_NAMES.includes(role.role_name));
+    return filteredCourierRoles.filter((role) => assignedRoleIds.includes(role.id));
+  }, [formEmployeeType, roles, assignedRoleIds, assignedShipperRoles]);
+
+  const handleAssignRole = (roleId: number | string) => {
+    if (formEmployeeType === 'shipper') {
+      const roleStr = String(roleId);
+      if (!assignedShipperRoles.includes(roleStr)) {
+        setAssignedShipperRoles((prev) => [...prev, roleStr]);
+      }
+    } else {
+      const idNum = Number(roleId);
+      if (!assignedRoleIds.includes(idNum)) {
+        setAssignedRoleIds((prev) => [...prev, idNum]);
+      }
+    }
+  };
+
+  const handleUnassignRole = (roleId: number | string) => {
+    if (formEmployeeType === 'shipper') {
+      const roleStr = String(roleId);
+      setAssignedShipperRoles((prev) => prev.filter((r) => r !== roleStr));
+    } else {
+      const idNum = Number(roleId);
+      setAssignedRoleIds((prev) => prev.filter((id) => id !== idNum));
+    }
+  };
   
   // Loading and error states
   const [isLoading, setIsLoading] = React.useState(true);
@@ -43,7 +124,6 @@ export default function EmployeeManagementPage() {
   const [formFullName, setFormFullName] = React.useState('');
   const [formPhone, setFormPhone] = React.useState('');
   const [formIsEnabled, setFormIsEnabled] = React.useState(true);
-  const [formRoleId, setFormRoleId] = React.useState<number | ''>('');
   const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
   const [formPassword, setFormPassword] = React.useState('');
 
@@ -62,9 +142,22 @@ export default function EmployeeManagementPage() {
       setRoles(mappedRoles);
 
       // 2. Fetch users
-      const usersRes = await apiClient.get('/users?populate=role_definition');
+      const usersRes = await apiClient.get('/users?populate=role_definition,shipper');
       const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
       setEmployees(rawUsers);
+
+      // 3. Fetch shippers
+      try {
+        const shippersRes = await apiClient.get('/shippers');
+        const rawShippers = shippersRes.data?.data || [];
+        const mappedShippers = rawShippers.map((item: any) => ({
+          id: item.id,
+          name: item.name || `Shipper #${item.id}`,
+        }));
+        setShippers(mappedShippers);
+      } catch (shippersErr) {
+        console.error('Failed to load shippers list:', shippersErr);
+      }
     } catch (err: any) {
       console.error('Failed to load employee directory:', err);
       setError('Could not fetch employee directory from the database.');
@@ -80,21 +173,32 @@ export default function EmployeeManagementPage() {
   // Filter and Search logic
   const filteredEmployees = React.useMemo(() => {
     return employees.filter((emp) => {
-      // 1. Filter by Active vs Quit status (blocked maps to quit/terminated)
+      // 1. Filter by Courier vs Shipper type based on context/URL parameter
+      const matchesType = effectiveType === 'shipper' ? !!emp.shipper : !emp.shipper;
+      if (!matchesType) return false;
+
+      // 1b. If logged in as shipper, only show employees of the same shipper
+      if (isLoggedShipper && loggedInUser?.shipper?.id && emp.shipper?.id !== loggedInUser.shipper.id) {
+        return false;
+      }
+
+      // 2. Filter by Active vs Quit status (blocked maps to quit/terminated)
       const matchesStatus = statusFilter === 'active' ? !emp.blocked : !!emp.blocked;
       if (!matchesStatus) return false;
 
-      // 2. Filter by search query across Username, Full Name, and Role name
+      // 3. Filter by search query across Username, Full Name, and Role name
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
-      const roleName = emp.role_definition?.role_name || '';
+      const roleName = emp.role_definition?.map((r) => r.role_name).join(' ') || '';
+      const shipperRoles = emp.shipper_roles?.join(' ') || '';
       return (
         emp.username.toLowerCase().includes(query) ||
         (emp.fullName || '').toLowerCase().includes(query) ||
-        roleName.toLowerCase().includes(query)
+        roleName.toLowerCase().includes(query) ||
+        shipperRoles.toLowerCase().includes(query)
       );
     });
-  }, [employees, statusFilter, searchQuery]);
+  }, [employees, statusFilter, searchQuery, effectiveType]);
 
   // Open creation form
   const handleOpenAddForm = () => {
@@ -104,7 +208,10 @@ export default function EmployeeManagementPage() {
     setFormFullName('');
     setFormPhone('');
     setFormIsEnabled(true);
-    setFormRoleId('');
+    setFormEmployeeType(effectiveType === 'shipper' ? 'shipper' : 'courier');
+    setFormShipperId('');
+    setAssignedRoleIds([]);
+    setAssignedShipperRoles([]);
     setFormConfirmationType('no_confirmation');
     setFormPassword('');
     setIsFormOpen(true);
@@ -119,7 +226,19 @@ export default function EmployeeManagementPage() {
     setFormFullName(selectedUser.fullName || '');
     setFormPhone(selectedUser.phone || '');
     setFormIsEnabled(!selectedUser.blocked);
-    setFormRoleId(selectedUser.role_definition?.id || '');
+
+    const isShipperUser = !!selectedUser.shipper;
+    setFormEmployeeType(isShipperUser ? 'shipper' : 'courier');
+    setFormShipperId(selectedUser.shipper?.id || '');
+
+    const initialRoleIds = Array.isArray(selectedUser.role_definition)
+      ? selectedUser.role_definition.map((r) => r.id)
+      : selectedUser.role_definition
+      ? [(selectedUser.role_definition as any).id]
+      : [];
+    setAssignedRoleIds(initialRoleIds);
+    setAssignedShipperRoles(selectedUser.shipper_roles || []);
+
     setFormConfirmationType('no_confirmation');
     setFormPassword('');
     setIsFormOpen(true);
@@ -144,10 +263,29 @@ export default function EmployeeManagementPage() {
     }
   };
 
+  // Resend Invite
+  const handleResendInvite = async () => {
+    if (!selectedUser) return;
+    try {
+      await apiClient.post(`/tenant/users/${selectedUser.id}/resend-invite`);
+      alert('Invitation resent successfully.');
+    } catch (err: any) {
+      console.error('Error resending invite:', err);
+      alert(err.response?.data?.error?.message || 'Failed to resend invitation.');
+    }
+  };
+
   // Form Submit Handler
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formUsername.trim() || !formEmail.trim()) return;
+
+    if (formEmployeeType === 'shipper' && !isLoggedShipper && formShipperId === '') {
+      if (!assignedShipperRoles.includes('shipper admin')) {
+        alert('When creating a new shipper, you must assign the "shipper admin" role.');
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     try {
@@ -156,9 +294,18 @@ export default function EmployeeManagementPage() {
         email: formEmail,
         fullName: formFullName,
         phone: formPhone,
-        role_definition: formRoleId || null,
         isenable: formIsEnabled,
       };
+
+      if (formEmployeeType === 'shipper') {
+        payload.shipper = formShipperId || null;
+        payload.shipper_roles = assignedShipperRoles;
+        payload.role_definition = [];
+      } else {
+        payload.shipper = null;
+        payload.shipper_roles = [];
+        payload.role_definition = assignedRoleIds;
+      }
 
       if (isEditMode) {
         if (formPassword) payload.password = formPassword;
@@ -186,8 +333,16 @@ export default function EmployeeManagementPage() {
     <PortalLayout>
       <div className="flex flex-col gap-lg animate-in fade-in duration-200">
         <div>
-          <h1 className="font-display-lg text-display-lg text-on-surface">Employee Directory</h1>
-          <p className="text-on-surface-variant font-body-md text-body-md">Manage staff credentials, permissions, and roles.</p>
+          <h1 className="font-display-lg text-display-lg text-on-surface">
+            {isLoggedShipper ? 'Employee Directory' : (typeParam === 'shipper' ? 'Shipper Directory' : 'Employee Directory')}
+          </h1>
+          <p className="text-on-surface-variant font-body-md text-body-md">
+            {isLoggedShipper 
+              ? 'Manage staff credentials, permissions, and roles.' 
+              : (typeParam === 'shipper'
+                  ? 'Manage shipper staff credentials, permissions, and roles.'
+                  : 'Manage courier staff credentials, permissions, and roles.')}
+          </p>
         </div>
 
         {error && (
@@ -236,7 +391,7 @@ export default function EmployeeManagementPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Username, Name or Role..."
+              placeholder={isLoggedShipper ? 'Search Username, Name or Role...' : (typeParam === 'shipper' ? 'Search Username, Name or Shipper Role...' : 'Search Username, Name or Courier Role...')}
               className="w-full bg-slate-50 border border-outline-variant rounded-lg py-1.5 pl-10 pr-4 text-body-md focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container transition-all"
             />
           </div>
@@ -248,7 +403,7 @@ export default function EmployeeManagementPage() {
               className="bg-primary text-white h-10 px-4 rounded-xl hover:shadow-lg active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              Add New User
+              {isLoggedShipper ? 'Add New Employee' : (typeParam === 'shipper' ? 'Add New Shipper' : 'Add New Employee')}
             </button>
             <button
               onClick={handleOpenEditForm}
@@ -265,6 +420,14 @@ export default function EmployeeManagementPage() {
             >
               <span className="material-symbols-outlined text-[18px]">delete</span>
               Delete
+            </button>
+            <button
+              onClick={handleResendInvite}
+              disabled={!selectedUser || selectedUser.confirmed}
+              className="bg-blue-50 border border-blue-200 text-blue-700 h-10 px-4 rounded-xl hover:bg-blue-100/50 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 disabled:hidden cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">forward_to_inbox</span>
+              Resend Invite
             </button>
           </div>
         </div>
@@ -304,9 +467,46 @@ export default function EmployeeManagementPage() {
                         </td>
                         <td className="px-lg py-4 font-semibold text-on-surface">{emp.fullName || '-'}</td>
                         <td className="px-lg py-4 font-semibold text-on-surface-variant">
-                          {emp.role_definition?.role_name || (
-                            <span className="text-xs text-outline italic">No custom role</span>
-                          )}
+                          {(() => {
+                            if (emp.shipper) {
+                              const sRoles = Array.isArray(emp.shipper_roles) ? emp.shipper_roles : [];
+                              return (
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                    Shipper: {emp.shipper.name}
+                                  </span>
+                                  {sRoles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {sRoles.map((r) => (
+                                        <span key={r} className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50 rounded-full">
+                                          {r}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-outline italic mt-1">No shipper roles</span>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            const empRoles = Array.isArray(emp.role_definition)
+                              ? emp.role_definition
+                              : emp.role_definition
+                              ? [emp.role_definition]
+                              : [];
+                            return empRoles.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {empRoles.map((r) => (
+                                  <span key={r.id} className="px-2.5 py-1 text-xs font-semibold bg-primary-container/40 text-on-primary-container border border-primary/10 rounded-full">
+                                    {r.role_name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-outline italic">No custom role</span>
+                            );
+                          })()}
                         </td>
                         <td className="px-lg py-4 text-center">
                           {emp.blocked ? (
@@ -349,7 +549,9 @@ export default function EmployeeManagementPage() {
             <div className="flex justify-between items-center border-b border-outline-variant pb-md mb-lg">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-xs">
                 <span className="material-symbols-outlined">{isEditMode ? 'edit' : 'person_add'}</span>
-                {isEditMode ? 'Edit Employee Details' : 'Add New User'}
+                {isEditMode 
+                  ? ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Edit Shipper Details' : 'Edit Employee Details')
+                  : ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Add New Shipper' : 'Add New Employee')}
               </h2>
               <button
                 onClick={() => setIsFormOpen(false)}
@@ -410,21 +612,122 @@ export default function EmployeeManagementPage() {
                 />
               </div>
 
-              {/* Role Dropdown */}
+              {/* Employee Type Selection */}
+              {!isLoggedShipper && (
+                <div className="flex flex-col gap-xs">
+                  <label className="text-sm font-bold text-on-surface">Employee Type</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-xs font-semibold text-body-md text-on-surface cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={formEmployeeType === 'courier'}
+                        onChange={() => {
+                          setFormEmployeeType('courier');
+                          setFormShipperId('');
+                        }}
+                        className="w-4 h-4 text-primary focus:ring-0 border-outline-variant cursor-pointer"
+                      />
+                      Courier Employee
+                    </label>
+                    <label className="flex items-center gap-xs font-semibold text-body-md text-on-surface cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={formEmployeeType === 'shipper'}
+                        onChange={() => {
+                          setFormEmployeeType('shipper');
+                        }}
+                        className="w-4 h-4 text-primary focus:ring-0 border-outline-variant cursor-pointer"
+                      />
+                      Shipper Employee
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Shipper Selector */}
+              {formEmployeeType === 'shipper' && !isLoggedShipper && (
+                <div className="flex flex-col gap-xs">
+                  <label className="text-sm font-bold text-on-surface">Assign to Shipper</label>
+                  <select
+                    required
+                    value={formShipperId === '' ? 'new' : formShipperId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'new') {
+                        setFormShipperId('');
+                        if (!assignedShipperRoles.includes('shipper admin')) {
+                          setAssignedShipperRoles(prev => [...prev, 'shipper admin']);
+                        }
+                      } else {
+                        setFormShipperId(Number(val));
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-outline-variant rounded-lg p-3 text-body-md focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container outline-none"
+                  >
+                    <option value="new">-- Create New Shipper --</option>
+                    {shippers.map(shipper => (
+                      <option key={shipper.id} value={shipper.id}>{shipper.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Multi-Role Dual List Box */}
               <div className="flex flex-col gap-xs">
-                <label className="text-sm font-bold text-on-surface">Assign Custom Role</label>
-                <select
-                  value={formRoleId}
-                  onChange={(e) => setFormRoleId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full bg-slate-50 border border-outline-variant rounded-lg p-3 text-body-md focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container outline-none cursor-pointer"
-                >
-                  <option value="">Select custom role...</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.role_name}
-                    </option>
-                  ))}
-                </select>
+                <label className="text-sm font-bold text-on-surface">Assign Roles</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                  {/* Available Roles */}
+                  <div className="border border-outline-variant rounded-xl p-md bg-slate-50/50 flex flex-col h-[220px]">
+                    <div className="flex justify-between items-center mb-xs">
+                      <span className="text-xs font-bold text-outline uppercase tracking-wider">Available Roles ({unassignedRoles.length})</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-sm pr-xs">
+                      {unassignedRoles.length > 0 ? (
+                        unassignedRoles.map((role) => (
+                          <button
+                            key={role.id}
+                            type="button"
+                            onClick={() => handleAssignRole(role.id)}
+                            className="w-full flex items-center justify-between p-2.5 bg-white border border-outline-variant rounded-lg hover:border-primary hover:text-primary transition-all text-left group"
+                          >
+                            <span className="text-sm font-semibold text-on-surface group-hover:text-primary">{role.role_name}</span>
+                            <span className="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">add</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-outline italic">
+                          All roles assigned
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Assigned Roles */}
+                  <div className="border border-outline-variant rounded-xl p-md bg-slate-50/50 flex flex-col h-[220px]">
+                    <div className="flex justify-between items-center mb-xs">
+                      <span className="text-xs font-bold text-outline uppercase tracking-wider">Assigned Roles ({assignedRoles.length})</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-sm pr-xs">
+                      {assignedRoles.length > 0 ? (
+                        assignedRoles.map((role) => (
+                          <button
+                            key={role.id}
+                            type="button"
+                            onClick={() => handleUnassignRole(role.id)}
+                            className="w-full flex items-center justify-between p-2.5 bg-white border border-primary-container hover:border-error rounded-lg hover:bg-error-container/10 transition-all text-left group"
+                          >
+                            <span className="text-sm font-semibold text-on-surface group-hover:text-error">{role.role_name}</span>
+                            <span className="material-symbols-outlined text-[18px] text-outline group-hover:text-error transition-colors">close</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-outline italic">
+                          No roles assigned
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* IsEnabled toggle */}

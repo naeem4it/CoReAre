@@ -3,20 +3,52 @@
 import * as React from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { apiClient } from '@/shared/api/api-client';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
 
   React.useEffect(() => {
     const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
     if (!token) {
       router.push('/login');
     } else {
-      setIsAuthenticated(true);
+      // Fetch current user details with populated relations
+      apiClient.get('/users/me')
+        .then((res) => {
+          localStorage.setItem('user', JSON.stringify(res.data));
+          setLoggedInUser(res.data);
+          setIsAuthenticated(true);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch user context:', err);
+          // If auth token is invalid, redirect to login
+          localStorage.removeItem('token');
+          localStorage.removeItem('dbarc-token');
+          localStorage.removeItem('user');
+          router.push('/login');
+        });
     }
   }, [router]);
+
+  const userRoles = React.useMemo(() => {
+    if (!loggedInUser) return [];
+    return Array.isArray(loggedInUser.role_definition)
+      ? loggedInUser.role_definition.map((r: any) => r.role_name)
+      : [];
+  }, [loggedInUser]);
+
+  const showShipmentBooking = React.useMemo(() => {
+    if (!loggedInUser) return false;
+    return (
+      loggedInUser.role?.type === 'super_admin' ||
+      userRoles.includes('Super Admin') ||
+      userRoles.includes('Admin')
+    );
+  }, [loggedInUser, userRoles]);
 
   if (!isAuthenticated) {
     return (
@@ -82,6 +114,18 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <button className="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95 cursor-pointer">
               <span className="material-symbols-outlined text-on-surface-variant">help</span>
             </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('dbarc-token');
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+              }}
+              className="p-2 rounded-full hover:bg-error-container/20 text-error hover:text-error transition-colors duration-200 active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Logout"
+            >
+              <span className="material-symbols-outlined text-red-600">logout</span>
+            </button>
             <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2">
               <img
                 alt="User profile"
@@ -96,21 +140,23 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <div className="flex min-h-[calc(100vh-64px)] max-w-[1280px] w-full mx-auto flex-1">
         {/* SideNavBar */}
         <aside className="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-outline-variant dark:border-outline bg-surface dark:bg-surface-dim shrink-0">
-          <div className="mb-lg p-sm">
-            <Link
-              href="/shipments/book"
-              className="w-full bg-primary-container text-on-primary-container py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-xs hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer animate-in fade-in duration-200"
-            >
-              <span className="material-symbols-outlined">add</span>
-              New Shipment
-            </Link>
-          </div>
+          {showShipmentBooking && (
+            <div className="mb-lg p-sm">
+              <Link
+                href="/shipments/book"
+                className="w-full bg-primary-container text-on-primary-container py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-xs hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer animate-in fade-in duration-200"
+              >
+                <span className="material-symbols-outlined">add</span>
+                New Shipment
+              </Link>
+            </div>
+          )}
           <React.Suspense fallback={
             <div className="h-48 flex items-center justify-center text-outline">
               <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
             </div>
           }>
-            <SideNavigation />
+            <SideNavigation showShipmentBooking={showShipmentBooking} />
           </React.Suspense>
           <div className="mt-auto p-sm">
             <div className="bg-surface-container-low rounded-xl p-md border border-outline-variant">
@@ -162,20 +208,37 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       </nav>
 
       {/* FAB for Quick Actions */}
-      <Link
-        href="/shipments/book"
-        className="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40 cursor-pointer"
-      >
-        <span className="material-symbols-outlined text-[32px]">add</span>
-      </Link>
+      {showShipmentBooking && (
+        <Link
+          href="/shipments/book"
+          className="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40 cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[32px]">add</span>
+        </Link>
+      )}
     </div>
   );
 }
 
-function SideNavigation() {
+function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = searchParams?.get('tab');
+
+  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setLoggedInUser(JSON.parse(userStr));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  const isShipper = !!loggedInUser?.shipper;
 
   return (
     <nav className="flex flex-col gap-1">
@@ -190,16 +253,18 @@ function SideNavigation() {
         <span className="font-label-md text-label-md">Overview</span>
       </Link>
 
-      <Link
-        href="/shipments/book"
-        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname === '/shipments/book' && tab !== 'bulk'
-            ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-            : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-          }`}
-      >
-        <span className="material-symbols-outlined">local_shipping</span>
-        <span className="font-label-md text-label-md">Booking</span>
-      </Link>
+      {showShipmentBooking && (
+        <Link
+          href="/shipments/book"
+          className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname === '/shipments/book' && tab !== 'bulk'
+              ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+              : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+        >
+          <span className="material-symbols-outlined">local_shipping</span>
+          <span className="font-label-md text-label-md">Booking</span>
+        </Link>
+      )}
       <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
         <span className="material-symbols-outlined">location_on</span>
         <span className="font-label-md text-label-md">Tracking</span>
@@ -218,17 +283,61 @@ function SideNavigation() {
         <span className="material-symbols-outlined">group</span>
         <span className="font-label-md text-label-md">Customers</span>
       </a>
-      <Link
-        href="/administration/employees"
-        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname.startsWith('/administration')
-            ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-            : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-          }`}
-      >
-        <span className="material-symbols-outlined">shield</span>
-        <span className="font-label-md text-label-md">Administration</span>
-      </Link>
-      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
+      {/* Administration and User Accounts Submenus */}
+      <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
+          <span className="material-symbols-outlined">shield</span>
+          <span className="font-label-md text-label-md">Administration</span>
+        </div>
+        
+        <div className="pl-4 flex flex-col gap-0.5">
+          <div className="flex items-center p-xs font-bold text-outline uppercase tracking-wider text-[10px] select-none">
+            User Accounts
+          </div>
+          
+          {isShipper ? (
+            <Link
+              href="/administration/employees?type=shipper"
+              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                pathname.startsWith('/administration')
+                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">badge</span>
+              <span className="font-label-md text-label-md">Add/Edit Employee</span>
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/administration/employees?type=shipper"
+                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                  pathname.startsWith('/administration') && searchParams?.get('type') === 'shipper'
+                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[20px]">local_shipping</span>
+                <span className="font-label-md text-label-md">Add/Edit Shipper</span>
+              </Link>
+
+              <Link
+                href="/administration/employees?type=courier"
+                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                  pathname.startsWith('/administration') && (searchParams?.get('type') === 'courier' || !searchParams?.get('type'))
+                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[20px]">badge</span>
+                <span className="font-label-md text-label-md">Add/Edit Employee</span>
+              </Link>
+            </>
+          )}
+        </div>
+      </div>
+
+      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all border-t border-outline-variant pt-2 mt-1">
         <span className="material-symbols-outlined">settings</span>
         <span className="font-label-md text-label-md">Settings</span>
       </a>

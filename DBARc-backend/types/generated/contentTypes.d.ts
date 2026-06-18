@@ -469,6 +469,39 @@ export interface ApiAboutAbout extends Struct.SingleTypeSchema {
   };
 }
 
+export interface ApiArrivalArrival extends Struct.CollectionTypeSchema {
+  collectionName: 'arrivals';
+  info: {
+    description: 'Log logs for arrived parcels checked in by riders';
+    displayName: 'Arrival';
+    pluralName: 'arrivals';
+    singularName: 'arrival';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    arrival_date: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::arrival.arrival'
+    > &
+      Schema.Attribute.Private;
+    parcels: Schema.Attribute.Relation<'manyToMany', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    total_pieces: Schema.Attribute.Integer;
+    total_weight: Schema.Attribute.Decimal;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
   collectionName: 'articles';
   info: {
@@ -653,6 +686,10 @@ export interface ApiCodSettlementCodSettlement
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    delivered_count: Schema.Attribute.Integer;
+    ibft_charges: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    invoice_date: Schema.Attribute.Date;
+    invoice_number: Schema.Attribute.String & Schema.Attribute.Unique;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -661,8 +698,13 @@ export interface ApiCodSettlementCodSettlement
       Schema.Attribute.Private;
     net_payable: Schema.Attribute.Decimal & Schema.Attribute.Required;
     paid_at: Schema.Attribute.DateTime;
+    period_end: Schema.Attribute.Date;
+    period_start: Schema.Attribute.Date;
     publishedAt: Schema.Attribute.DateTime;
+    returned_count: Schema.Attribute.Integer;
+    service_charges: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    statement_pdf: Schema.Attribute.String;
     status: Schema.Attribute.Enumeration<
       ['calculated', 'approved', 'processing', 'paid', 'disputed']
     > &
@@ -757,6 +799,10 @@ export interface ApiDeliveryAttemptDeliveryAttempt
     draftAndPublish: false;
   };
   attributes: {
+    advice_status: Schema.Attribute.Enumeration<
+      ['Awaiting advice', 'Resolved', 'Failed']
+    > &
+      Schema.Attribute.DefaultTo<'Awaiting advice'>;
     attempt_time: Schema.Attribute.DateTime;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -775,7 +821,49 @@ export interface ApiDeliveryAttemptDeliveryAttempt
     recipient_name: Schema.Attribute.String;
     recipient_relation: Schema.Attribute.String;
     rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    shipper_advice: Schema.Attribute.Text;
     status: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiDeliverySheetDeliverySheet
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'delivery_sheets';
+  info: {
+    description: 'Rider run sheets and dispatch assignments';
+    displayName: 'Delivery Sheet';
+    pluralName: 'delivery-sheets';
+    singularName: 'delivery-sheet';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    custom_name: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::delivery-sheet.delivery-sheet'
+    > &
+      Schema.Attribute.Private;
+    parcels: Schema.Attribute.Relation<'manyToMany', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    route_code: Schema.Attribute.String;
+    sheet_date: Schema.Attribute.Date & Schema.Attribute.Required;
+    sheet_number: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.Enumeration<
+      ['Pending', 'Out For Delivery', 'Completed']
+    > &
+      Schema.Attribute.DefaultTo<'Pending'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -912,6 +1000,82 @@ export interface ApiHubHub extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiInvoiceInvoice extends Struct.CollectionTypeSchema {
+  collectionName: 'invoices';
+  info: {
+    description: 'Shipper billing invoices';
+    displayName: 'Invoice';
+    pluralName: 'invoices';
+    singularName: 'invoice';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    invoice_date: Schema.Attribute.Date & Schema.Attribute.Required;
+    invoice_number: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::invoice.invoice'
+    > &
+      Schema.Attribute.Private;
+    period_end: Schema.Attribute.Date;
+    period_start: Schema.Attribute.Date;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    status: Schema.Attribute.Enumeration<['Paid', 'Pending', 'Overdue']> &
+      Schema.Attribute.DefaultTo<'Pending'>;
+    total_charges: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
+  collectionName: 'load_sheets';
+  info: {
+    description: 'Cargo distribution sheets for dispatched routes';
+    displayName: 'Load Sheet';
+    pluralName: 'load-sheets';
+    singularName: 'load-sheet';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    date_created: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::load-sheet.load-sheet'
+    > &
+      Schema.Attribute.Private;
+    origin_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
+    parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    sheet_id: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.Enumeration<
+      ['Pending', 'Dispatched', 'On-Route', 'Delivered']
+    > &
+      Schema.Attribute.DefaultTo<'Pending'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiParcelHubMovementParcelHubMovement
   extends Struct.CollectionTypeSchema {
   collectionName: 'parcel_hub_movements';
@@ -964,6 +1128,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
   attributes: {
     allow_to_open: Schema.Attribute.Enumeration<['Yes', 'No']> &
       Schema.Attribute.DefaultTo<'No'>;
+    arrival_date: Schema.Attribute.DateTime;
     cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     comments: Schema.Attribute.Text;
     consignee_alt_phone: Schema.Attribute.String;
@@ -976,14 +1141,37 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    delivered_date: Schema.Attribute.DateTime;
     delivery_charges: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    load_sheet: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::load-sheet.load-sheet'
+    >;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::parcel.parcel'
     > &
       Schema.Attribute.Private;
-    parcel_status: Schema.Attribute.Enumeration<
+    pickup_location: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::pickup-location.pickup-location'
+    >;
+    pieces: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
+    publishedAt: Schema.Attribute.DateTime;
+    recipient_address: Schema.Attribute.Text & Schema.Attribute.Required;
+    recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
+    recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
+    reference_number: Schema.Attribute.String;
+    service_type: Schema.Attribute.Enumeration<
+      ['Overnight', 'Second Day', 'Rush', 'Detained']
+    > &
+      Schema.Attribute.DefaultTo<'Overnight'>;
+    shipment_type: Schema.Attribute.Enumeration<
+      ['Parcel', 'Document', 'Flyer']
+    > &
+      Schema.Attribute.DefaultTo<'Parcel'>;
+    status: Schema.Attribute.Enumeration<
       [
         'Total Booking',
         'Not Arrived',
@@ -998,10 +1186,6 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       ]
     > &
       Schema.Attribute.DefaultTo<'Total Booking'>;
-    publishedAt: Schema.Attribute.DateTime;
-    recipient_address: Schema.Attribute.Text & Schema.Attribute.Required;
-    recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
-    recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
     tracking_number: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
@@ -1009,6 +1193,42 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     weight: Schema.Attribute.Decimal & Schema.Attribute.Required;
+  };
+}
+
+export interface ApiPickupLocationPickupLocation
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'pickup_locations';
+  info: {
+    description: 'Shipper warehouse and dispatch sites';
+    displayName: 'Pickup Location';
+    pluralName: 'pickup-locations';
+    singularName: 'pickup-location';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text & Schema.Attribute.Required;
+    city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::pickup-location.pickup-location'
+    > &
+      Schema.Attribute.Private;
+    location_name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    status: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1310,6 +1530,7 @@ export interface ApiRiderRider extends Struct.CollectionTypeSchema {
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
     publishedAt: Schema.Attribute.DateTime;
+    rider_code: Schema.Attribute.String & Schema.Attribute.Unique;
     status: Schema.Attribute.Enumeration<['active', 'inactive', 'suspended']> &
       Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
@@ -1395,6 +1616,7 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    account_id: Schema.Attribute.String & Schema.Attribute.Unique;
     api_key: Schema.Attribute.String & Schema.Attribute.Unique;
     business_type: Schema.Attribute.String;
     couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
@@ -2146,10 +2368,11 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.role'
     >;
     role_definition: Schema.Attribute.Relation<
-      'manyToOne',
+      'manyToMany',
       'api::role-definition.role-definition'
     >;
     shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    shipper_roles: Schema.Attribute.JSON;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -2175,6 +2398,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::about.about': ApiAboutAbout;
+      'api::arrival.arrival': ApiArrivalArrival;
       'api::article.article': ApiArticleArticle;
       'api::author.author': ApiAuthorAuthor;
       'api::bag.bag': ApiBagBag;
@@ -2184,12 +2408,16 @@ declare module '@strapi/strapi' {
       'api::courier-city.courier-city': ApiCourierCityCourierCity;
       'api::courier.courier': ApiCourierCourier;
       'api::delivery-attempt.delivery-attempt': ApiDeliveryAttemptDeliveryAttempt;
+      'api::delivery-sheet.delivery-sheet': ApiDeliverySheetDeliverySheet;
       'api::dispute.dispute': ApiDisputeDispute;
       'api::event-stream.event-stream': ApiEventStreamEventStream;
       'api::global.global': ApiGlobalGlobal;
       'api::hub.hub': ApiHubHub;
+      'api::invoice.invoice': ApiInvoiceInvoice;
+      'api::load-sheet.load-sheet': ApiLoadSheetLoadSheet;
       'api::parcel-hub-movement.parcel-hub-movement': ApiParcelHubMovementParcelHubMovement;
       'api::parcel.parcel': ApiParcelParcel;
+      'api::pickup-location.pickup-location': ApiPickupLocationPickupLocation;
       'api::pickup-request.pickup-request': ApiPickupRequestPickupRequest;
       'api::platform-integration.platform-integration': ApiPlatformIntegrationPlatformIntegration;
       'api::rating.rating': ApiRatingRating;
