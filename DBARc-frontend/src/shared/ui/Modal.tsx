@@ -49,12 +49,12 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md', className }: Mod
       {/* Modal Content */}
       <div
         className={cn(
-          'relative w-full rounded-2xl bg-white shadow-2xl transition-all duration-300 animate-in fade-in zoom-in slide-in-from-bottom-4',
+          'relative flex flex-col w-full max-h-[90vh] rounded-2xl bg-white shadow-2xl transition-all duration-300 animate-in fade-in zoom-in slide-in-from-bottom-4',
           sizes[size],
           className
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 p-6">
+        <div className="flex items-center justify-between border-b border-slate-100 p-6 shrink-0">
           {title && <h2 className="text-xl font-semibold text-slate-900">{title}</h2>}
           <Button
             variant="ghost"
@@ -66,7 +66,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md', className }: Mod
           </Button>
         </div>
         
-        <div className="p-6">{children}</div>
+        <div className="p-6 overflow-y-auto">{children}</div>
       </div>
     </div>,
     document.body

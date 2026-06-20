@@ -35,37 +35,14 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = useAuthStore.getState().refreshToken;
-        
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
-
-        // Call your refresh token endpoint
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-
-        // Update store
-        const { user } = useAuthStore.getState();
-        if (user) {
-          useAuthStore.getState().setAuth(user, accessToken, newRefreshToken);
-        }
-
-        // Retry original request
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed, logout user
-        useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
-      }
+    if (error.response?.status === 401) {
+      // Token is invalid or expired.
+      // Since Strapi v4 doesn't support refresh tokens by default without a custom plugin,
+      // we could log the user out here. However, to prevent abrupt logouts on unauthorized
+      // endpoints, we will simply reject the promise and let the component handle it.
+      // If global logout is required, uncomment the line below:
+      // useAuthStore.getState().logout();
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);
