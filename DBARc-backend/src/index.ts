@@ -186,6 +186,36 @@ export default {
       await grantPermissions(publicRole.id, publicPermissions);
 
       console.log('All permissions successfully bootstrapped!');
+
+      // Seed Pakistan Cities
+      const citiesCount = await strapi.db.query('api::city.city').count();
+      if (citiesCount === 0) {
+        console.log('Fetching Pakistan cities from internet to seed database...');
+        try {
+          const response = await fetch('https://countriesnow.space/api/v0.1/countries/cities', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country: 'pakistan' })
+          });
+          const result: any = await response.json();
+          if (!result.error && Array.isArray(result.data)) {
+            const citiesToInsert = result.data.map((c: string) => ({ name: c, Code: c.substring(0, 3).toUpperCase() }));
+            for (const city of citiesToInsert) {
+              await strapi.db.query('api::city.city').create({
+                data: city
+              });
+            }
+            console.log(`Successfully seeded ${citiesToInsert.length} cities of Pakistan!`);
+          } else {
+            console.error('Failed to fetch cities from API:', result.msg);
+          }
+        } catch (fetchErr) {
+          console.error('Error fetching cities:', fetchErr);
+        }
+      } else {
+        console.log(`Cities already seeded. Count: ${citiesCount}`);
+      }
+
     } catch (err) {
       console.error('Error during permissions bootstrap:', err);
     }

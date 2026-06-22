@@ -49,6 +49,12 @@
       "relation": "oneToOne",
       "target": "api::parcel.parcel",
       "inversedBy": "courier"
+    },
+    "regions": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::region.region",
+      "mappedBy": "courier"
     }
   }
 }

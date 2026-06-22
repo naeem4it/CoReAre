@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useForm, FormProvider } from 'react-hook-form';
+import { useForm, FormProvider, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { 
@@ -38,6 +38,7 @@ import { apiClient } from '@/shared/api/api-client';
 import { TextBox } from '@/components/ui/form/text-box';
 import { TextAreaInput } from '@/components/ui/form/text-area';
 import { SearchableDropdown } from '@/components/ui/form/searchable-dropdown';
+import { CitySelect } from '@/components/ui/CitySelect';
 
 // Form validation schema using Zod for manual entry
 const bookingSchema = z.object({
@@ -47,7 +48,8 @@ const bookingSchema = z.object({
   consigneeAltPhone: z.string().optional(),
   
   deliveryAddress: z.string().min(5, 'Delivery address is too short'),
-  destinationCity: z.string().min(1, 'Please select a destination city'),
+  destinationCity: z.union([z.number(), z.string()]).refine(val => val !== '', 'Please select a destination city'),
+  destinationCityName: z.string().optional(),
   area: z.string().optional(),
   
   weight: z.number().min(0.1, 'Weight must be at least 0.1 kg'),
@@ -60,6 +62,7 @@ const bookingSchema = z.object({
   
   pickupDate: z.string().min(1, 'Pickup date is required'),
   pickupTimeSlot: z.string().default('Morning (09 AM - 12 PM)'),
+  pickupLocation: z.union([z.number(), z.string()]).optional(),
   specialInstructions: z.string().optional(),
 
   // Replacement Fields
@@ -165,6 +168,9 @@ function BookShipmentForm() {
   const [showRefDropdown, setShowRefDropdown] = React.useState(false);
   const [selectedReferencedParcel, setSelectedReferencedParcel] = React.useState<any | null>(null);
 
+  // Offices state for default pickup location
+  const [offices, setOffices] = React.useState<{label: string, value: number}[]>([]);
+
   // Sync mode with query parameter tab state
   React.useEffect(() => {
     const tab = searchParams?.get('tab');
@@ -218,7 +224,21 @@ function BookShipmentForm() {
     watch,
     reset,
     setValue,
+    control,
   } = methods;
+
+  React.useEffect(() => {
+    if (user?.id) {
+      apiClient.get(`/users/${user.id}?populate=offices`).then(res => {
+        const userOffices = res.data?.offices || [];
+        const mappedOffices = userOffices.map((o: any) => ({ label: o.name, value: o.id }));
+        setOffices(mappedOffices);
+        if (mappedOffices.length > 0) {
+          setValue('pickupLocation', mappedOffices[0].value);
+        }
+      }).catch(err => console.error(err));
+    }
+  }, [user, setValue]);
 
   // Watch fields for estimated cost calculation
   const weight = watch('weight') || 0.5;
@@ -290,12 +310,13 @@ function BookShipmentForm() {
           delivery_charges: pricing.total,
           recipient_name: data.consigneeName,
           recipient_phone: data.consigneePhone,
-          recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCity}`,
+          recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCityName || data.destinationCity}`,
           consignee_email: data.consigneeEmail,
           consignee_alt_phone: data.consigneeAltPhone,
           allow_to_open: data.allowToOpen,
           comments: data.comments,
           tenant: tenantId,
+          origin_office: data.pickupLocation || null,
         }
       });
 
@@ -930,13 +951,25 @@ function BookShipmentForm() {
                         />
                       </div>
 
-                      <SearchableDropdown<BookingFormValues>
-                        name="destinationCity"
-                        label="Destination City *"
-                        placeholder="Select City"
-                        items={CITY_OPTIONS}
-                        required
-                      />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-bold text-on-surface">Destination City *</label>
+                        <Controller
+                          name="destinationCity"
+                          control={control}
+                          render={({ field, fieldState }) => (
+                            <CitySelect
+                              value={field.value as any}
+                              onChange={(cityId, cityName) => {
+                                field.onChange(cityId);
+                                if (cityName) {
+                                  setValue('destinationCityName', cityName);
+                                }
+                              }}
+                              error={fieldState.error?.message}
+                            />
+                          )}
+                        />
+                      </div>
 
                       <TextBox<BookingFormValues>
                         name="area"
@@ -1038,6 +1071,12 @@ function BookShipmentForm() {
                         name="pickupTimeSlot"
                         label="Pickup Time Slot"
                         items={TIME_SLOT_OPTIONS}
+                      />
+
+                      <SearchableDropdown<BookingFormValues>
+                        name="pickupLocation"
+                        label="Pickup Location (Office)"
+                        items={offices.length > 0 ? offices : [{ label: 'Default Office', value: 'default' }]}
                       />
 
                       <div className="md:col-span-2">

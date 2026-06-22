@@ -89,7 +89,7 @@
     },
     "shipper": {
       "type": "relation",
-      "relation": "manyToOne",
+      "relation": "manyToMany",
       "target": "api::shipper.shipper"
     },
     "phone": {
@@ -97,6 +97,16 @@
     },
     "shipper_roles": {
       "type": "json"
+    },
+    "offices": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::office.office"
+    },
+    "pickup_locations": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::pickup-location.pickup-location"
     }
   }
 }

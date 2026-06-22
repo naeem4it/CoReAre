@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { shipmentSchema, ShipmentFormValues, regions } from '@/entities/shipment/model/shipment.schema';
+import { shipmentSchema, ShipmentFormValues } from '@/entities/shipment/model/shipment.schema';
+import { CitySelect } from '@/shared/ui/CitySelect';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Card, CardContent } from '@/shared/ui/Card';
@@ -14,16 +15,22 @@ import { useAuthStore } from '@/shared/model/auth.store';
 
 export const CreateShipmentForm = () => {
   const { user } = useAuthStore();
+  const defaultOutletId = user?.outlets && user.outlets.length > 0 ? String(user.outlets[0].id) : '';
+
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<ShipmentFormValues>({
     resolver: zodResolver(shipmentSchema),
     defaultValues: {
+      sourceCity: '',
+      destinationCity: '',
       weight: 0.5,
       codAmount: 0,
+      pickupLocation: defaultOutletId,
     },
   });
 
@@ -42,8 +49,11 @@ export const CreateShipmentForm = () => {
           recipient_name: data.customerName,
           recipient_phone: data.customerPhone,
           recipient_address: data.customerAddress,
+          source_city: data.sourceCity,
+          destination_city: data.destinationCity,
           tenant: user?.tenantId,
           shipper: user?.id,
+          pickup_location: data.pickupLocation ? Number(data.pickupLocation) : null,
         }
       });
 
@@ -69,29 +79,55 @@ export const CreateShipmentForm = () => {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Origin Region</label>
-              <select
-                {...register('originRegion')}
-                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
-              >
-                <option value="">Select Origin</option>
-                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-              {errors.originRegion && <p className="text-xs text-red-500 font-medium">{errors.originRegion.message}</p>}
+              <label className="text-sm font-medium text-slate-700">Origin City</label>
+              <Controller
+                name="sourceCity"
+                control={control}
+                render={({ field }) => (
+                  <CitySelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select Origin City"
+                    error={errors.sourceCity?.message}
+                  />
+                )}
+              />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Destination</label>
-              <select
-                {...register('destinationRegion')}
-                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
-              >
-                <option value="">Select Destination</option>
-                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-              {errors.destinationRegion && <p className="text-xs text-red-500 font-medium">{errors.destinationRegion.message}</p>}
+              <label className="text-sm font-medium text-slate-700">Destination City</label>
+              <Controller
+                name="destinationCity"
+                control={control}
+                render={({ field }) => (
+                  <CitySelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select Destination City"
+                    error={errors.destinationCity?.message}
+                  />
+                )}
+              />
             </div>
           </div>
+
+          {user?.outlets && user.outlets.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Pickup Outlet/Location</label>
+              <select
+                {...register('pickupLocation')}
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+              >
+                {user.outlets.length > 1 && <option value="">Select Pickup Outlet</option>}
+                {user.outlets.map((outlet) => (
+                  <option key={outlet.id} value={outlet.id}>
+                    {outlet.name || outlet.id}
+                  </option>
+                ))}
+              </select>
+              {errors.pickupLocation && <p className="text-xs text-red-500 font-medium">{errors.pickupLocation.message}</p>}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <Input

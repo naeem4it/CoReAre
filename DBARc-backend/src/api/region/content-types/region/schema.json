@@ -26,6 +26,28 @@
     },
     "geo_polygon": {
       "type": "json"
+    },
+    "cities": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::city.city",
+      "inversedBy": "regions"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier.courier",
+      "inversedBy": "regions"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant",
+      "inversedBy": "default_regions"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
     }
   }
 }

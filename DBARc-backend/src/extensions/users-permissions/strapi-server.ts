@@ -172,7 +172,7 @@ export default (plugin: any) => {
     try {
       const populatedUser = await strapi.db.query('plugin::users-permissions.user').findOne({
         where: { id: user.id },
-        populate: ['role', 'tenant', 'role_definition', 'courier', 'shipper'],
+        populate: ['role', 'tenant', 'role_definition', 'courier', 'shipper', 'pickup_locations'],
       });
 
       if (populatedUser) {
@@ -200,7 +200,7 @@ export default (plugin: any) => {
           isSuperAdmin: ctx.state.user.role?.type === 'super_admin',
           tenantId: ctx.state.user.tenant?.id || null,
           courierId: null,
-          shipperId: null,
+          shipperIds: [],
           user: ctx.state.user.adminUser,
         };
       }
@@ -213,7 +213,7 @@ export default (plugin: any) => {
           isSuperAdmin: user.role?.type === 'super_admin',
           tenantId: user.tenant?.id || null,
           courierId: user.courier?.id || null,
-          shipperId: user.shipper?.id || null,
+          shipperIds: Array.isArray(user.shipper) ? user.shipper.map((s: any) => s.id) : (user.shipper ? [user.shipper.id] : []),
           user,
         };
       }
@@ -235,7 +235,7 @@ export default (plugin: any) => {
               isSuperAdmin,
               tenantId: admin.tenant?.id || null,
               courierId: null,
-              shipperId: null,
+              shipperIds: [],
               user: admin,
             };
           }
@@ -261,8 +261,8 @@ export default (plugin: any) => {
         filters.tenant = null;
       }
 
-      if (!authContext.isSuperAdmin && authContext.shipperId) {
-        filters.shipper = authContext.shipperId;
+      if (!authContext.isSuperAdmin && authContext.shipperIds && authContext.shipperIds.length > 0) {
+        filters.shipper = { id: { $in: authContext.shipperIds } };
       }
 
       if (ctx.query.search) {
@@ -280,7 +280,7 @@ export default (plugin: any) => {
 
       const users = await strapi.db.query('plugin::users-permissions.user').findMany({
         where: filters,
-        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role'],
+        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations'],
         orderBy: { createdAt: 'desc' },
       });
 
@@ -300,14 +300,14 @@ export default (plugin: any) => {
       const queryFilters: any = { id };
       if (!authContext.isSuperAdmin) {
         queryFilters.tenant = authContext.tenantId || null;
-        if (authContext.shipperId) {
-          queryFilters.shipper = authContext.shipperId;
+        if (authContext.shipperIds && authContext.shipperIds.length > 0) {
+          queryFilters.shipper = { id: { $in: authContext.shipperIds } };
         }
       }
 
       const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
         where: queryFilters,
-        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role'],
+        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations'],
       });
 
       if (!targetUser) {
@@ -340,33 +340,70 @@ export default (plugin: any) => {
         tenant,
         courier,
         shipper,
+        pickup_locations,
         role,
+        shipperName,
+        shipperAddress,
+        shipperCity,
       } = ctx.request.body;
 
       const tenantId = authContext.isSuperAdmin ? tenant : authContext.tenantId;
       const courierId = authContext.isSuperAdmin ? courier : authContext.courierId;
       
-      let shipperId = authContext.shipperId;
-      if (!shipperId && shipper_roles && shipper_roles.length > 0) {
-        // Automatically create a new Shipper record named after the user's fullName or username
-        const shipperName = fullName || username || `Shipper for ${email}`;
+      let targetShipperIds: number[] = [];
+      const adminShipperIds = authContext.shipperIds || [];
+      
+      if (adminShipperIds.length === 0 && shipperName) {
+        // Create the new Shipper record
         const newShipper = await strapi.db.query('api::shipper.shipper').create({
           data: {
             name: shipperName,
             tenant: tenantId,
-            status: 'active'
+            status: 'active',
+            publishedAt: new Date(),
           }
         });
-        shipperId = newShipper.id;
-        console.log(`Automatically created Shipper record: ${shipperName} (ID: ${shipperId})`);
-      } else if (!shipperId && shipper) {
-        // Allow courier/tenant admin to specify shipper if it belongs to their tenant
-        const targetShipper = await strapi.db.query('api::shipper.shipper').findOne({
-          where: { id: shipper, tenant: tenantId }
+        targetShipperIds = [newShipper.id];
+        
+        // Also create the Shipper's default office
+        await strapi.db.query('api::office.office').create({
+          data: {
+            name: 'Main Office',
+            address: shipperAddress || '',
+            city: shipperCity || null,
+            type: 'shipper',
+            shipper: newShipper.id,
+            tenant: tenantId,
+            publishedAt: new Date(),
+          }
         });
-        if (targetShipper) {
-          shipperId = targetShipper.id;
+        console.log(`Automatically created Shipper record: ${shipperName} (ID: ${newShipper.id}) with office.`);
+      } else if (adminShipperIds.length === 0 && shipper_roles && shipper_roles.length > 0 && !shipper) {
+        // Fallback if no shipperName is provided but we need a shipper
+        const fallbackName = fullName || username || `Shipper for ${email}`;
+        const newShipper = await strapi.db.query('api::shipper.shipper').create({
+          data: {
+            name: fallbackName,
+            tenant: tenantId,
+            status: 'active',
+            publishedAt: new Date()
+          }
+        });
+        targetShipperIds = [newShipper.id];
+        console.log(`Automatically created Shipper record: ${fallbackName} (ID: ${newShipper.id})`);
+      } else if (adminShipperIds.length > 0) {
+        if (Array.isArray(shipper)) {
+          targetShipperIds = shipper.filter((id: any) => adminShipperIds.includes(Number(id))).map(Number);
+        } else if (shipper && adminShipperIds.includes(Number(shipper))) {
+          targetShipperIds = [Number(shipper)];
         }
+      } else if (shipper) {
+        // Allow courier/tenant admin to specify shippers if it belongs to their tenant
+        const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
+        const validShippers = await strapi.db.query('api::shipper.shipper').findMany({
+          where: { id: { $in: requestedShippers }, tenant: tenantId }
+        });
+        targetShipperIds = validShippers.map((s: any) => s.id);
       }
 
       if (!tenantId) {
@@ -423,7 +460,8 @@ export default (plugin: any) => {
         role_definition: role_definition || null,
         shipper_roles: shipper_roles || null,
         courier: courierId,
-        shipper: shipperId,
+        shipper: targetShipperIds,
+        pickup_locations: Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []),
         blocked: isenable === false,
         confirmed: isNoConfirmation,
         password: userPassword,
@@ -478,14 +516,14 @@ export default (plugin: any) => {
       const queryFilters: any = { id };
       if (!authContext.isSuperAdmin) {
         queryFilters.tenant = authContext.tenantId || null;
-        if (authContext.shipperId) {
-          queryFilters.shipper = authContext.shipperId;
+        if (authContext.shipperIds && authContext.shipperIds.length > 0) {
+          queryFilters.shipper = { id: { $in: authContext.shipperIds } };
         }
       }
 
       const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
         where: queryFilters,
-        populate: ['tenant', 'shipper'],
+        populate: ['tenant', 'shipper', 'pickup_locations'],
       });
 
       if (!targetUser) {
@@ -504,6 +542,7 @@ export default (plugin: any) => {
         tenant,
         courier,
         shipper,
+        pickup_locations,
         role,
       } = ctx.request.body;
 
@@ -514,17 +553,13 @@ export default (plugin: any) => {
       if (email) updateData.email = getTenantScopedEmail(email, tenantId);
       if (fullName !== undefined) {
         updateData.fullName = fullName;
-        // Keep linked shipper record name in sync
-        if (targetUser.shipper?.id) {
-          await strapi.db.query('api::shipper.shipper').update({
-            where: { id: targetUser.shipper.id },
-            data: { name: fullName || targetUser.username }
-          });
-        }
       }
       if (phone !== undefined) updateData.phone = phone;
       if (role_definition !== undefined) updateData.role_definition = role_definition;
       if (shipper_roles !== undefined) updateData.shipper_roles = shipper_roles;
+      if (pickup_locations !== undefined) {
+        updateData.pickup_locations = Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []);
+      }
       if (isenable !== undefined) updateData.blocked = isenable === false;
       
       if (authContext.isSuperAdmin) {
@@ -539,20 +574,22 @@ export default (plugin: any) => {
           }
         }
       } else {
-        if (authContext.shipperId) {
+        if (authContext.shipperIds && authContext.shipperIds.length > 0) {
           // Enforce shipper admin's shipper association for their employees
-          updateData.shipper = authContext.shipperId;
+          if (shipper !== undefined) {
+            const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
+            updateData.shipper = requestedShippers.filter(id => authContext.shipperIds.includes(id));
+          }
         } else if (shipper !== undefined) {
           // Allow tenant/courier admin to update shipper for users within their tenant
-          if (shipper === null) {
-            updateData.shipper = null;
+          if (shipper === null || shipper === '') {
+            updateData.shipper = [];
           } else {
-            const targetShipper = await strapi.db.query('api::shipper.shipper').findOne({
-              where: { id: shipper, tenant: tenantId }
+            const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
+            const validShippers = await strapi.db.query('api::shipper.shipper').findMany({
+              where: { id: { $in: requestedShippers }, tenant: tenantId }
             });
-            if (targetShipper) {
-              updateData.shipper = targetShipper.id;
-            }
+            updateData.shipper = validShippers.map((s: any) => s.id);
           }
         }
       }
@@ -581,8 +618,8 @@ export default (plugin: any) => {
       const queryFilters: any = { id };
       if (!authContext.isSuperAdmin) {
         queryFilters.tenant = authContext.tenantId || null;
-        if (authContext.shipperId) {
-          queryFilters.shipper = authContext.shipperId;
+        if (authContext.shipperIds && authContext.shipperIds.length > 0) {
+          queryFilters.shipper = { id: { $in: authContext.shipperIds } };
         }
       }
 

@@ -20,8 +20,9 @@ interface User {
   blocked?: boolean;
   confirmed?: boolean;
   role_definition?: RoleDefinition[];
-  shipper?: { id: number; name: string } | null;
+  shipper?: { id: number; name: string }[] | null;
   shipper_roles?: string[];
+  offices?: { id: number; name: string }[] | null;
 }
 
 const SHIPPER_ROLES = ['shipper admin', 'Finance', 'Shipment', 'Customer admin'];
@@ -50,6 +51,7 @@ export default function EmployeeManagementPage() {
   const [employees, setEmployees] = React.useState<User[]>([]);
   const [roles, setRoles] = React.useState<RoleDefinition[]>([]);
   const [shippers, setShippers] = React.useState<{ id: number; name: string }[]>([]);
+  const [offices, setOffices] = React.useState<{ id: number; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'active' | 'quit'>('active');
   const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
@@ -59,9 +61,10 @@ export default function EmployeeManagementPage() {
   // Multi-roles state (for Shipper)
   const [assignedShipperRoles, setAssignedShipperRoles] = React.useState<string[]>([]);
   
-  // Selected Employee Type & Shipper for the active form
+  // Selected Employee Type, Shippers & Offices for the active form
   const [formEmployeeType, setFormEmployeeType] = React.useState<'courier' | 'shipper'>('courier');
-  const [formShipperId, setFormShipperId] = React.useState<number | ''>('');
+  const [assignedShipperIds, setAssignedShipperIds] = React.useState<number[]>([]);
+  const [assignedOfficeIds, setAssignedOfficeIds] = React.useState<number[]>([]);
 
   const unassignedRoles = React.useMemo(() => {
     if (formEmployeeType === 'shipper') {
@@ -127,6 +130,22 @@ export default function EmployeeManagementPage() {
   const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
   const [formPassword, setFormPassword] = React.useState('');
 
+  // Shipper Creation Form Fields
+  const [formShipperName, setFormShipperName] = React.useState('');
+  const [formShipperAddress, setFormShipperAddress] = React.useState('');
+  const [formShipperCity, setFormShipperCity] = React.useState('');
+
+  // Modals for Shipper / Office
+  const [isOfficeModalOpen, setIsOfficeModalOpen] = React.useState(false);
+  const [isAddOfficeMode, setIsAddOfficeMode] = React.useState(false);
+  const [newOfficeName, setNewOfficeName] = React.useState('');
+  const [newOfficeAddress, setNewOfficeAddress] = React.useState('');
+  
+  const [isAddBusinessModalOpen, setIsAddBusinessModalOpen] = React.useState(false);
+  const [newBusinessName, setNewBusinessName] = React.useState('');
+  const [newBusinessAddress, setNewBusinessAddress] = React.useState('');
+  const [newBusinessCity, setNewBusinessCity] = React.useState('');
+
   const fetchEmployeesAndRoles = async () => {
     setIsLoading(true);
     setError(null);
@@ -142,7 +161,7 @@ export default function EmployeeManagementPage() {
       setRoles(mappedRoles);
 
       // 2. Fetch users
-      const usersRes = await apiClient.get('/users?populate=role_definition,shipper');
+      const usersRes = await apiClient.get('/users?populate=role_definition,shipper,offices');
       const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
       setEmployees(rawUsers);
 
@@ -157,6 +176,21 @@ export default function EmployeeManagementPage() {
         setShippers(mappedShippers);
       } catch (shippersErr) {
         console.error('Failed to load shippers list:', shippersErr);
+      }
+
+      // 4. Fetch offices
+      try {
+        const tenantId = JSON.parse(localStorage.getItem('user') || '{}')?.tenant?.id;
+        const filters = isLoggedShipper ? { type: 'shipper' } : { type: 'courier', courier: tenantId };
+        const officesRes = await apiClient.get('/offices', { params: { filters } });
+        const rawOffices = officesRes.data?.data || [];
+        const mappedOffices = rawOffices.map((item: any) => ({
+          id: item.id,
+          name: item.attributes?.name || item.name || `Office #${item.id}`,
+        }));
+        setOffices(mappedOffices);
+      } catch (officesErr) {
+        console.error('Failed to load offices list:', officesErr);
       }
     } catch (err: any) {
       console.error('Failed to load employee directory:', err);
@@ -209,7 +243,8 @@ export default function EmployeeManagementPage() {
     setFormPhone('');
     setFormIsEnabled(true);
     setFormEmployeeType(effectiveType === 'shipper' ? 'shipper' : 'courier');
-    setFormShipperId('');
+    setAssignedShipperIds([]);
+    setAssignedOfficeIds([]);
     setAssignedRoleIds([]);
     setAssignedShipperRoles([]);
     setFormConfirmationType('no_confirmation');
@@ -227,9 +262,10 @@ export default function EmployeeManagementPage() {
     setFormPhone(selectedUser.phone || '');
     setFormIsEnabled(!selectedUser.blocked);
 
-    const isShipperUser = !!selectedUser.shipper;
+    const isShipperUser = !!(selectedUser.shipper && selectedUser.shipper.length > 0);
     setFormEmployeeType(isShipperUser ? 'shipper' : 'courier');
-    setFormShipperId(selectedUser.shipper?.id || '');
+    setAssignedShipperIds(selectedUser.shipper ? selectedUser.shipper.map((s: any) => s.id) : []);
+    setAssignedOfficeIds(selectedUser.offices ? selectedUser.offices.map((o: any) => o.id) : []);
 
     const initialRoleIds = Array.isArray(selectedUser.role_definition)
       ? selectedUser.role_definition.map((r) => r.id)
@@ -280,7 +316,7 @@ export default function EmployeeManagementPage() {
     e.preventDefault();
     if (!formUsername.trim() || !formEmail.trim()) return;
 
-    if (formEmployeeType === 'shipper' && !isLoggedShipper && formShipperId === '') {
+    if (formEmployeeType === 'shipper' && !isLoggedShipper && assignedShipperIds.length === 0) {
       if (!assignedShipperRoles.includes('shipper admin')) {
         alert('When creating a new shipper, you must assign the "shipper admin" role.');
         return;
@@ -295,12 +331,19 @@ export default function EmployeeManagementPage() {
         fullName: formFullName,
         phone: formPhone,
         isenable: formIsEnabled,
+        offices: assignedOfficeIds,
       };
 
       if (formEmployeeType === 'shipper') {
-        payload.shipper = formShipperId || null;
+        payload.shipper = assignedShipperIds.length > 0 ? assignedShipperIds : null;
         payload.shipper_roles = assignedShipperRoles;
         payload.role_definition = [];
+        
+        if (!isEditMode && assignedShipperIds.length === 0) {
+          payload.shipperName = formShipperName;
+          payload.shipperAddress = formShipperAddress;
+          payload.shipperCity = formShipperCity;
+        }
       } else {
         payload.shipper = null;
         payload.shipper_roles = [];
@@ -326,6 +369,63 @@ export default function EmployeeManagementPage() {
       alert(err.response?.data?.error?.message || 'Error occurred while saving employee record.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAddBusiness = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBusinessName.trim()) return;
+    
+    try {
+      const payload = {
+        name: newBusinessName,
+        address: newBusinessAddress,
+        city: newBusinessCity
+      };
+      const res = await apiClient.post('/shippers', { data: payload });
+      const createdShipper = res.data.data;
+      
+      const newShipperObj = { id: createdShipper.id, name: createdShipper.attributes?.name || newBusinessName };
+      setShippers(prev => [...prev, newShipperObj]);
+      setAssignedShipperIds(prev => [...prev, newShipperObj.id]);
+      
+      setIsAddBusinessModalOpen(false);
+      setNewBusinessName('');
+      setNewBusinessAddress('');
+      setNewBusinessCity('');
+    } catch (err: any) {
+      console.error('Error adding business:', err);
+      alert(err.response?.data?.error?.message || 'Failed to add business.');
+    }
+  };
+
+  const handleSaveOffice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isAddOfficeMode) {
+      if (!newOfficeName.trim()) return;
+      try {
+        const payload = {
+          name: newOfficeName,
+          address: newOfficeAddress,
+          type: formEmployeeType === 'shipper' ? 'shipper' : 'courier'
+        };
+        const res = await apiClient.post('/offices', { data: payload });
+        const createdOffice = res.data.data;
+        
+        const newOfficeObj = { id: createdOffice.id, name: createdOffice.attributes?.name || newOfficeName };
+        setOffices(prev => [...prev, newOfficeObj]);
+        setAssignedOfficeIds([newOfficeObj.id]);
+        
+        setIsOfficeModalOpen(false);
+        setNewOfficeName('');
+        setNewOfficeAddress('');
+      } catch (err: any) {
+        console.error('Error adding office:', err);
+        alert(err.response?.data?.error?.message || 'Failed to add office.');
+      }
+    } else {
+      // Just closing modal, selection is already made in the UI
+      setIsOfficeModalOpen(false);
     }
   };
 
@@ -468,13 +568,15 @@ export default function EmployeeManagementPage() {
                         <td className="px-lg py-4 font-semibold text-on-surface">{emp.fullName || '-'}</td>
                         <td className="px-lg py-4 font-semibold text-on-surface-variant">
                           {(() => {
-                            if (emp.shipper) {
+                            if (emp.shipper && emp.shipper.length > 0) {
                               const sRoles = Array.isArray(emp.shipper_roles) ? emp.shipper_roles : [];
                               return (
                                 <div className="flex flex-col gap-1 items-start">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-                                    Shipper: {emp.shipper.name}
-                                  </span>
+                                  {emp.shipper.map(s => (
+                                    <span key={s.id} className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 mb-1">
+                                      Shipper: {s.name}
+                                    </span>
+                                  ))}
                                   {sRoles.length > 0 ? (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {sRoles.map((r) => (
@@ -644,33 +746,109 @@ export default function EmployeeManagementPage() {
                 </div>
               )}
 
-              {/* Shipper Selector */}
+              {/* Shipper Selector / Creation */}
               {formEmployeeType === 'shipper' && !isLoggedShipper && (
-                <div className="flex flex-col gap-xs">
-                  <label className="text-sm font-bold text-on-surface">Assign to Shipper</label>
-                  <select
-                    required
-                    value={formShipperId === '' ? 'new' : formShipperId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === 'new') {
-                        setFormShipperId('');
-                        if (!assignedShipperRoles.includes('shipper admin')) {
-                          setAssignedShipperRoles(prev => [...prev, 'shipper admin']);
-                        }
-                      } else {
-                        setFormShipperId(Number(val));
-                      }
-                    }}
-                    className="w-full bg-slate-50 border border-outline-variant rounded-lg p-3 text-body-md focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container outline-none"
-                  >
-                    <option value="new">-- Create New Shipper --</option>
-                    {shippers.map(shipper => (
-                      <option key={shipper.id} value={shipper.id}>{shipper.name}</option>
-                    ))}
-                  </select>
+                <div className="flex flex-col gap-xs border border-outline-variant rounded-xl p-md bg-slate-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-bold text-on-surface">Assigned Businesses (Shippers)</label>
+                    {isEditMode && (
+                      <button 
+                        type="button"
+                        onClick={() => setIsAddBusinessModalOpen(true)}
+                        className="bg-primary-container text-on-primary-container text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-primary-container/80 transition-all flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">add</span> Add Business
+                      </button>
+                    )}
+                  </div>
+                  
+                  {!isEditMode ? (
+                    <div className="flex flex-col gap-sm">
+                      <div className="text-xs text-outline mb-1">Please provide details for the initial business entity. This is required to create the shipper login.</div>
+                      <input
+                        required
+                        type="text"
+                        value={formShipperName}
+                        onChange={(e) => setFormShipperName(e.target.value)}
+                        placeholder="Business Name"
+                        className="w-full bg-white border border-outline-variant rounded-lg p-2.5 text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"
+                      />
+                      <input
+                        required
+                        type="text"
+                        value={formShipperAddress}
+                        onChange={(e) => setFormShipperAddress(e.target.value)}
+                        placeholder="Business Address"
+                        className="w-full bg-white border border-outline-variant rounded-lg p-2.5 text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"
+                      />
+                      <input
+                        required
+                        type="text"
+                        value={formShipperCity}
+                        onChange={(e) => setFormShipperCity(e.target.value)}
+                        placeholder="City"
+                        className="w-full bg-white border border-outline-variant rounded-lg p-2.5 text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {assignedShipperIds.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          {assignedShipperIds.map(id => {
+                            const shipperObj = shippers.find(s => s.id === id);
+                            return (
+                              <div key={id} className="flex items-center justify-between bg-white border border-outline-variant p-2 rounded-lg">
+                                <span className="font-semibold text-sm text-on-surface">{shipperObj?.name || `Business #${id}`}</span>
+                                <button type="button" onClick={() => setAssignedShipperIds(prev => prev.filter(sId => sId !== id))} className="text-error hover:bg-error-container/20 p-1 rounded">
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-outline italic p-2 bg-white rounded-lg border border-outline-variant text-center">No businesses assigned.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Office Selector */}
+              <div className="flex flex-col gap-xs border border-outline-variant rounded-xl p-md bg-slate-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-on-surface">Office Address</label>
+                </div>
+                
+                <div className="flex items-center justify-between bg-white border border-outline-variant p-3 rounded-lg">
+                  <div className="flex flex-col">
+                    {assignedOfficeIds.length > 0 ? (
+                      <>
+                        <span className="font-semibold text-sm text-on-surface">{offices.find(o => o.id === assignedOfficeIds[0])?.name || `Office #${assignedOfficeIds[0]}`}</span>
+                        <span className="text-xs text-outline">Selected Office</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-outline italic">No office selected</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => { setIsAddOfficeMode(false); setIsOfficeModalOpen(true); }}
+                      className="text-primary font-bold text-xs hover:bg-primary-container/20 px-3 py-1.5 rounded-lg border border-primary/20 transition-all"
+                    >
+                      Change
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { setIsAddOfficeMode(true); setIsOfficeModalOpen(true); }}
+                      className="bg-primary text-white font-bold text-xs hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      Add new address
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* Multi-Role Dual List Box */}
               <div className="flex flex-col gap-xs">
@@ -815,6 +993,86 @@ export default function EmployeeManagementPage() {
                   ) : (
                     'Save User Profile'
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Business Modal */}
+      {isAddBusinessModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddBusinessModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-on-surface">Add New Business</h3>
+              <button onClick={() => setIsAddBusinessModalOpen(false)} className="text-outline hover:text-on-surface">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleAddBusiness} className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="text-sm font-bold text-on-surface mb-1 block">Business Name</label>
+                <input required type="text" value={newBusinessName} onChange={e => setNewBusinessName(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-on-surface mb-1 block">Business Address</label>
+                <input required type="text" value={newBusinessAddress} onChange={e => setNewBusinessAddress(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-on-surface mb-1 block">City</label>
+                <input required type="text" value={newBusinessCity} onChange={e => setNewBusinessCity(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none" />
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button type="button" onClick={() => setIsAddBusinessModalOpen(false)} className="px-4 py-2 border border-outline-variant rounded-xl text-sm font-semibold hover:bg-slate-50">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 shadow-md">Create & Assign</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Office Modal */}
+      {isOfficeModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsOfficeModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-on-surface">{isAddOfficeMode ? 'Add New Office' : 'Select Office'}</h3>
+              <button onClick={() => setIsOfficeModalOpen(false)} className="text-outline hover:text-on-surface">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleSaveOffice} className="p-6 flex flex-col gap-4">
+              {isAddOfficeMode ? (
+                <>
+                  <div>
+                    <label className="text-sm font-bold text-on-surface mb-1 block">Office Name / Identifier</label>
+                    <input required type="text" value={newOfficeName} onChange={e => setNewOfficeName(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-on-surface mb-1 block">Office Address</label>
+                    <input required type="text" value={newOfficeAddress} onChange={e => setNewOfficeAddress(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none" />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-sm font-bold text-on-surface mb-1 block">Choose from existing offices</label>
+                  <select 
+                    value={assignedOfficeIds[0] || ''} 
+                    onChange={e => setAssignedOfficeIds([Number(e.target.value)])}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 focus:ring-2 focus:ring-primary-container outline-none"
+                  >
+                    <option value="" disabled>Select an office</option>
+                    {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="flex justify-end gap-3 mt-4">
+                <button type="button" onClick={() => setIsOfficeModalOpen(false)} className="px-4 py-2 border border-outline-variant rounded-xl text-sm font-semibold hover:bg-slate-50">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 shadow-md">
+                  {isAddOfficeMode ? 'Create & Assign' : 'Save Selection'}
                 </button>
               </div>
             </form>

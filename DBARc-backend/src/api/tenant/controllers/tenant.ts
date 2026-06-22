@@ -20,6 +20,7 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
         adminEmail,
         adminPassword,
         confirmationType,
+        address,
       } = ctx.request.body;
 
       if (!name || !domain || !adminUsername || !adminEmail) {
@@ -44,6 +45,7 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
           commissionPct,
           status,
           features,
+          address,
           publishedAt: new Date(),
         }
       });
@@ -80,6 +82,36 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
           confirmed: confirmed,
           blocked: false,
           provider: 'local',
+        }
+      });
+
+      // Create Courier Admin custom role for this tenant
+      const courierAdminRole = await strapi.db.query('api::role-definition.role-definition').create({
+        data: {
+          role_name: 'Courier Admin',
+          permissions: ['all'],
+          tenant: tenant.id,
+          publishedAt: new Date(),
+        }
+      });
+
+      // Create default office
+      const defaultOffice = await strapi.db.query('api::office.office').create({
+        data: {
+          name: 'Head Office',
+          address: address || 'N/A',
+          type: 'courier',
+          tenant: tenant.id,
+          publishedAt: new Date(),
+        }
+      });
+
+      // Link role and office to user
+      await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id: user.id },
+        data: {
+          role_definition: [courierAdminRole.id],
+          offices: [defaultOffice.id]
         }
       });
 

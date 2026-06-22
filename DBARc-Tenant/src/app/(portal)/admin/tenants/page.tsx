@@ -121,6 +121,7 @@ export default function AdminTenantsPage() {
   // Form states for creating/editing
   const [formName, setFormName] = React.useState('');
   const [formDomain, setFormDomain] = React.useState('');
+  const [formAddress, setFormAddress] = React.useState('');
   const [formPlan, setFormPlan] = React.useState<'Basic' | 'Growth' | 'Enterprise'>('Growth');
   const [formCommission, setFormCommission] = React.useState(2.0);
   const [formStatus, setFormStatus] = React.useState<'active' | 'suspended' | 'pending'>('pending');
@@ -185,6 +186,7 @@ export default function AdminTenantsPage() {
   const handleOpenCreate = () => {
     setFormName('');
     setFormDomain('');
+    setFormAddress('');
     setFormPlan('Growth');
     setFormCommission(2.0);
     setFormStatus('pending');
@@ -233,6 +235,7 @@ export default function AdminTenantsPage() {
       const payload = {
         name: formName,
         domain: formDomain || `${formName.toLowerCase().replace(/[^a-z0-9]/g, '')}.dbarc.com`,
+        address: formAddress,
         plan: formPlan,
         commissionPct: Number(formCommission),
         status: formStatus,
@@ -482,6 +485,13 @@ export default function AdminTenantsPage() {
               value={formDomain}
               onChange={(e) => setFormDomain(e.target.value)}
               helperText="Defaults to businessname.dbarc.com"
+            />
+            <Input
+              label="Physical Address"
+              placeholder="e.g. 123 Main St, City"
+              value={formAddress}
+              onChange={(e) => setFormAddress(e.target.value)}
+              required
             />
           </div>
 

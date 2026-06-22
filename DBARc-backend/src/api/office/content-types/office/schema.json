@@ -1,0 +1,59 @@
+{
+  "kind": "collectionType",
+  "collectionName": "offices",
+  "info": {
+    "singularName": "office",
+    "pluralName": "offices",
+    "displayName": "Office",
+    "description": "Physical offices for Couriers and Shippers"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "address": {
+      "type": "text"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": [
+        "courier",
+        "shipper"
+      ],
+      "required": true,
+      "default": "courier"
+    },
+    "city": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::city.city"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier.courier"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "status": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

@@ -23,6 +23,8 @@ interface User {
   blocked?: boolean;
   confirmed?: boolean;
   role_definition?: RoleDefinition | null;
+  shipper?: any[];
+  pickup_locations?: any[];
 }
 
 export default function CourierUsersPage() {
@@ -31,6 +33,8 @@ export default function CourierUsersPage() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'active' | 'quit'>('active');
   const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
+  const [shippersList, setShippersList] = React.useState<any[]>([]);
+  const [outletsList, setOutletsList] = React.useState<any[]>([]);
 
   // States
   const [isLoading, setIsLoading] = React.useState(true);
@@ -49,6 +53,8 @@ export default function CourierUsersPage() {
   const [formRoleId, setFormRoleId] = React.useState<number | ''>('');
   const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
   const [formPassword, setFormPassword] = React.useState('');
+  const [formShippers, setFormShippers] = React.useState<number[]>([]);
+  const [formOutlet, setFormOutlet] = React.useState<number | ''>('');
 
   const fetchEmployeesAndRoles = async () => {
     setIsLoading(true);
@@ -63,9 +69,19 @@ export default function CourierUsersPage() {
       }));
       setRoles(mappedRoles);
 
-      const usersRes = await apiClient.get('/users?populate=role_definition');
+      const usersRes = await apiClient.get('/users?populate=role_definition,shipper,pickup_locations');
       const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
       setEmployees(rawUsers);
+
+      try {
+        const shippersRes = await apiClient.get('/shippers');
+        setShippersList(shippersRes.data?.data || []);
+      } catch (err) { console.error('Failed to load shippers', err); }
+
+      try {
+        const outletsRes = await apiClient.get('/pickup-locations');
+        setOutletsList(outletsRes.data?.data || []);
+      } catch (err) { console.error('Failed to load pickup locations', err); }
     } catch (err: any) {
       console.error('Failed to load employee list:', err);
       setError('Could not fetch employee directory from the database.');
@@ -105,6 +121,8 @@ export default function CourierUsersPage() {
     setFormConfirmationType('no_confirmation');
     setFormPassword('');
     setShowPassword(false);
+    setFormShippers([]);
+    setFormOutlet('');
     setIsModalOpen(true);
   };
 
@@ -120,6 +138,8 @@ export default function CourierUsersPage() {
     setFormConfirmationType('no_confirmation');
     setFormPassword('');
     setShowPassword(false);
+    setFormShippers(emp.shipper ? emp.shipper.map((s: any) => s.id) : []);
+    setFormOutlet(emp.pickup_locations && emp.pickup_locations.length > 0 ? emp.pickup_locations[0].id : '');
     setIsModalOpen(true);
   };
 
@@ -150,8 +170,11 @@ export default function CourierUsersPage() {
         email: formEmail,
         fullName: formFullName,
         phone: formPhone,
+        phone: formPhone,
         role_definition: formRoleId || null,
         isenable: formIsEnabled,
+        shipper: formShippers,
+        pickup_locations: formOutlet ? [formOutlet] : [],
       };
 
       if (isEditMode) {
@@ -366,6 +389,41 @@ export default function CourierUsersPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-600">Assigned Businesses (Shippers)</label>
+              <select
+                multiple
+                value={formShippers.map(String)}
+                onChange={(e) => setFormShippers(Array.from(e.target.selectedOptions, option => Number(option.value)))}
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white text-slate-700 outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer h-24"
+              >
+                {shippersList.map((shipper) => (
+                  <option key={shipper.id} value={shipper.id}>
+                    {shipper.attributes?.Shipper_Name || shipper.attributes?.Company_Name || shipper.id}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400">Hold Ctrl/Cmd to select multiple</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-600">Assigned Outlet/Location</label>
+              <select
+                value={formOutlet}
+                onChange={(e) => setFormOutlet(e.target.value ? Number(e.target.value) : '')}
+                className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white text-slate-700 outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer"
+              >
+                <option value="">Select an outlet...</option>
+                {outletsList.map((outlet) => (
+                  <option key={outlet.id} value={outlet.id}>
+                    {outlet.attributes?.Location_Name || outlet.id}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 py-2">

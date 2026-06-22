@@ -16,6 +16,9 @@
       "type": "string",
       "required": true
     },
+    "address": {
+      "type": "text"
+    },
     "domain": {
       "type": "string",
       "unique": true
@@ -45,6 +48,12 @@
       "type": "relation",
       "relation": "oneToMany",
       "target": "api::rider.rider",
+      "mappedBy": "tenant"
+    },
+    "default_regions": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::region.region",
       "mappedBy": "tenant"
     }
   }

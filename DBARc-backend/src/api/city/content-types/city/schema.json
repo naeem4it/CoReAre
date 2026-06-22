@@ -22,6 +22,12 @@
       "relation": "manyToMany",
       "target": "api::courier-city.courier-city",
       "mappedBy": "cities"
+    },
+    "regions": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::region.region",
+      "mappedBy": "cities"
     }
   }
 }

@@ -4,23 +4,24 @@ import * as React from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/shared/api/api-client';
+import { useAuth } from '@/components/AuthProvider';
+import { ChevronDown, Building2, MapPin } from 'lucide-react';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
-  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
+  const { user, activeBusinessId, activeOfficeId, setActiveBusinessId, setActiveOfficeId, refreshUser } = useAuth();
 
   React.useEffect(() => {
     const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
     if (!token) {
       router.push('/login');
     } else {
-      // Fetch current user details with populated relations
-      apiClient.get('/users/me')
+      apiClient.get('/users/me?populate=shipper,offices,role_definition')
         .then((res) => {
           localStorage.setItem('user', JSON.stringify(res.data));
-          setLoggedInUser(res.data);
+          refreshUser();
           setIsAuthenticated(true);
         })
         .catch((err) => {
@@ -35,20 +36,20 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }, [router]);
 
   const userRoles = React.useMemo(() => {
-    if (!loggedInUser) return [];
-    return Array.isArray(loggedInUser.role_definition)
-      ? loggedInUser.role_definition.map((r: any) => r.role_name)
+    if (!user) return [];
+    return Array.isArray(user.role_definition)
+      ? user.role_definition.map((r: any) => r.role_name)
       : [];
-  }, [loggedInUser]);
+  }, [user]);
 
   const showShipmentBooking = React.useMemo(() => {
-    if (!loggedInUser) return false;
+    if (!user) return false;
     return (
-      loggedInUser.role?.type === 'super_admin' ||
+      user.role?.type === 'super_admin' ||
       userRoles.includes('Super Admin') ||
       userRoles.includes('Admin')
     );
-  }, [loggedInUser, userRoles]);
+  }, [user, userRoles]);
 
   if (!isAuthenticated) {
     return (
@@ -108,6 +109,62 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </div>
 
           <div className="flex items-center gap-sm">
+            {/* Shippers Switcher */}
+            {user?.shipper && Array.isArray(user.shipper) && user.shipper.length > 0 && (
+              <div className="relative group mr-2">
+                <button className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
+                  <Building2 className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700 max-w-[120px] truncate">
+                    {user.shipper.find((s: any) => s.id === activeBusinessId)?.name || 'Select Shipper'}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </button>
+                <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="py-1">
+                    {user.shipper.map((biz: any) => (
+                      <button
+                        key={biz.id}
+                        onClick={() => setActiveBusinessId(biz.id)}
+                        className={`w-full text-left px-4 py-2 text-sm ${
+                          activeBusinessId === biz.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {biz.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Offices Switcher */}
+            {user?.offices && Array.isArray(user.offices) && user.offices.length > 0 && (
+              <div className="relative group mr-2">
+                <button className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
+                  <MapPin className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700 max-w-[120px] truncate">
+                    {user.offices.find((o: any) => o.id === activeOfficeId)?.name || 'Select Office'}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </button>
+                <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="py-1">
+                    {user.offices.map((office: any) => (
+                      <button
+                        key={office.id}
+                        onClick={() => setActiveOfficeId(office.id)}
+                        className={`w-full text-left px-4 py-2 text-sm ${
+                          activeOfficeId === office.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {office.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button className="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95 cursor-pointer">
               <span className="material-symbols-outlined text-on-surface-variant">notifications</span>
             </button>
@@ -224,21 +281,9 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = searchParams?.get('tab');
+  const { user } = useAuth();
 
-  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
-
-  React.useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        setLoggedInUser(JSON.parse(userStr));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  }, []);
-
-  const isShipper = !!loggedInUser?.shipper;
+  const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
 
   return (
     <nav className="flex flex-col gap-1">

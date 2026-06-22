@@ -664,6 +664,7 @@ export interface ApiCityCity extends Struct.CollectionTypeSchema {
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::city.city'> &
       Schema.Attribute.Private;
     publishedAt: Schema.Attribute.DateTime;
+    regions: Schema.Attribute.Relation<'manyToMany', 'api::region.region'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -777,6 +778,7 @@ export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     parcel: Schema.Attribute.Relation<'oneToOne', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
+    regions: Schema.Attribute.Relation<'oneToMany', 'api::region.region'>;
     shippers: Schema.Attribute.Relation<'manyToMany', 'api::shipper.shipper'>;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
@@ -1076,6 +1078,45 @@ export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiOfficeOffice extends Struct.CollectionTypeSchema {
+  collectionName: 'offices';
+  info: {
+    description: 'Physical offices for Couriers and Shippers';
+    displayName: 'Office';
+    pluralName: 'offices';
+    singularName: 'office';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text;
+    city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
+    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::office.office'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    status: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    type: Schema.Attribute.Enumeration<['courier', 'shipper']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'courier'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiParcelHubMovementParcelHubMovement
   extends Struct.CollectionTypeSchema {
   collectionName: 'parcel_hub_movements';
@@ -1143,6 +1184,8 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     delivered_date: Schema.Attribute.DateTime;
     delivery_charges: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    destination_city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
+    is_3pl: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     load_sheet: Schema.Attribute.Relation<
       'manyToOne',
       'api::load-sheet.load-sheet'
@@ -1153,6 +1196,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       'api::parcel.parcel'
     > &
       Schema.Attribute.Private;
+    origin_office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
     pickup_location: Schema.Attribute.Relation<
       'manyToOne',
       'api::pickup-location.pickup-location'
@@ -1171,6 +1215,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       ['Parcel', 'Document', 'Flyer']
     > &
       Schema.Attribute.DefaultTo<'Parcel'>;
+    source_city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
     status: Schema.Attribute.Enumeration<
       [
         'Total Booking',
@@ -1383,6 +1428,9 @@ export interface ApiRegionRegion extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    cities: Schema.Attribute.Relation<'manyToMany', 'api::city.city'>;
+    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1396,6 +1444,7 @@ export interface ApiRegionRegion extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     parent: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
     publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     type: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1683,9 +1732,14 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    address: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    default_regions: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::region.region'
+    >;
     domain: Schema.Attribute.String & Schema.Attribute.Unique;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -2354,12 +2408,17 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.user'
     > &
       Schema.Attribute.Private;
+    offices: Schema.Attribute.Relation<'manyToMany', 'api::office.office'>;
     password: Schema.Attribute.Password &
       Schema.Attribute.Private &
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
     phone: Schema.Attribute.String;
+    pickup_locations: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::pickup-location.pickup-location'
+    >;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
@@ -2371,7 +2430,7 @@ export interface PluginUsersPermissionsUser
       'manyToMany',
       'api::role-definition.role-definition'
     >;
-    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
+    shipper: Schema.Attribute.Relation<'manyToMany', 'api::shipper.shipper'>;
     shipper_roles: Schema.Attribute.JSON;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -2415,6 +2474,7 @@ declare module '@strapi/strapi' {
       'api::hub.hub': ApiHubHub;
       'api::invoice.invoice': ApiInvoiceInvoice;
       'api::load-sheet.load-sheet': ApiLoadSheetLoadSheet;
+      'api::office.office': ApiOfficeOffice;
       'api::parcel-hub-movement.parcel-hub-movement': ApiParcelHubMovementParcelHubMovement;
       'api::parcel.parcel': ApiParcelParcel;
       'api::pickup-location.pickup-location': ApiPickupLocationPickupLocation;
