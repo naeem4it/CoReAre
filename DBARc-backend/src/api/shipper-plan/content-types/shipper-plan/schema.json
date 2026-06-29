@@ -1,0 +1,90 @@
+{
+  "kind": "collectionType",
+  "collectionName": "shipper_plans",
+  "info": {
+    "singularName": "shipper-plan",
+    "pluralName": "shipper-plans",
+    "displayName": "Shipper Plan",
+    "description": "Courier-defined plans assigned to Shipper Businesses"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "charge_type": {
+      "type": "enumeration",
+      "enum": [
+        "percentage",
+        "fixed_rupees",
+        "tier_based"
+      ],
+      "required": true,
+      "default": "percentage"
+    },
+    "charge_value": {
+      "type": "decimal"
+    },
+    "rto_charge_type": {
+      "type": "enumeration",
+      "enum": [
+        "percentage",
+        "fixed_rupees"
+      ]
+    },
+    "rto_charge_value": {
+      "type": "decimal"
+    },
+    "replacement_charge_type": {
+      "type": "enumeration",
+      "enum": [
+        "percentage",
+        "fixed_rupees"
+      ]
+    },
+    "replacement_charge_value": {
+      "type": "decimal"
+    },
+    "cod_charge_type": {
+      "type": "enumeration",
+      "enum": [
+        "percentage",
+        "fixed_rupees"
+      ]
+    },
+    "cod_charge_value": {
+      "type": "decimal"
+    },
+    "max_parcels_per_month": {
+      "type": "integer"
+    },
+    "support_level": {
+      "type": "string"
+    },
+    "api_access": {
+      "type": "boolean",
+      "default": false
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier.courier",
+      "inversedBy": "shipper_plans"
+    },
+    "shippers": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::shipper.shipper",
+      "mappedBy": "shipper_plan"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

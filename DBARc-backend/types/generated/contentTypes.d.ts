@@ -779,6 +779,10 @@ export interface ApiCourierCourier extends Struct.CollectionTypeSchema {
     parcel: Schema.Attribute.Relation<'oneToOne', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
     regions: Schema.Attribute.Relation<'oneToMany', 'api::region.region'>;
+    shipper_plans: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::shipper-plan.shipper-plan'
+    >;
     shippers: Schema.Attribute.Relation<'manyToMany', 'api::shipper.shipper'>;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
@@ -1621,6 +1625,59 @@ export interface ApiRoleDefinitionRoleDefinition
   };
 }
 
+export interface ApiShipperPlanShipperPlan extends Struct.CollectionTypeSchema {
+  collectionName: 'shipper_plans';
+  info: {
+    description: 'Courier-defined plans assigned to Shipper Businesses';
+    displayName: 'Shipper Plan';
+    pluralName: 'shipper-plans';
+    singularName: 'shipper-plan';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    api_access: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    charge_type: Schema.Attribute.Enumeration<
+      ['percentage', 'fixed_rupees', 'tier_based']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'percentage'>;
+    charge_value: Schema.Attribute.Decimal;
+    cod_charge_type: Schema.Attribute.Enumeration<
+      ['percentage', 'fixed_rupees']
+    >;
+    cod_charge_value: Schema.Attribute.Decimal;
+    courier: Schema.Attribute.Relation<'manyToOne', 'api::courier.courier'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::shipper-plan.shipper-plan'
+    > &
+      Schema.Attribute.Private;
+    max_parcels_per_month: Schema.Attribute.Integer;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    replacement_charge_type: Schema.Attribute.Enumeration<
+      ['percentage', 'fixed_rupees']
+    >;
+    replacement_charge_value: Schema.Attribute.Decimal;
+    rto_charge_type: Schema.Attribute.Enumeration<
+      ['percentage', 'fixed_rupees']
+    >;
+    rto_charge_value: Schema.Attribute.Decimal;
+    shippers: Schema.Attribute.Relation<'oneToMany', 'api::shipper.shipper'>;
+    support_level: Schema.Attribute.String;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiShipperWalletShipperWallet
   extends Struct.CollectionTypeSchema {
   collectionName: 'shipper_wallets';
@@ -1680,6 +1737,10 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    shipper_plan: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::shipper-plan.shipper-plan'
+    >;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
     tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -1701,6 +1762,10 @@ export interface ApiTenantPlanTenantPlan extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    api_access: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    charge_type: Schema.Attribute.Enumeration<['percentage', 'fixed_rupees']> &
+      Schema.Attribute.DefaultTo<'percentage'>;
+    charge_value: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<2>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1712,8 +1777,12 @@ export interface ApiTenantPlanTenantPlan extends Struct.CollectionTypeSchema {
       'api::tenant-plan.tenant-plan'
     > &
       Schema.Attribute.Private;
+    max_parcels_per_month: Schema.Attribute.Integer;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    support_level: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'Standard'>;
+    tenants: Schema.Attribute.Relation<'oneToMany', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1733,6 +1802,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.Text;
+    commissionPct: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<2>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1741,6 +1811,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       'api::region.region'
     >;
     domain: Schema.Attribute.String & Schema.Attribute.Unique;
+    features: Schema.Attribute.JSON;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1749,12 +1820,17 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
+    plan: Schema.Attribute.String;
     platform_commission_pct: Schema.Attribute.Decimal &
       Schema.Attribute.DefaultTo<2>;
     publishedAt: Schema.Attribute.DateTime;
     riders: Schema.Attribute.Relation<'oneToMany', 'api::rider.rider'>;
     status: Schema.Attribute.Enumeration<['active', 'suspended', 'pending']> &
       Schema.Attribute.DefaultTo<'pending'>;
+    tenant_plan: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::tenant-plan.tenant-plan'
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2488,6 +2564,7 @@ declare module '@strapi/strapi' {
       'api::rider-location-history.rider-location-history': ApiRiderLocationHistoryRiderLocationHistory;
       'api::rider.rider': ApiRiderRider;
       'api::role-definition.role-definition': ApiRoleDefinitionRoleDefinition;
+      'api::shipper-plan.shipper-plan': ApiShipperPlanShipperPlan;
       'api::shipper-wallet.shipper-wallet': ApiShipperWalletShipperWallet;
       'api::shipper.shipper': ApiShipperShipper;
       'api::tenant-plan.tenant-plan': ApiTenantPlanTenantPlan;

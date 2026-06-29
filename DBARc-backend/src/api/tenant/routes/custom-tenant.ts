@@ -16,5 +16,21 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'PUT',
+      path: '/tenant/update/:id',
+      handler: 'tenant.customUpdate',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/tenant/list',
+      handler: 'tenant.customFind',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

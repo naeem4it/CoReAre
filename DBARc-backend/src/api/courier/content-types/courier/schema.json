@@ -55,6 +55,12 @@
       "relation": "oneToMany",
       "target": "api::region.region",
       "mappedBy": "courier"
+    },
+    "shipper_plans": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::shipper-plan.shipper-plan",
+      "mappedBy": "courier"
     }
   }
 }

@@ -1755,9 +1755,6 @@ function BookShipmentForm() {
         )}
       </div>
     </PortalLayout>
-  );
-}
-
 export default function BookShipmentPage() {
   return (
     <React.Suspense fallback={

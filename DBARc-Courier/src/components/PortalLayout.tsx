@@ -285,49 +285,89 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
 
   const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
 
-  return (
-    <nav className="flex flex-col gap-1">
+  const isActive = (path: string) => pathname === path;
+
+  const NavLink = ({ href, icon, label, exact = true }: { href: string, icon: string, label: string, exact?: boolean }) => {
+    const active = exact ? isActive(href) : pathname.startsWith(href);
+    return (
       <Link
-        href="/"
-        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname === '/'
+        href={href}
+        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+          active
             ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
             : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-          }`}
+        }`}
       >
-        <span className="material-symbols-outlined">dashboard</span>
-        <span className="font-label-md text-label-md">Overview</span>
+        <span className="material-symbols-outlined">{icon}</span>
+        <span className="font-label-md text-label-md">{label}</span>
       </Link>
+    );
+  };
+
+  return (
+    <nav className="flex flex-col gap-1">
+      <NavLink href="/" icon="dashboard" label="Overview" />
+      <NavLink href="/pickup-information" icon="local_mall" label="Pickup Information" />
 
       {showShipmentBooking && (
-        <Link
-          href="/shipments/book"
-          className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname === '/shipments/book' && tab !== 'bulk'
-              ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-              : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-            }`}
-        >
-          <span className="material-symbols-outlined">local_shipping</span>
-          <span className="font-label-md text-label-md">Booking</span>
-        </Link>
+        <NavLink href="/shipments/book" icon="local_shipping" label="Booking" />
       )}
+      
+      <NavLink href="/shipments" icon="list_alt" label="Shipments List" />
+      
       <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
         <span className="material-symbols-outlined">location_on</span>
         <span className="font-label-md text-label-md">Tracking</span>
       </a>
-      <Link
-        href="/shipments/book?tab=bulk"
-        className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${pathname === '/shipments/book' && tab === 'bulk'
-            ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-            : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-          }`}
-      >
-        <span className="material-symbols-outlined">inventory_2</span>
-        <span className="font-label-md text-label-md">Load Sheets</span>
-      </Link>
-      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
+      
+      <NavLink href="/load-sheet" icon="inventory_2" label="Load Sheets" />
+      <NavLink href="/shipper-advise" icon="quick_reference_all" label="Shipper Advise" />
+      
+      {/* Reports Section */}
+      <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
+          <span className="material-symbols-outlined">bar_chart</span>
+          <span className="font-label-md text-label-md">Reports & Invoices</span>
+        </div>
+        <div className="pl-4 flex flex-col gap-0.5">
+          <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
+          <NavLink href="/reports/dispatch" icon="local_shipping" label="Dispatch Report" />
+          <NavLink href="/reports/monthly-invoice" icon="receipt_long" label="Monthly Invoice" />
+          <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoice" />
+        </div>
+      </div>
+      
+      {/* External / Other Designs Section */}
+      <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
+          <span className="material-symbols-outlined">layers</span>
+          <span className="font-label-md text-label-md">Other Interfaces</span>
+        </div>
+        <div className="pl-4 flex flex-col gap-0.5">
+          <NavLink href="/stitch-unified" icon="integration_instructions" label="Stitch Unified" />
+          <NavLink href="/velocity-corporate" icon="corporate_fare" label="Velocity Corporate" />
+        </div>
+      </div>
+
+      {/* V2 Redesigns Section */}
+      <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
+          <span className="material-symbols-outlined">design_services</span>
+          <span className="font-label-md text-label-md">V2 Redesigns</span>
+        </div>
+        <div className="pl-4 flex flex-col gap-0.5">
+          <NavLink href="/redesigns/pickup-information" icon="local_mall" label="Pickup Information" />
+          <NavLink href="/redesigns/shipments/book" icon="local_shipping" label="Book Shipment" />
+          <NavLink href="/redesigns/shipments/list" icon="list_alt" label="Shipments List" />
+          <NavLink href="/redesigns/load-sheet" icon="inventory_2" label="Load Sheet" />
+        </div>
+      </div>
+
+      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all border-t border-outline-variant pt-2 mt-1">
         <span className="material-symbols-outlined">group</span>
         <span className="font-label-md text-label-md">Customers</span>
       </a>
+      
       {/* Administration and User Accounts Submenus */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
         <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
@@ -354,6 +394,18 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             </Link>
           ) : (
             <>
+              <Link
+                href="/administration/plans"
+                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                  pathname === '/administration/plans'
+                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[20px]">assignment</span>
+                <span className="font-label-md text-label-md">Plans</span>
+              </Link>
+
               <Link
                 href="/administration/employees?type=shipper"
                 className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
@@ -382,10 +434,14 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
         </div>
       </div>
 
-      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all border-t border-outline-variant pt-2 mt-1">
-        <span className="material-symbols-outlined">settings</span>
-        <span className="font-label-md text-label-md">Settings</span>
-      </a>
+      <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+        <NavLink href="/auth/change-password" icon="password" label="Change Password" />
+        <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all border-t border-outline-variant pt-2 mt-1">
+          <span className="material-symbols-outlined">settings</span>
+          <span className="font-label-md text-label-md">Settings</span>
+        </a>
+      </div>
     </nav>
   );
 }
+

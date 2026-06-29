@@ -90,7 +90,7 @@ export default function SuperAdminUsersPage() {
       setSystemRoles(filteredRoles);
 
       // Fetch Tenants
-      const tenantsRes = await apiClient.get('/tenants');
+      const tenantsRes = await apiClient.get('/tenant/list');
       const rawTenants = tenantsRes.data?.data || [];
       setTenants(rawTenants.map((t: any) => ({ id: t.id, name: t.name })));
 

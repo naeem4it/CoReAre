@@ -16,11 +16,37 @@
       "type": "string",
       "required": true
     },
+    "charge_type": {
+      "type": "enumeration",
+      "enum": ["percentage", "fixed_rupees"],
+      "default": "percentage"
+    },
+    "charge_value": {
+      "type": "decimal",
+      "default": 2.0
+    },
+    "max_parcels_per_month": {
+      "type": "integer"
+    },
+    "api_access": {
+      "type": "boolean",
+      "default": false
+    },
+    "support_level": {
+      "type": "string",
+      "default": "Standard"
+    },
     "features": {
       "type": "json"
     },
     "limits": {
       "type": "json"
+    },
+    "tenants": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::tenant.tenant",
+      "mappedBy": "tenant_plan"
     }
   }
 }

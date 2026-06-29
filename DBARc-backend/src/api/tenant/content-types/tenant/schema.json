@@ -55,6 +55,22 @@
       "relation": "oneToMany",
       "target": "api::region.region",
       "mappedBy": "tenant"
+    },
+    "plan": {
+      "type": "string"
+    },
+    "commissionPct": {
+      "type": "decimal",
+      "default": 2.0
+    },
+    "features": {
+      "type": "json"
+    },
+    "tenant_plan": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant-plan.tenant-plan",
+      "inversedBy": "tenants"
     }
   }
 }

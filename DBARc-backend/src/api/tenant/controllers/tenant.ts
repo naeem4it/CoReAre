@@ -218,5 +218,54 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       console.error('Resend Invite error:', err);
       return ctx.internalServerError('Failed to resend admin invitation');
     }
+  },
+
+  async customFind(ctx) {
+    try {
+      // Find all tenants (auth is bypassed or set to false in route)
+      const entities = await strapi.entityService.findMany('api::tenant.tenant', {
+        ...ctx.query,
+      }) as any[];
+      
+      const transformed = entities.map(entity => {
+        const { id, ...attributes } = entity;
+        return { id, attributes };
+      });
+      
+      return ctx.send({ data: transformed });
+    } catch (err) {
+      console.error('Failed to find tenants:', err);
+      return ctx.internalServerError('Failed to fetch tenants');
+    }
+  },
+
+  async customUpdate(ctx) {
+    try {
+      const { id } = ctx.params;
+      const {
+        name,
+        domain,
+        plan,
+        commissionPct,
+        status,
+        features
+      } = ctx.request.body;
+      
+      const updated = await strapi.entityService.update('api::tenant.tenant', id, {
+        data: {
+          name,
+          domain,
+          plan,
+          commissionPct,
+          status,
+          features
+        }
+      });
+      
+      return ctx.send({ data: updated });
+    } catch (err) {
+      console.error('Failed to update tenant:', err);
+      return ctx.internalServerError('Failed to update tenant');
+    }
   }
 }));

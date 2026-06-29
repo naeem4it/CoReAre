@@ -44,6 +44,12 @@
     "account_id": {
       "type": "string",
       "unique": true
+    },
+    "shipper_plan": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper-plan.shipper-plan",
+      "inversedBy": "shippers"
     }
   }
 }

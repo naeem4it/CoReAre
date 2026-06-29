@@ -43,7 +43,7 @@ export default function DefaultRegionsPage() {
 
   const fetchTenants = async () => {
     try {
-      const res = await apiClient.get('/tenants');
+      const res = await apiClient.get('/tenant/list');
       setTenants(res.data?.data || []);
     } catch (err) {
       console.error('Failed to fetch tenants:', err);

@@ -41,6 +41,15 @@ interface Tenant {
   createdAt: string;
 }
 
+interface TenantPlan {
+  id: number;
+  attributes: {
+    name: string;
+    charge_type: 'percentage' | 'fixed_rupees';
+    charge_value: number;
+  };
+}
+
 const INITIAL_TENANTS: Tenant[] = [
   {
     id: 't-1',
@@ -110,6 +119,7 @@ const INITIAL_TENANTS: Tenant[] = [
 
 export default function AdminTenantsPage() {
   const [tenants, setTenants] = React.useState<Tenant[]>([]);
+  const [availablePlans, setAvailablePlans] = React.useState<TenantPlan[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
   
@@ -122,7 +132,7 @@ export default function AdminTenantsPage() {
   const [formName, setFormName] = React.useState('');
   const [formDomain, setFormDomain] = React.useState('');
   const [formAddress, setFormAddress] = React.useState('');
-  const [formPlan, setFormPlan] = React.useState<'Basic' | 'Growth' | 'Enterprise'>('Growth');
+  const [formPlan, setFormPlan] = React.useState<string>(''); // stores plan ID
   const [formCommission, setFormCommission] = React.useState(2.0);
   const [formStatus, setFormStatus] = React.useState<'active' | 'suspended' | 'pending'>('pending');
   const [formFeatures, setFormFeatures] = React.useState({
@@ -143,16 +153,26 @@ export default function AdminTenantsPage() {
 
   React.useEffect(() => {
     fetchTenants();
+    fetchPlans();
   }, []);
+
+  const fetchPlans = async () => {
+    try {
+      const res = await apiClient.get('/tenant-plan/list');
+      setAvailablePlans(res.data?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch plans', err);
+    }
+  };
 
   const fetchTenants = async () => {
     try {
-      const res = await apiClient.get('/tenants?populate=*');
+      const res = await apiClient.get('/tenant/list?populate=*');
       const fetchedTenants = res.data.data.map((item: any) => ({
         id: item.id.toString(),
-        name: item.attributes.name,
-        domain: item.attributes.domain,
-        plan: item.attributes.plan || 'Growth',
+        name: item.attributes.name || '',
+        domain: item.attributes.domain || '',
+        plan: item.attributes.tenant_plan?.data?.attributes?.name || item.attributes.plan || 'Growth',
         commissionPct: item.attributes.commissionPct || 2.0,
         status: item.attributes.status || 'pending',
         features: item.attributes.features || {
@@ -187,8 +207,12 @@ export default function AdminTenantsPage() {
     setFormName('');
     setFormDomain('');
     setFormAddress('');
-    setFormPlan('Growth');
-    setFormCommission(2.0);
+    if (availablePlans.length > 0) {
+      handlePlanChange(availablePlans[0].id.toString());
+    } else {
+      setFormPlan('');
+      setFormCommission(2.0);
+    }
     setFormStatus('pending');
     setFormFeatures({
       tplAggregation: false,
@@ -205,27 +229,36 @@ export default function AdminTenantsPage() {
     setIsCreateModalOpen(true);
   };
 
-  const handleSaveConfig = (e: React.FormEvent) => {
+  const handlePlanChange = (planId: string) => {
+    setFormPlan(planId);
+    const plan = availablePlans.find(p => p.id.toString() === planId);
+    if (plan) {
+      setFormCommission(plan.attributes.charge_value || 0);
+    }
+  };
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTenant) return;
 
-    setTenants((prev) =>
-      prev.map((t) =>
-        t.id === selectedTenant.id
-          ? {
-              ...t,
-              name: formName,
-              domain: formDomain,
-              plan: formPlan,
-              commissionPct: Number(formCommission),
-              status: formStatus,
-              features: { ...formFeatures }
-            }
-          : t
-      )
-    );
-    setIsConfigModalOpen(false);
-    setSelectedTenant(null);
+    try {
+      await apiClient.put(`/tenant/update/${selectedTenant.id}`, {
+        name: formName,
+        domain: formDomain,
+        plan: availablePlans.find(p => p.id.toString() === formPlan)?.attributes.name || formPlan,
+        tenant_plan: formPlan,
+        commissionPct: Number(formCommission),
+        status: formStatus,
+        features: formFeatures
+      });
+
+      await fetchTenants();
+      setIsConfigModalOpen(false);
+      setSelectedTenant(null);
+    } catch (err: any) {
+      console.error('Failed to update tenant configuration', err);
+      alert(err.response?.data?.error?.message || 'Failed to update configurations');
+    }
   };
 
   const handleCreateTenant = async (e: React.FormEvent) => {
@@ -236,7 +269,8 @@ export default function AdminTenantsPage() {
         name: formName,
         domain: formDomain || `${formName.toLowerCase().replace(/[^a-z0-9]/g, '')}.dbarc.com`,
         address: formAddress,
-        plan: formPlan,
+        plan: availablePlans.find(p => p.id.toString() === formPlan)?.attributes.name || formPlan,
+        tenant_plan: formPlan,
         commissionPct: Number(formCommission),
         status: formStatus,
         features: { ...formFeatures },
@@ -270,8 +304,8 @@ export default function AdminTenantsPage() {
 
   // Filter tenants
   const filteredTenants = tenants.filter((tenant) => {
-    const matchesSearch = tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          tenant.domain.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (tenant.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (tenant.domain || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -500,17 +534,24 @@ export default function AdminTenantsPage() {
               <label className="text-sm font-medium text-slate-700">Platform SaaS Plan</label>
               <select
                 value={formPlan}
-                onChange={(e) => setFormPlan(e.target.value as any)}
+                onChange={(e) => handlePlanChange(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
               >
-                <option value="Basic">Basic Plan</option>
-                <option value="Growth">Growth Plan</option>
-                <option value="Enterprise">Enterprise Plan</option>
+                {availablePlans.length === 0 && <option value="">No plans available</option>}
+                {availablePlans.map((plan) => (
+                  <option key={plan.id} value={plan.id.toString()}>
+                    {plan.attributes.name}
+                  </option>
+                ))}
               </select>
             </div>
 
             <Input
-              label="Platform Commission Fee (%)"
+              label={
+                availablePlans.find(p => p.id.toString() === formPlan)?.attributes.charge_type === 'fixed_rupees' 
+                ? "Platform Fixed Fee (PKR)" 
+                : "Platform Commission Fee (%)"
+              }
               type="number"
               step="0.1"
               min="0"
@@ -699,17 +740,24 @@ export default function AdminTenantsPage() {
               <label className="text-sm font-medium text-slate-700">Platform SaaS Plan</label>
               <select
                 value={formPlan}
-                onChange={(e) => setFormPlan(e.target.value as any)}
+                onChange={(e) => handlePlanChange(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
               >
-                <option value="Basic">Basic Plan</option>
-                <option value="Growth">Growth Plan</option>
-                <option value="Enterprise">Enterprise Plan</option>
+                {availablePlans.length === 0 && <option value="">No plans available</option>}
+                {availablePlans.map((plan) => (
+                  <option key={plan.id} value={plan.id.toString()}>
+                    {plan.attributes.name}
+                  </option>
+                ))}
               </select>
             </div>
 
             <Input
-              label="Platform Commission Fee (%)"
+              label={
+                availablePlans.find(p => p.id.toString() === formPlan)?.attributes.charge_type === 'fixed_rupees' 
+                ? "Platform Fixed Fee (PKR)" 
+                : "Platform Commission Fee (%)"
+              }
               type="number"
               step="0.1"
               min="0"

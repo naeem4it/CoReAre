@@ -50,6 +50,7 @@ const COURIER_SHIPMENTS_SUBMENU: NavItem[] = [
 const SUPER_ADMINISTRATION_SUBMENU: NavItem[] = [
   { label: 'User Management', href: '/admin/users', icon: Users },
   { label: 'Role Definition', href: '/admin/roles', icon: ShieldCheck },
+  { label: 'Plans', href: '/admin/plans', icon: FileText },
 ];
 
 const COURIER_ADMINISTRATION_SUBMENU: NavItem[] = [
