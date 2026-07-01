@@ -1,6 +1,63 @@
+'use client';
+
+import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import { useForm } from 'react-hook-form';
+import { apiClient } from '@/shared/api/api-client';
+
+interface PickupFormValues {
+  clientName: string;
+  phoneNumber: string;
+  requested_date: string;
+  pickupAddress: string;
+  status: string;
+  courierAssigned: string;
+  totalWeight: number;
+  parcel_count: number;
+  priority: string;
+}
 
 export default function PickupInformationPage() {
+  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<PickupFormValues>({
+    defaultValues: {
+      clientName: 'Zameen Tech Solutions',
+      phoneNumber: '+92 300 1234567',
+      requested_date: '2024-05-20',
+      pickupAddress: '12-B, Industrial Area Phase 2, Karachi, Pakistan',
+      status: 'scheduled',
+      courierAssigned: 'Ali Ahmed (V-202)',
+      totalWeight: 45.5,
+      parcel_count: 12,
+      priority: 'Express'
+    }
+  });
+
+  const [submitStatus, setSubmitStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
+
+  const onSubmit = async (data: PickupFormValues) => {
+    try {
+      setSubmitStatus('idle');
+      
+      // Map to the actual Strapi schema for CreatePickupRequestRequest
+      const payload = {
+        requested_date: data.requested_date,
+        parcel_count: Number(data.parcel_count),
+        status: data.status,
+        // The rest of the fields from the mockup are currently UI-only as they
+        // do not exist directly on the PickupRequest schema generated types.
+      };
+
+      await apiClient.post('/pickup-requests', { data: payload });
+      setSubmitStatus('success');
+      
+      // Auto hide success message
+      setTimeout(() => setSubmitStatus('idle'), 3000);
+    } catch (error) {
+      console.error('Failed to create pickup request:', error);
+      setSubmitStatus('error');
+    }
+  };
+
   return (
     <PortalLayout>
     <div className="flex-1 p-lg bg-surface-container-low min-h-[calc(100vh-64px)] w-full">
@@ -20,6 +77,21 @@ export default function PickupInformationPage() {
           </button>
         </div>
       </div>
+
+      {submitStatus === 'success' && (
+        <div className="mb-lg bg-emerald-50 text-emerald-800 p-sm border border-emerald-200 rounded-xl flex items-center gap-md">
+          <span className="material-symbols-outlined">check_circle</span>
+          <p className="font-label-md">Pickup request created successfully!</p>
+        </div>
+      )}
+
+      {submitStatus === 'error' && (
+        <div className="mb-lg bg-red-50 text-red-800 p-sm border border-red-200 rounded-xl flex items-center gap-md">
+          <span className="material-symbols-outlined">error</span>
+          <p className="font-label-md">Failed to create pickup request. Please try again.</p>
+        </div>
+      )}
+
       {/* Reference Image Context (Subtle) */}
       <div className="mb-lg bg-white p-sm border border-outline-variant rounded-xl flex items-center gap-md">
         <img alt="Old System UI" className="h-12 w-24 object-cover rounded border border-outline-variant opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsFpaaJ1hFR6LFzkn6mQAnVOuzVHgMl88mcYZjKRBEiZOXXtRB8ccXng6hRaNfws-OnJe6vEdkB8d1A6dSlZX1tEx8kdauL66_VwLYP1IFBKzsMqoQuMMT5wpqUsf4Y-JeK2iqGm3EvSSBeVTWIncb7GZmzJ1J0rBJu1TNS3-i-XB3JKqKJENzQOVoaek06Lr40tBdA4PmEgJatGtt7kBmCSvO9M6KtdOCOJyGribIT5wOIUk6sdW8H4TXAcfmrTJnbQcMFrDopsA" />
@@ -36,29 +108,29 @@ export default function PickupInformationPage() {
           </h3>
           <span className="bg-primary-fixed text-on-primary-fixed px-sm py-1 rounded-full text-label-md">DRAFT #PK-98231</span>
         </div>
-        <form className="p-lg grid grid-cols-12 gap-x-gutter gap-y-md">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-lg grid grid-cols-12 gap-x-gutter gap-y-md">
           {/* Section: Sender Info */}
           <div className="col-span-12 md:col-span-6 grid grid-cols-1 gap-md">
             <h4 className="font-label-md text-primary uppercase tracking-widest border-b border-primary-fixed pb-xs mb-xs">Origin Details</h4>
             <div className="flex flex-col gap-xs">
               <label className="font-label-md text-on-surface-variant">Client Name</label>
-              <input className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="text" defaultValue="Zameen Tech Solutions" />
+              <input {...register('clientName')} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="text" />
             </div>
             <div className="grid grid-cols-2 gap-sm">
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Phone Number</label>
-                <input className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="tel" defaultValue="+92 300 1234567" />
+                <input {...register('phoneNumber')} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="tel" />
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Pickup Date</label>
                 <div className="relative">
-                  <input className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="date" defaultValue="2024-05-20" />
+                  <input {...register('requested_date', { required: true })} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" type="date" />
                 </div>
               </div>
             </div>
             <div className="flex flex-col gap-xs">
               <label className="font-label-md text-on-surface-variant">Pickup Address</label>
-              <textarea className="w-full border border-outline-variant rounded p-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all resize-none" rows={3} defaultValue="12-B, Industrial Area Phase 2, Karachi, Pakistan"></textarea>
+              <textarea {...register('pickupAddress')} className="w-full border border-outline-variant rounded p-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all resize-none" rows={3}></textarea>
             </div>
           </div>
           {/* Section: Logistical Controls */}
@@ -67,7 +139,7 @@ export default function PickupInformationPage() {
             <div className="grid grid-cols-2 gap-sm">
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Status</label>
-                <select className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white appearance-none cursor-pointer" defaultValue="scheduled">
+                <select {...register('status')} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white appearance-none cursor-pointer">
                   <option value="pending">Pending</option>
                   <option value="scheduled">Scheduled</option>
                   <option value="in_transit">In Transit</option>
@@ -77,28 +149,28 @@ export default function PickupInformationPage() {
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Courier Assigned</label>
-                <select className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white" defaultValue="Ali Ahmed (V-202)">
-                  <option>Select Driver</option>
-                  <option>Ali Ahmed (V-202)</option>
-                  <option>Sajid Khan (V-105)</option>
+                <select {...register('courierAssigned')} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all bg-white">
+                  <option value="">Select Driver</option>
+                  <option value="Ali Ahmed (V-202)">Ali Ahmed (V-202)</option>
+                  <option value="Sajid Khan (V-105)">Sajid Khan (V-105)</option>
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-sm">
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Total Weight (kg)</label>
-                <input className="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" defaultValue="45.5" />
+                <input {...register('totalWeight')} className="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" step="0.1" />
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Package Count</label>
-                <input className="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" defaultValue="12" />
+                <input {...register('parcel_count')} className="w-full h-10 border border-outline-variant rounded px-sm font-tabular-nums text-right focus:ring-2 focus:ring-primary outline-none transition-all" type="number" />
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-md text-on-surface-variant">Priority</label>
-                <select className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all" defaultValue="Express">
-                  <option>Standard</option>
-                  <option>Express</option>
-                  <option>Overnight</option>
+                <select {...register('priority')} className="w-full h-10 border border-outline-variant rounded px-sm font-body-md focus:ring-2 focus:ring-primary outline-none transition-all">
+                  <option value="Standard">Standard</option>
+                  <option value="Express">Express</option>
+                  <option value="Overnight">Overnight</option>
                 </select>
               </div>
             </div>
@@ -116,11 +188,23 @@ export default function PickupInformationPage() {
               Cancel Request
             </button>
             <div className="flex gap-sm">
-              <button className="px-lg py-3 border border-outline text-secondary font-semibold rounded hover:bg-surface-container-high transition-all active:scale-95" type="reset">
+              <button 
+                className="px-lg py-3 border border-outline text-secondary font-semibold rounded hover:bg-surface-container-high transition-all active:scale-95" 
+                type="button" 
+                onClick={() => reset()}
+              >
                 Reset Form
               </button>
-              <button className="px-xl py-3 bg-primary-container text-white font-bold rounded shadow-md hover:brightness-110 transition-all active:scale-95 flex items-center gap-sm" type="submit">
-                <span className="material-symbols-outlined">save</span>
+              <button 
+                className="px-xl py-3 bg-primary-container text-white font-bold rounded shadow-md hover:brightness-110 transition-all active:scale-95 flex items-center gap-sm disabled:opacity-70" 
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <span className="material-symbols-outlined animate-spin">refresh</span>
+                ) : (
+                  <span className="material-symbols-outlined">save</span>
+                )}
                 Save Changes
               </button>
             </div>

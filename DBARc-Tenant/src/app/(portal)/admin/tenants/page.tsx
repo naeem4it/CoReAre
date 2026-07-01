@@ -39,6 +39,9 @@ interface Tenant {
     pakistanTaxEngine: boolean;
   };
   createdAt: string;
+  businessName?: string;
+  themePrimaryColor?: string;
+  logo?: any;
 }
 
 interface TenantPlan {
@@ -126,6 +129,7 @@ export default function AdminTenantsPage() {
   // Modals state
   const [isConfigModalOpen, setIsConfigModalOpen] = React.useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
+  const [isStylingModalOpen, setIsStylingModalOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState<Tenant | null>(null);
 
   // Form states for creating/editing
@@ -142,6 +146,11 @@ export default function AdminTenantsPage() {
     doorstepDigitalPay: false,
     pakistanTaxEngine: false
   });
+
+  // UI Branding Form States
+  const [formBusinessName, setFormBusinessName] = React.useState('');
+  const [formThemeColor, setFormThemeColor] = React.useState('#003ec7');
+  const [formLogoFile, setFormLogoFile] = React.useState<File | null>(null);
 
   // Admin Credentials State
   const [formAdminUsername, setFormAdminUsername] = React.useState('');
@@ -182,7 +191,10 @@ export default function AdminTenantsPage() {
           doorstepDigitalPay: false,
           pakistanTaxEngine: false
         },
-        createdAt: new Date(item.attributes.createdAt).toISOString().split('T')[0]
+        createdAt: new Date(item.attributes.createdAt).toISOString().split('T')[0],
+        businessName: item.attributes.business_name || '',
+        themePrimaryColor: item.attributes.theme_primary_color || '#003ec7',
+        logo: item.attributes.logo?.data || null,
       }));
       setTenants(fetchedTenants);
     } catch (err) {
@@ -201,6 +213,14 @@ export default function AdminTenantsPage() {
     setFormStatus(tenant.status);
     setFormFeatures({ ...tenant.features });
     setIsConfigModalOpen(true);
+  };
+
+  const handleOpenStylingConfig = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setFormBusinessName(tenant.businessName || tenant.name);
+    setFormThemeColor(tenant.themePrimaryColor || '#003ec7');
+    setFormLogoFile(null);
+    setIsStylingModalOpen(true);
   };
 
   const handleOpenCreate = () => {
@@ -258,6 +278,39 @@ export default function AdminTenantsPage() {
     } catch (err: any) {
       console.error('Failed to update tenant configuration', err);
       alert(err.response?.data?.error?.message || 'Failed to update configurations');
+    }
+  };
+
+  const handleSaveStyling = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenant) return;
+    setIsSubmitting(true);
+    try {
+      let logoId = null;
+      if (formLogoFile) {
+        const formData = new FormData();
+        formData.append('files', formLogoFile);
+        const uploadRes = await apiClient.post('/upload', formData);
+        logoId = uploadRes.data[0].id;
+      }
+      
+      const payload: any = {
+        business_name: formBusinessName,
+        theme_primary_color: formThemeColor,
+      };
+      if (logoId) {
+        payload.logo = logoId;
+      }
+
+      await apiClient.put(`/tenant/update/${selectedTenant.id}`, payload);
+      await fetchTenants();
+      setIsStylingModalOpen(false);
+      setSelectedTenant(null);
+    } catch (err: any) {
+      console.error('Failed to update styling configuration', err);
+      alert(err.response?.data?.error?.message || 'Failed to update styling configurations');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -487,6 +540,14 @@ export default function AdminTenantsPage() {
                         >
                           <Settings2 className="h-3.5 w-3.5" /> Configure
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenStylingConfig(tenant)}
+                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                        >
+                          <Globe className="h-3.5 w-3.5" /> Configure UI
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -704,6 +765,66 @@ export default function AdminTenantsPage() {
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Provisioning...' : 'Provision Workspace'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 3: STYLING TENANT */}
+      <Modal 
+        isOpen={isStylingModalOpen} 
+        onClose={() => setIsStylingModalOpen(false)} 
+        title="Configure Tenant UI Branding"
+        size="md"
+      >
+        <form onSubmit={handleSaveStyling} className="space-y-6">
+          <Input
+            label="Business Name (Display Name)"
+            placeholder="e.g. Velocity Courier"
+            value={formBusinessName}
+            onChange={(e) => setFormBusinessName(e.target.value)}
+            required
+          />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">Theme Primary Color</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={formThemeColor}
+                onChange={(e) => setFormThemeColor(e.target.value)}
+                className="h-10 w-16 p-1 rounded border border-slate-200 cursor-pointer"
+              />
+              <Input
+                placeholder="#003ec7"
+                value={formThemeColor}
+                onChange={(e) => setFormThemeColor(e.target.value)}
+                className="flex-1"
+                required
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">Tenant Logo</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  setFormLogoFile(e.target.files[0]);
+                }
+              }}
+              className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+            />
+            {selectedTenant?.logo && !formLogoFile && (
+              <p className="text-xs text-slate-500 mt-2">Current logo is uploaded. Selecting a new file will replace it.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button type="button" variant="outline" onClick={() => setIsStylingModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : 'Save Branding'}
             </Button>
           </div>
         </form>

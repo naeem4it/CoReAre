@@ -760,14 +760,12 @@ function BookShipmentForm() {
     <PortalLayout>
       <div className="max-w-[1280px] mx-auto space-y-lg relative">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
+        <div className="flex items-center justify-between mb-xl">
           <div>
-            <nav className="flex items-center gap-1.5 text-xs font-semibold text-[#003ec7] mb-1">
-              <Link href="/shipments" className="hover:underline transition-all">
-                Shipments
-              </Link>
-              <ChevronRight className="h-3 w-3 text-outline" />
-              <span className="text-on-surface-variant">Book Shipment</span>
+            <nav className="flex gap-xs text-label-md font-label-md text-on-surface-variant mb-xs">
+              <Link href="/shipments" className="hover:text-primary transition-colors cursor-pointer">Shipments</Link>
+              <span>/</span>
+              <span className="text-on-surface">Book Shipment</span>
             </nav>
             <h1 className="font-display-lg text-display-lg text-on-surface">Book New Shipment</h1>
           </div>
@@ -871,9 +869,9 @@ function BookShipmentForm() {
         )}
 
         {/* Main Grid Section */}
-        <div className="grid grid-cols-12 gap-6">
+        <div className="grid grid-cols-12 gap-lg">
           {/* Left Column: Form Canvas or Bulk Uploader */}
-          <div className="col-span-12 lg:col-span-8 space-y-6">
+          <div className="col-span-12 lg:col-span-8 space-y-lg">
             {/* Mode Switch Tabs */}
             <div className="bg-surface-container-high p-1.5 rounded-2xl flex w-fit gap-1 border border-outline-variant">
               <button
@@ -903,18 +901,18 @@ function BookShipmentForm() {
               <FormProvider {...methods}>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                   {/* Section 1: Consignee Details */}
-                  <section className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-6">
-                    <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                      <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                        <User className="h-5 w-5" />
+                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined">person</span>
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-on-surface">Consignee Detail</h2>
-                        <p className="text-xs text-on-surface-variant font-medium">Recipient&apos;s contact and delivery information</p>
+                        <h2 className="font-headline-md text-headline-md">Consignee Detail</h2>
+                        <p className="font-body-md text-body-md text-on-surface-variant">Recipient&apos;s contact and delivery information</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
                       <TextBox<BookingFormValues>
                         name="consigneeName"
                         label="Full Name *"
@@ -980,18 +978,18 @@ function BookShipmentForm() {
                   </section>
 
                   {/* Section 2: Shipment Detail */}
-                  <section className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-6">
-                    <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                      <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                        <Package className="h-5 w-5" />
+                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined">inventory_2</span>
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-on-surface">Shipment Detail</h2>
-                        <p className="text-xs text-on-surface-variant font-medium">Package weight, contents, and value</p>
+                        <h2 className="font-headline-md text-headline-md">Shipment Detail</h2>
+                        <p className="font-body-md text-body-md text-on-surface-variant">Package weight, contents, and value</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
                       <TextBox<BookingFormValues>
                         name="weight"
                         label="Weight (kg) *"
@@ -1048,18 +1046,18 @@ function BookShipmentForm() {
                   </section>
 
                   {/* Section 3: Collection Detail */}
-                  <section className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-6">
-                    <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                      <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                        <Truck className="h-5 w-5" />
+                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined">local_shipping</span>
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-on-surface">Collection Detail</h2>
-                        <p className="text-xs text-on-surface-variant font-medium">Pickup timing and special instructions</p>
+                        <h2 className="font-headline-md text-headline-md">Collection Detail</h2>
+                        <p className="font-body-md text-body-md text-on-surface-variant">Pickup timing and special instructions</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
                       <TextBox<BookingFormValues>
                         name="pickupDate"
                         label="Pickup Date"
@@ -1090,18 +1088,18 @@ function BookShipmentForm() {
                   </section>
 
                   {/* Section 4: Replacement / Collection Detail */}
-                  <section className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-6">
-                    <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                      <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                        <RefreshCw className="h-5 w-5" />
+                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined">autorenew</span>
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-on-surface">Replacement / Collection Detail</h2>
-                        <p className="text-xs text-on-surface-variant font-medium">Record returns and exchange collections</p>
+                        <h2 className="font-headline-md text-headline-md">Replacement / Collection Detail</h2>
+                        <p className="font-body-md text-body-md text-on-surface-variant">Record returns and exchange collections</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
                       <div className="space-y-1.5 relative group flex flex-col w-full">
                         <div className="flex justify-between items-center mb-1">
                           <label className="text-[12px] font-bold text-on-surface-variant">Reference No (Old Booking)</label>
@@ -1176,16 +1174,16 @@ function BookShipmentForm() {
               </FormProvider>
             ) : (
               /* Bulk Upload Uploader Canvas & Grid */
-              <div className="space-y-6">
+              <div className="space-y-lg">
                 {/* Uploader Card */}
-                <div className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-6">
-                  <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                      <UploadCloud className="h-5 w-5" />
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
+                  <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
+                    <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined">upload_file</span>
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-on-surface">Bulk Shipment Upload</h2>
-                      <p className="text-xs text-on-surface-variant font-medium">Book hundreds of shipments concurrently via spreadsheet</p>
+                      <h2 className="font-headline-md text-headline-md">Bulk Shipment Upload</h2>
+                      <p className="font-body-md text-body-md text-on-surface-variant">Book hundreds of shipments concurrently via spreadsheet</p>
                     </div>
                   </div>
 
@@ -1304,11 +1302,11 @@ function BookShipmentForm() {
 
                 {/* INTERACTIVE EDITABLE GRID (Only visible when file is loaded) */}
                 {parsedRows.length > 0 && (
-                  <div className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant pb-md">
                       <div>
-                        <h3 className="text-base font-bold text-on-surface">Loaded Shipments Grid</h3>
-                        <p className="text-xs text-outline font-medium mt-0.5">Edit rows to correct error highlights before booking</p>
+                        <h3 className="font-headline-md text-headline-md">Loaded Shipments Grid</h3>
+                        <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">Edit rows to correct error highlights before booking</p>
                       </div>
 
                       {gridHasErrors && (
@@ -1522,8 +1520,8 @@ function BookShipmentForm() {
                 )}
 
                 {/* Upload History Section */}
-                <div className="bg-white border border-outline-variant rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold text-on-surface">Recent Upload Activity</h3>
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
+                  <h3 className="font-headline-md text-headline-md">Recent Upload Activity</h3>
                   <div className="divide-y divide-outline-variant">
                     {uploadHistory.map((item) => (
                       <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
@@ -1564,53 +1562,53 @@ function BookShipmentForm() {
           </div>
 
           {/* Right Column: Live Quote Card, Bento, and Alerts */}
-          <div className="col-span-12 lg:col-span-4 space-y-6">
+          <div className="col-span-12 lg:col-span-4 space-y-lg">
             {/* Visual Anchor Image */}
-            <div className="rounded-2xl overflow-hidden border border-outline-variant shadow-sm h-48 relative group">
+            <div className="rounded-xl overflow-hidden border border-outline-variant shadow-sm h-48 relative group">
               <img 
                 alt="Fly Courier Dashboard Overview" 
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuCso3PSLKmhfWtz_0bE_k1jKISWASyYG_trC5Meib2KR22S3asUQMdzdsqT_MQHhLRhuIJ_4BovlNzry9o2vwBDrotvIgIJfl2mc0DnQsvxVYTtckFLOzoAVRGj2rdUaRjtQL1eQMZyAOrfZ2FByat4DsDvFhncMl4G1pfu2_tC6jDpBetNsNVC3xWT-2dRceBU07IMQr1wmsyF2zGlVHh4V9NsiM9lMzR27NOhJpP2HacGcpd2oD179mMPZgSBmNy2hX5uEpv8YOw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 to-transparent flex items-end p-4">
-                <p className="text-white text-xs font-bold">Current Logistics Performance Dashboard</p>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-md">
+                <p className="text-white font-label-md text-label-md">Current Logistics Performance Dashboard</p>
               </div>
             </div>
 
             {/* Dynamic Card based on mode */}
             {bookingMode === 'manual' ? (
               /* Live Quote Card (Manual Mode) */
-              <div className="bg-primary text-white rounded-2xl p-6 shadow-md space-y-4 animate-in fade-in duration-300">
-                <h3 className="font-bold text-lg flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
+              <div className="bg-primary text-on-primary rounded-xl p-md shadow-lg animate-in fade-in duration-300">
+                <h3 className="font-headline-md text-headline-md mb-md flex items-center gap-xs">
+                  <span className="material-symbols-outlined">payments</span>
                   Estimated Cost
                 </h3>
                 
-                <div className="space-y-2.5 text-sm">
-                  <div className="flex justify-between items-center opacity-85">
-                    <span>Base Rate</span>
-                    <span className="font-mono">PKR {pricing.baseRate.toFixed(2)}</span>
+                <div className="space-y-sm mb-lg">
+                  <div className="flex justify-between items-center opacity-80">
+                    <span className="font-body-md text-body-md">Base Rate</span>
+                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.baseRate.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between items-center opacity-85">
-                    <span>Fuel Surcharge</span>
-                    <span className="font-mono">PKR {pricing.surcharge.toFixed(2)}</span>
+                  <div className="flex justify-between items-center opacity-80">
+                    <span className="font-body-md text-body-md">Fuel Surcharge</span>
+                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.surcharge.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between items-center opacity-85 border-b border-white/20 pb-3">
-                    <span>GST (17%)</span>
-                    <span className="font-mono">PKR {pricing.gst.toFixed(2)}</span>
+                  <div className="flex justify-between items-center opacity-80 border-b border-white/20 pb-sm">
+                    <span className="font-body-md text-body-md">GST (17%)</span>
+                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.gst.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between items-center pt-1">
-                    <span className="font-bold text-base">Total</span>
-                    <span className="font-bold text-2xl tracking-tight font-mono">PKR {pricing.total.toFixed(2)}</span>
+                  <div className="flex justify-between items-center pt-xs">
+                    <span className="font-headline-md text-headline-md">Total</span>
+                    <span className="font-display-lg text-display-lg tracking-tight">PKR {pricing.total.toFixed(2)}</span>
                   </div>
                 </div>
-                <p className="text-[10px] uppercase tracking-wider opacity-60 text-center font-semibold">Final price calculated at warehouse</p>
+                <p className="font-label-md text-[10px] uppercase tracking-widest opacity-60 text-center">Final price calculated at warehouse</p>
               </div>
             ) : (
               /* Bulk Information Card (Bulk Mode) */
-              <div className="bg-primary text-white rounded-2xl p-6 shadow-md space-y-4 animate-in fade-in duration-300">
-                <h3 className="font-bold text-lg flex items-center gap-2">
-                  <FileSpreadsheet className="h-5 w-5" />
+              <div className="bg-primary text-on-primary rounded-xl p-md shadow-lg animate-in fade-in duration-300">
+                <h3 className="font-headline-md text-headline-md mb-md flex items-center gap-xs">
+                  <span className="material-symbols-outlined">file_present</span>
                   Bulk Summary
                 </h3>
                 <div className="space-y-3 text-xs leading-relaxed">
@@ -1628,44 +1626,46 @@ function BookShipmentForm() {
             )}
 
             {/* Helpful Tips Bento / Quick Actions */}
-            <div className="bg-surface-container-high rounded-2xl p-6 space-y-4 border border-outline-variant">
-              <h4 className="text-xs text-primary font-extrabold uppercase tracking-wider">Quick Actions</h4>
+            <div className="bg-surface-container-low rounded-xl p-md border border-outline-variant">
+              <h4 className="font-label-md text-label-md text-primary mb-md">Quick Actions</h4>
               
-              <button 
-                type="button"
-                onClick={autofillRecent}
-                className="w-full p-4 bg-white rounded-xl border border-outline-variant flex items-center gap-3 hover:border-primary transition-all text-left shadow-sm active:scale-[0.98] group cursor-pointer"
-              >
-                <History className="h-5 w-5 text-primary shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-on-surface">Recent Recipients</p>
-                  <p className="text-[10px] text-outline mt-0.5">Autofill form from past bookings</p>
-                </div>
-              </button>
-              
-              <button 
-                type="button"
-                onClick={() => setBookingMode('bulk')}
-                className="w-full p-4 bg-white rounded-xl border border-outline-variant flex items-center gap-3 hover:border-primary transition-all text-left shadow-sm active:scale-[0.98] group cursor-pointer"
-              >
-                <UploadCloud className="h-5 w-5 text-primary shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-on-surface">Upload Shipments</p>
-                  <p className="text-[10px] text-outline mt-0.5">Switch to spreadsheet import view</p>
-                </div>
-              </button>
-              
-              <button 
-                type="button"
-                onClick={downloadTemplate}
-                className="w-full p-4 bg-white rounded-xl border border-outline-variant flex items-center gap-3 hover:border-primary transition-all text-left shadow-sm active:scale-[0.98] group cursor-pointer"
-              >
-                <FileDown className="h-5 w-5 text-primary shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-on-surface">Download Template</p>
-                  <p className="text-[10px] text-outline mt-0.5">Get blank template CSV sheet</p>
-                </div>
-              </button>
+              <div className="space-y-xs">
+                <button 
+                  type="button"
+                  onClick={autofillRecent}
+                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-primary">history</span>
+                  <div>
+                    <p className="font-label-md text-label-md text-on-surface">Recent Recipients</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">Autofill form from past bookings</p>
+                  </div>
+                </button>
+                
+                <button 
+                  type="button"
+                  onClick={() => setBookingMode('bulk')}
+                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-primary">upload_file</span>
+                  <div>
+                    <p className="font-label-md text-label-md text-on-surface">Upload Shipments</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">Switch to spreadsheet view</p>
+                  </div>
+                </button>
+                
+                <button 
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-primary">download</span>
+                  <div>
+                    <p className="font-label-md text-label-md text-on-surface">Download Template</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">Get blank template CSV</p>
+                  </div>
+                </button>
+              </div>
             </div>
 
             {/* Info Alert */}

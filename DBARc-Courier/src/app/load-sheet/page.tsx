@@ -1,6 +1,57 @@
+'use client';
+
+import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import { apiClient } from '@/shared/api/api-client';
+import { LoadSheet } from '@/types/generated/load-sheet.types';
 
 export default function LoadSheetPage() {
+  const [loadSheets, setLoadSheets] = React.useState<LoadSheet[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  
+  // Filter states
+  const [statusFilter, setStatusFilter] = React.useState('');
+  
+  const fetchLoadSheets = async () => {
+    try {
+      setLoading(true);
+      const params: any = {
+        populate: ['origin_hub', 'parcels'],
+        sort: ['createdAt:desc']
+      };
+      
+      if (statusFilter && statusFilter !== 'All Statuses') {
+        params.filters = { status: { $eq: statusFilter } };
+      }
+      
+      const response = await apiClient.get('/load-sheets', { params });
+      setLoadSheets(response.data?.data || []);
+    } catch (error) {
+      console.error('Failed to fetch load sheets:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchLoadSheets();
+  }, [statusFilter]);
+
+  const getStatusBadgeColors = (status?: string) => {
+    switch (status) {
+      case 'Delivered':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'Dispatched':
+        return 'bg-green-100 text-green-700 border-green-200';
+      case 'Pending':
+        return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'On-Route':
+        return 'bg-blue-100 text-blue-700 border-blue-200';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
   return (
     <PortalLayout>
     <div className="p-lg max-w-[1280px] mx-auto w-full flex flex-col gap-lg">
@@ -40,15 +91,23 @@ export default function LoadSheetPage() {
         </div>
         <div className="flex flex-col gap-xs">
           <label className="font-label-md text-label-md text-outline">Sheet Status</label>
-          <select className="w-full px-sm py-xs bg-surface-container-low border border-outline-variant rounded font-body-md text-body-md focus:ring-primary focus:border-primary">
-            <option>All Statuses</option>
-            <option>Pending</option>
-            <option>Dispatched</option>
-            <option>Delivered</option>
+          <select 
+            className="w-full px-sm py-xs bg-surface-container-low border border-outline-variant rounded font-body-md text-body-md focus:ring-primary focus:border-primary"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="All Statuses">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Dispatched">Dispatched</option>
+            <option value="On-Route">On-Route</option>
+            <option value="Delivered">Delivered</option>
           </select>
         </div>
         <div className="flex items-end">
-          <button className="w-full py-xs bg-secondary text-on-secondary font-label-md text-label-md rounded hover:bg-on-secondary-fixed-variant transition-colors flex items-center justify-center gap-xs h-[40px]">
+          <button 
+            onClick={fetchLoadSheets}
+            className="w-full py-xs bg-secondary text-on-secondary font-label-md text-label-md rounded hover:bg-on-secondary-fixed-variant transition-colors flex items-center justify-center gap-xs h-[40px]"
+          >
             <span className="material-symbols-outlined text-[18px]">search</span>
             Search Sheets
           </button>
@@ -69,84 +128,69 @@ export default function LoadSheetPage() {
         <div className="p-md border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
           <h4 className="font-headline-md text-headline-md text-on-surface">Recent Load Sheets</h4>
           <div className="flex items-center gap-sm">
-            <span className="text-label-md font-label-md text-outline">Showing 1-10 of 124</span>
+            <span className="text-label-md font-label-md text-outline">
+              Showing {loadSheets.length} sheet{loadSheets.length !== 1 ? 's' : ''}
+            </span>
             <div className="flex border border-outline-variant rounded overflow-hidden">
-              <button className="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors border-r border-outline-variant">
+              <button className="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors border-r border-outline-variant disabled:opacity-50">
                 <span className="material-symbols-outlined text-[18px]">chevron_left</span>
               </button>
-              <button className="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors">
+              <button className="px-xs py-xs bg-surface-container-high hover:bg-outline-variant transition-colors disabled:opacity-50">
                 <span className="material-symbols-outlined text-[18px]">chevron_right</span>
               </button>
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-surface-container border-b border-outline-variant">
-              <tr>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Sheet ID</th>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Date Created</th>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Origin Station</th>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Total Shipments</th>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Status</th>
-                <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant">
-              <tr className="data-table-row transition-colors hover:bg-[#f8fafc]">
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8891</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Oct 24, 2024</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Karachi Central Hub</td>
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">42 Units</td>
-                <td className="px-md py-md">
-                  <span className="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-green-100 text-green-700 border border-green-200">Dispatched</span>
-                </td>
-                <td className="px-md py-md text-right">
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
-                </td>
-              </tr>
-              <tr className="data-table-row transition-colors hover:bg-[#f8fafc]">
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8892</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Oct 24, 2024</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Lahore North</td>
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">18 Units</td>
-                <td className="px-md py-md">
-                  <span className="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-orange-100 text-orange-700 border border-orange-200">Pending</span>
-                </td>
-                <td className="px-md py-md text-right">
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
-                </td>
-              </tr>
-              <tr className="data-table-row transition-colors hover:bg-[#f8fafc]">
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8893</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Oct 23, 2024</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Islamabad HQ</td>
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">65 Units</td>
-                <td className="px-md py-md">
-                  <span className="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-green-100 text-green-700 border border-green-200">Dispatched</span>
-                </td>
-                <td className="px-md py-md text-right">
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
-                </td>
-              </tr>
-              <tr className="data-table-row transition-colors hover:bg-[#f8fafc]">
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">LS-2024-8894</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Oct 23, 2024</td>
-                <td className="px-md py-md font-body-md text-body-md text-on-surface">Quetta Hub</td>
-                <td className="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">12 Units</td>
-                <td className="px-md py-md">
-                  <span className="inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md bg-blue-100 text-blue-700 border border-blue-200">On-Route</span>
-                </td>
-                <td className="px-md py-md text-right">
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
-                  <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="overflow-x-auto min-h-[300px]">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-[200px] text-outline">
+              <span className="material-symbols-outlined animate-spin text-[32px] mb-2">refresh</span>
+              <p>Loading load sheets...</p>
+            </div>
+          ) : loadSheets.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[200px] text-outline">
+              <span className="material-symbols-outlined text-[32px] mb-2">inbox</span>
+              <p>No load sheets found</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-surface-container border-b border-outline-variant">
+                <tr>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Sheet ID</th>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Date Created</th>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Origin Station</th>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Total Shipments</th>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Status</th>
+                  <th className="px-md py-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant">
+                {loadSheets.map((sheet) => (
+                  <tr key={sheet.id} className="data-table-row transition-colors hover:bg-[#f8fafc]">
+                    <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-bold">{sheet.sheet_id || `LS-${sheet.id}`}</td>
+                    <td className="px-md py-md font-body-md text-body-md text-on-surface">
+                      {sheet.date_created ? new Date(sheet.date_created).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="px-md py-md font-body-md text-body-md text-on-surface">
+                      {sheet.origin_hub?.name || 'N/A'}
+                    </td>
+                    <td className="px-md py-md font-tabular-nums text-tabular-nums text-on-surface">
+                      {sheet.parcels?.length || 0} Units
+                    </td>
+                    <td className="px-md py-md">
+                      <span className={`inline-flex items-center px-sm py-0.5 rounded-full text-label-md font-label-md border ${getStatusBadgeColors(sheet.status)}`}>
+                        {sheet.status || 'Pending'}
+                      </span>
+                    </td>
+                    <td className="px-md py-md text-right">
+                      <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">visibility</button>
+                      <button className="material-symbols-outlined text-outline hover:text-primary transition-colors p-xs">print</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

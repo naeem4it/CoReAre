@@ -49,10 +49,16 @@
   --color-surface-variant: #e0e3e5;
   --color-on-primary-fixed: #001452;
   --color-surface-container-lowest: #ffffff;
-  --color-primary-container: #0052ff;
-  --color-tertiary-fixed-dim: #b7c8e1;
-  --color-primary: #003ec7;
-  --color-secondary: #565e74;
+  /* Tenant Dynamic Variables (Fallback defaults) */
+  --tenant-primary: #003ec7;
+  --tenant-secondary: #565e74;
+
+  --color-primary: var(--tenant-primary);
+  --color-surface-tint: var(--tenant-primary);
+  --color-primary-container: color-mix(in srgb, var(--tenant-primary) 15%, #ffffff);
+  --color-secondary: var(--tenant-secondary);
+  --color-secondary-container: color-mix(in srgb, var(--tenant-secondary) 15%, #ffffff);
+
   /* Exact value from design template */
   --color-inverse-surface: #2d3133;
   --color-on-primary-fixed-variant: #0038b6;

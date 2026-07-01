@@ -13,6 +13,7 @@ import { AuthService } from '@/services/api';
 import { LoginRequest, LoginResponse } from '@/types/auth.types';
 import { StrapiErrorResponse } from '@/types/strapi.types';
 import { TextBox } from '@/components/ui/form/text-box';
+import { useTenant } from '@/components/TenantProvider';
 
 const loginSchema = z.object({
   identifier: z.string().email('Please enter a valid business email address'),
@@ -24,6 +25,7 @@ export default function LoginPage() {
   const [remember, setRemember] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const { businessName, logoUrl } = useTenant();
 
   const methods = useForm<LoginRequest>({
     resolver: zodResolver(loginSchema),
@@ -96,7 +98,7 @@ export default function LoginPage() {
           {/* Brand Anchor */}
           <div>
             <h1 className="font-headline-lg text-headline-lg font-bold text-white tracking-tight">
-              LogisticsMastery
+              {businessName}
             </h1>
           </div>
           {/* Messaging Content */}
@@ -105,7 +107,7 @@ export default function LoginPage() {
               Precision in Motion. Global in Scale.
             </h2>
             <p className="font-body-lg text-body-lg text-primary-fixed opacity-90 leading-relaxed">
-              Access Fly Courier's high-performance terminal. Manage fleet analytics, real-time shipment tracking, and compliance workflows from a single unified command center.
+              Access {businessName}'s high-performance terminal. Manage fleet analytics, real-time shipment tracking, and compliance workflows from a single unified command center.
             </p>
             <div className="mt-lg flex gap-md">
               <div className="flex flex-col">
@@ -122,7 +124,7 @@ export default function LoginPage() {
           {/* Footer Text */}
           <div>
             <p className="font-label-md text-label-md text-primary-fixed opacity-60">
-              © 2024 LogisticsMastery. All rights reserved. Precision in Motion.
+              © 2024 {businessName}. All rights reserved. Precision in Motion.
             </p>
           </div>
         </div>
@@ -133,12 +135,16 @@ export default function LoginPage() {
         <div className="w-full max-w-[440px] flex flex-col">
           {/* Mobile Branding (Logo only visible on mobile) */}
           <div className="lg:hidden mb-lg flex justify-center">
-            <span className="font-headline-lg text-headline-lg font-bold text-primary">LogisticsMastery</span>
+            {logoUrl ? (
+              <img src={logoUrl} alt={businessName} className="h-10 object-contain" />
+            ) : (
+              <span className="font-headline-lg text-headline-lg font-bold text-primary">{businessName}</span>
+            )}
           </div>
           {/* Header */}
           <div className="mb-lg">
             <h3 className="font-headline-lg text-headline-lg text-on-surface mb-xs">Sign In</h3>
-            <p className="font-body-md text-body-md text-on-surface-variant">Enter your credentials to access the Fly Courier dashboard.</p>
+            <p className="font-body-md text-body-md text-on-surface-variant">Enter your credentials to access the {businessName} dashboard.</p>
           </div>
 
           {/* Error Message */}

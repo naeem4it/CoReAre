@@ -13,7 +13,7 @@ export default function DashboardPage() {
   return (
     <PortalLayout>
       {/* Page Header & Filters */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between mb-lg gap-md animate-in fade-in duration-200">
+      <header className="flex flex-col md:flex-row md:items-center justify-between mb-lg gap-md">
         <div>
           <h1 className="font-display-lg text-display-lg text-on-surface">Logistics Mastery</h1>
           <p className="text-on-surface-variant font-body-md text-body-md">Real-time oversight of global operations</p>

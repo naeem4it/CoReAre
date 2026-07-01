@@ -1802,6 +1802,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.Text;
+    business_name: Schema.Attribute.String;
     commissionPct: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<2>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1818,6 +1819,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       'api::tenant.tenant'
     > &
       Schema.Attribute.Private;
+    logo: Schema.Attribute.Media<'images'>;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
     plan: Schema.Attribute.String;
@@ -1831,6 +1833,8 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::tenant-plan.tenant-plan'
     >;
+    theme_primary_color: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'#003ec7'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

@@ -12,6 +12,19 @@
   },
   "pluginOptions": {},
   "attributes": {
+    "business_name": {
+      "type": "string"
+    },
+    "theme_primary_color": {
+      "type": "string",
+      "default": "#003ec7"
+    },
+    "logo": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
     "name": {
       "type": "string",
       "required": true

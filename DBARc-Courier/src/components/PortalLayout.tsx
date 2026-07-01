@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
+import { useTenant } from '@/components/TenantProvider';
 import { ChevronDown, Building2, MapPin } from 'lucide-react';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -12,13 +13,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const { user, activeBusinessId, activeOfficeId, setActiveBusinessId, setActiveOfficeId, refreshUser } = useAuth();
+  const { businessName, logoUrl } = useTenant();
 
   React.useEffect(() => {
     const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
     if (!token) {
       router.push('/login');
     } else {
-      apiClient.get('/users/me?populate=shipper,offices,role_definition')
+      apiClient.get('/users/me?populate=shipper,offices,role_definition,tenant.logo')
         .then((res) => {
           localStorage.setItem('user', JSON.stringify(res.data));
           refreshUser();
@@ -67,7 +69,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <header className="bg-surface-container-lowest dark:bg-surface-dim h-[64px] w-full sticky top-0 z-50 border-b border-outline-variant dark:border-outline shadow-sm dark:shadow-none">
         <div className="flex items-center justify-between px-lg w-full max-w-[1280px] mx-auto h-full gap-md">
           <div className="flex items-center gap-md">
-            <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Fly Courier</span>
+            {logoUrl ? (
+              <img src={logoUrl} alt={businessName} className="h-8 object-contain" />
+            ) : (
+              <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">{businessName}</span>
+            )}
             <nav className="hidden md:flex items-center gap-md ml-lg">
               <Link
                 href="/"
