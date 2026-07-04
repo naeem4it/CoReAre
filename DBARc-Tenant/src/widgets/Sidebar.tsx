@@ -102,12 +102,21 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
 export const Sidebar = ({ role }: { role: UserRole }) => {
   const pathname = usePathname();
   const menuItems = MENU_CONFIG[role] || MENU_CONFIG.DEFAULT;
-  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
+  const [openMenu, setOpenMenu] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const activeParent = menuItems.find(item => item.children?.some(child => pathname === child.href));
+    if (activeParent) {
+      setOpenMenu(activeParent.href);
+    } else {
+      setOpenMenu(null);
+    }
+  }, [pathname, menuItems]);
 
   const renderNavItem = (item: NavItem) => {
     const isActive = pathname === item.href;
     const hasChildren = Boolean(item.children?.length);
-    const isOpen = hasChildren && (openMenus[item.href] ?? item.children?.some((child) => pathname === child.href));
+    const isOpen = hasChildren && openMenu === item.href;
 
     return (
       <div key={item.href} className="space-y-1">
@@ -131,7 +140,10 @@ export const Sidebar = ({ role }: { role: UserRole }) => {
           {hasChildren ? (
             <button
               type="button"
-              onClick={() => setOpenMenus((prev) => ({ ...prev, [item.href]: !prev[item.href] }))}
+              onClick={(e) => {
+                e.preventDefault();
+                setOpenMenu(openMenu === item.href ? null : item.href);
+              }}
               className={cn(
                 'inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200',
                 isOpen ? 'bg-white/10 text-white hover:bg-white/15' : 'text-slate-400 hover:bg-white/5 hover:text-white'

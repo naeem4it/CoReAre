@@ -288,6 +288,23 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   const searchParams = useSearchParams();
   const tab = searchParams?.get('tab');
   const { user } = useAuth();
+  const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (pathname.startsWith('/reports') || pathname.startsWith('/invoices')) {
+      setExpandedMenu('reports');
+    } else if (pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
+      setExpandedMenu('interfaces');
+    } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment')) {
+      setExpandedMenu('shipment');
+    } else if (pathname.startsWith('/administration')) {
+      setExpandedMenu('admin');
+    }
+  }, [pathname]);
+
+  const toggleMenu = (menu: string) => {
+    setExpandedMenu(expandedMenu === menu ? null : menu);
+  };
 
   const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
 
@@ -314,59 +331,68 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
     <nav className="flex flex-col gap-1">
       <NavLink href="/" icon="dashboard" label="Overview" />
       <NavLink href="/pickup-information" icon="local_mall" label="Pickup Information" />
-
-      {showShipmentBooking && (
-        <NavLink href="/shipments/book" icon="local_shipping" label="Booking" />
-      )}
-      
-      <NavLink href="/shipments" icon="list_alt" label="Shipments List" />
       
       <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
         <span className="material-symbols-outlined">location_on</span>
         <span className="font-label-md text-label-md">Tracking</span>
       </a>
       
-      <NavLink href="/load-sheet" icon="inventory_2" label="Load Sheets" />
       <NavLink href="/shipper-advise" icon="quick_reference_all" label="Shipper Advise" />
       
       {/* Reports Section */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
-          <span className="material-symbols-outlined">bar_chart</span>
-          <span className="font-label-md text-label-md">Reports & Invoices</span>
-        </div>
-        <div className="pl-4 flex flex-col gap-0.5">
-          <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
-          <NavLink href="/reports/dispatch" icon="local_shipping" label="Dispatch Report" />
-          <NavLink href="/reports/monthly-invoice" icon="receipt_long" label="Monthly Invoice" />
-          <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoice" />
-        </div>
+        <button onClick={() => toggleMenu('reports')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+          <div className="flex items-center gap-md">
+            <span className="material-symbols-outlined">bar_chart</span>
+            <span className="font-label-md text-label-md">Reports & Invoices</span>
+          </div>
+          <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'reports' ? 'rotate(180deg)' : '' }}>expand_more</span>
+        </button>
+        {expandedMenu === 'reports' && (
+          <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+            <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
+            <NavLink href="/reports/dispatch" icon="local_shipping" label="Dispatch Report" />
+            <NavLink href="/reports/monthly-invoice" icon="receipt_long" label="Monthly Invoice" />
+            <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoice" />
+          </div>
+        )}
       </div>
       
       {/* External / Other Designs Section */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
-          <span className="material-symbols-outlined">layers</span>
-          <span className="font-label-md text-label-md">Other Interfaces</span>
-        </div>
-        <div className="pl-4 flex flex-col gap-0.5">
-          <NavLink href="/stitch-unified" icon="integration_instructions" label="Stitch Unified" />
-          <NavLink href="/velocity-corporate" icon="corporate_fare" label="Velocity Corporate" />
-        </div>
+        <button onClick={() => toggleMenu('interfaces')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+          <div className="flex items-center gap-md">
+            <span className="material-symbols-outlined">layers</span>
+            <span className="font-label-md text-label-md">Other Interfaces</span>
+          </div>
+          <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'interfaces' ? 'rotate(180deg)' : '' }}>expand_more</span>
+        </button>
+        {expandedMenu === 'interfaces' && (
+          <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+            <NavLink href="/stitch-unified" icon="integration_instructions" label="Stitch Unified" />
+            <NavLink href="/velocity-corporate" icon="corporate_fare" label="Velocity Corporate" />
+          </div>
+        )}
       </div>
 
-      {/* V2 Redesigns Section */}
+      {/* Shipment\Order Section */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
-          <span className="material-symbols-outlined">design_services</span>
-          <span className="font-label-md text-label-md">V2 Redesigns</span>
-        </div>
-        <div className="pl-4 flex flex-col gap-0.5">
-          <NavLink href="/redesigns/pickup-information" icon="local_mall" label="Pickup Information" />
-          <NavLink href="/redesigns/shipments/book" icon="local_shipping" label="Book Shipment" />
-          <NavLink href="/redesigns/shipments/list" icon="list_alt" label="Shipments List" />
-          <NavLink href="/redesigns/load-sheet" icon="inventory_2" label="Load Sheet" />
-        </div>
+        <button onClick={() => toggleMenu('shipment')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+          <div className="flex items-center gap-md">
+            <span className="material-symbols-outlined">design_services</span>
+            <span className="font-label-md text-label-md">Shipment\Order</span>
+          </div>
+          <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'shipment' ? 'rotate(180deg)' : '' }}>expand_more</span>
+        </button>
+        {expandedMenu === 'shipment' && (
+          <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+            {showShipmentBooking && (
+              <NavLink href="/shipments/book" icon="local_shipping" label="Book Shipment" />
+            )}
+            <NavLink href="/orders" icon="list_alt" label="Order List" />
+            <NavLink href="/bulk-shipment" icon="inventory_2" label="Bulk Shipment" />
+          </div>
+        )}
       </div>
 
       <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all border-t border-outline-variant pt-2 mt-1">
@@ -374,60 +400,27 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
         <span className="font-label-md text-label-md">Customers</span>
       </a>
       
-      {/* Administration and User Accounts Submenus */}
+      {/* Administration Section */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-        <div className="flex items-center gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none">
-          <span className="material-symbols-outlined">shield</span>
-          <span className="font-label-md text-label-md">Administration</span>
-        </div>
-        
-        <div className="pl-4 flex flex-col gap-0.5">
-          <div className="flex items-center p-xs font-bold text-outline uppercase tracking-wider text-[10px] select-none">
-            User Accounts
+        <button onClick={() => toggleMenu('admin')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+          <div className="flex items-center gap-md">
+            <span className="material-symbols-outlined">shield</span>
+            <span className="font-label-md text-label-md">Administration</span>
           </div>
-          
-          {isShipper ? (
-            <Link
-              href="/administration/employees?type=shipper"
-              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                pathname.startsWith('/administration')
-                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[20px]">badge</span>
-              <span className="font-label-md text-label-md">Add/Edit Employee</span>
-            </Link>
-          ) : (
-            <>
-              <Link
-                href="/administration/plans"
-                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                  pathname === '/administration/plans'
-                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px]">assignment</span>
-                <span className="font-label-md text-label-md">Plans</span>
-              </Link>
-
+          <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'admin' ? 'rotate(180deg)' : '' }}>expand_more</span>
+        </button>
+        
+        {expandedMenu === 'admin' && (
+          <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="flex items-center p-xs font-bold text-outline uppercase tracking-wider text-[10px] select-none">
+              User Accounts
+            </div>
+            
+            {isShipper ? (
               <Link
                 href="/administration/employees?type=shipper"
                 className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                  pathname.startsWith('/administration') && searchParams?.get('type') === 'shipper'
-                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px]">local_shipping</span>
-                <span className="font-label-md text-label-md">Add/Edit Shipper</span>
-              </Link>
-
-              <Link
-                href="/administration/employees?type=courier"
-                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                  pathname.startsWith('/administration') && (searchParams?.get('type') === 'courier' || !searchParams?.get('type'))
+                  pathname.startsWith('/administration')
                     ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
                     : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
                 }`}
@@ -435,9 +428,47 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 <span className="material-symbols-outlined text-[20px]">badge</span>
                 <span className="font-label-md text-label-md">Add/Edit Employee</span>
               </Link>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <Link
+                  href="/administration/plans"
+                  className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                    pathname === '/administration/plans'
+                      ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                      : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[20px]">assignment</span>
+                  <span className="font-label-md text-label-md">Plans</span>
+                </Link>
+
+                <Link
+                  href="/administration/employees?type=shipper"
+                  className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                    pathname.startsWith('/administration') && searchParams?.get('type') === 'shipper'
+                      ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                      : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[20px]">local_shipping</span>
+                  <span className="font-label-md text-label-md">Add/Edit Shipper</span>
+                </Link>
+
+                <Link
+                  href="/administration/employees?type=courier"
+                  className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                    pathname.startsWith('/administration') && (searchParams?.get('type') === 'courier' || !searchParams?.get('type'))
+                      ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                      : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[20px]">badge</span>
+                  <span className="font-label-md text-label-md">Add/Edit Employee</span>
+                </Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">

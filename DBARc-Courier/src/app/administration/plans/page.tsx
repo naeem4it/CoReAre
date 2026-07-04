@@ -3,7 +3,6 @@
 import * as React from 'react';
 import { Plus, Search, Edit2, Trash2, Check, X } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
-import { Input } from '@/components/ui/Input';
 
 interface ShipperPlan {
   id: number;
