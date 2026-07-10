@@ -28,11 +28,11 @@ interface NavItem {
 }
 
 const MERCHANT_SUBMENU: NavItem[] = [
-  { label: 'Pickup Information', href: '/merchant/pickup-information', icon: Package },
+  { label: 'Pickup Locations', href: '/merchant/pickup-locations', icon: Package },
   { label: 'Book Shipment', href: '/merchant/book-shipment', icon: Package },
   { label: 'Reverse Shipment', href: '/merchant/reverse-shipment', icon: Package },
   { label: 'Upload Shipment', href: '/merchant/upload-shipment', icon: Package },
-  { label: 'Load Sheet', href: '/merchant/load-sheet', icon: Package },
+  { label: 'Bulk Shipment', href: '/merchant/load-sheet', icon: Package },
   { label: 'Customer Report', href: '/merchant/customer-report', icon: FileText },
   { label: 'Dispatch Report', href: '/merchant/dispatch-report', icon: FileText },
   { label: 'Shipper Advise', href: '/merchant/shipper-advise', icon: FileText },
@@ -43,7 +43,7 @@ const MERCHANT_SUBMENU: NavItem[] = [
 ];
 
 const COURIER_SHIPMENTS_SUBMENU: NavItem[] = [
-  { label: 'Shipments List', href: '/courier/shipments', icon: Package },
+  { label: 'Order List', href: '/courier/shipments', icon: Package },
   { label: 'Book Shipment', href: '/courier/shipments/book', icon: Package },
 ];
 

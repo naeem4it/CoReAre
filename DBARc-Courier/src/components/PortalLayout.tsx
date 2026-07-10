@@ -6,12 +6,13 @@ import Link from 'next/link';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
-import { ChevronDown, Building2, MapPin } from 'lucide-react';
+import { ChevronDown, Building2, MapPin, User, LogOut, Settings } from 'lucide-react';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = React.useState(false);
   const { user, activeBusinessId, activeOfficeId, setActiveBusinessId, setActiveOfficeId, refreshUser } = useAuth();
   const { businessName, logoUrl } = useTenant();
 
@@ -177,24 +178,46 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <button className="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95 cursor-pointer">
               <span className="material-symbols-outlined text-on-surface-variant">help</span>
             </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('dbarc-token');
-                localStorage.removeItem('user');
-                window.location.href = '/login';
-              }}
-              className="p-2 rounded-full hover:bg-error-container/20 text-error hover:text-error transition-colors duration-200 active:scale-95 cursor-pointer flex items-center justify-center"
-              title="Logout"
-            >
-              <span className="material-symbols-outlined text-red-600">logout</span>
-            </button>
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2">
-              <img
-                alt="User profile"
-                className="w-full h-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfrNw28bnjOpyL4SHcMjfqmNhg7QBnJKqapM_h5C3zx3d5rE6Z5n4tjx3m8K_a76ZNxy2jckgp4horBbe2E4FsHFoVO_tf4yseSLswpo7i_TOJiMMvUd0WDOE85ise7nFUgWWIq6vse8UJhz4ldxJgfUxapUCp5B-uyNal8PFmEE4NMEi0EcObkIkmRWrj9SJGdWqxUV0-CXKgJuGONLqVh17oIWYfdYl2eVZFAcDwLvyMjIWw5vKCvDDsk7Oi8k9Fq6oOd8VtHnY"
-              />
+            <div className="relative">
+              <button 
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="flex items-center gap-2 p-1 pl-3 pr-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95 cursor-pointer border border-transparent hover:border-outline-variant"
+              >
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-semibold text-on-surface">{user?.fullName || user?.username || 'Employee'}</p>
+                  <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{userRoles[0] || 'User'}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant bg-primary-container flex items-center justify-center">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
+              </button>
+              
+              {profileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-outline-variant rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-4 border-b border-outline-variant bg-slate-50">
+                    <p className="font-bold text-sm text-on-surface truncate">{user?.fullName || user?.username}</p>
+                    <p className="text-xs text-on-surface-variant truncate">{user?.email}</p>
+                  </div>
+                  <div className="p-2">
+                    <Link href="/auth/change-password" onClick={() => setProfileDropdownOpen(false)} className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-slate-50 rounded-lg flex items-center gap-2 transition-colors">
+                      <Settings className="w-4 h-4" /> Account Settings
+                    </Link>
+                  </div>
+                  <div className="p-2 border-t border-outline-variant">
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('dbarc-token');
+                        localStorage.removeItem('user');
+                        window.location.href = '/login';
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error-container/20 hover:text-error rounded-lg flex items-center gap-2 transition-colors font-medium cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" /> Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -286,7 +309,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const tab = searchParams?.get('tab');
   const { user } = useAuth();
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
@@ -295,7 +317,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
       setExpandedMenu('reports');
     } else if (pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
       setExpandedMenu('interfaces');
-    } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment')) {
+    } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment') || pathname.startsWith('/cargo-distribution')) {
       setExpandedMenu('shipment');
     } else if (pathname.startsWith('/administration')) {
       setExpandedMenu('admin');
@@ -330,12 +352,10 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   return (
     <nav className="flex flex-col gap-1">
       <NavLink href="/" icon="dashboard" label="Overview" />
-      <NavLink href="/pickup-information" icon="local_mall" label="Pickup Information" />
       
-      <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
-        <span className="material-symbols-outlined">location_on</span>
-        <span className="font-label-md text-label-md">Tracking</span>
-      </a>
+      <NavLink href="/tracking" icon="location_on" label="Tracking" />
+      
+      <NavLink href="/load-sheet" icon="route" label="Load Sheet" />
       
       <NavLink href="/shipper-advise" icon="quick_reference_all" label="Shipper Advise" />
       
@@ -391,6 +411,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             )}
             <NavLink href="/orders" icon="list_alt" label="Order List" />
             <NavLink href="/bulk-shipment" icon="inventory_2" label="Bulk Shipment" />
+            <NavLink href="/cargo-distribution" icon="route" label="Cargo Dispatch" />
           </div>
         )}
       </div>

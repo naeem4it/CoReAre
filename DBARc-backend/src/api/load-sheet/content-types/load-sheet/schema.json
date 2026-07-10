@@ -41,6 +41,22 @@
       "relation": "oneToMany",
       "target": "api::parcel.parcel",
       "mappedBy": "load_sheet"
+    },
+    "destination_hub": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::hub.hub"
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "departure_schedule": {
+      "type": "datetime"
+    },
+    "vehicle_details": {
+      "type": "string"
     }
   }
 }

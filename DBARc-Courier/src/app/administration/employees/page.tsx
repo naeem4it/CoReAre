@@ -503,7 +503,7 @@ export default function EmployeeManagementPage() {
               className="bg-primary text-white h-10 px-4 rounded-xl hover:shadow-lg active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              {isLoggedShipper ? 'Add New Employee' : (typeParam === 'shipper' ? 'Add New Shipper' : 'Add New Employee')}
+              {isLoggedShipper ? 'Add Employee' : (typeParam === 'shipper' ? 'Add Shipper' : 'Add Employee')}
             </button>
             <button
               onClick={handleOpenEditForm}
@@ -652,8 +652,8 @@ export default function EmployeeManagementPage() {
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-xs">
                 <span className="material-symbols-outlined">{isEditMode ? 'edit' : 'person_add'}</span>
                 {isEditMode 
-                  ? ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Edit Shipper Details' : 'Edit Employee Details')
-                  : ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Add New Shipper' : 'Add New Employee')}
+                  ? ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Edit Shipper' : 'Edit Employee')
+                  : ((formEmployeeType === 'shipper' && !isLoggedShipper) ? 'Add Shipper' : 'Add Employee')}
               </h2>
               <button
                 onClick={() => setIsFormOpen(false)}

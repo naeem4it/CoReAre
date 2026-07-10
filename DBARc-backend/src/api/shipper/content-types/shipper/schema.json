@@ -50,6 +50,12 @@
       "relation": "manyToOne",
       "target": "api::shipper-plan.shipper-plan",
       "inversedBy": "shippers"
+    },
+    "pickup_locations": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::pickup-location.pickup-location",
+      "mappedBy": "shipper"
     }
   }
 }

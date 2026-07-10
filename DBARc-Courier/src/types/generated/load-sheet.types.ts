@@ -10,6 +10,10 @@ export interface LoadSheet {
   origin_hub?: Hub | null;
   status?: 'Pending' | 'Dispatched' | 'On-Route' | 'Delivered';
   parcels?: Parcel[];
+  destination_hub?: Hub | null;
+  rider?: any; // To be imported or typed as any for now
+  departure_schedule?: string;
+  vehicle_details?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -21,6 +25,10 @@ export interface CreateLoadSheetRequest {
   origin_hub?: Hub | null;
   status?: 'Pending' | 'Dispatched' | 'On-Route' | 'Delivered';
   parcels?: Parcel[];
+  destination_hub?: Hub | null;
+  rider?: any;
+  departure_schedule?: string;
+  vehicle_details?: string;
 }
 
 export interface UpdateLoadSheetRequest extends Partial<CreateLoadSheetRequest> {}

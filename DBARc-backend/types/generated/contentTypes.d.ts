@@ -1060,6 +1060,8 @@ export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     date_created: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    departure_schedule: Schema.Attribute.DateTime;
+    destination_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1069,6 +1071,7 @@ export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
     origin_hub: Schema.Attribute.Relation<'manyToOne', 'api::hub.hub'>;
     parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
     sheet_id: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
@@ -1079,6 +1082,7 @@ export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    vehicle_details: Schema.Attribute.String;
   };
 }
 
@@ -1736,6 +1740,10 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    pickup_locations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::pickup-location.pickup-location'
+    >;
     publishedAt: Schema.Attribute.DateTime;
     shipper_plan: Schema.Attribute.Relation<
       'manyToOne',
