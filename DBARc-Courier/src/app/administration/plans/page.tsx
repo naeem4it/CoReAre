@@ -1,460 +1,688 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, Search, Edit2, Trash2, Check, X } from 'lucide-react';
+import PortalLayout from '@/components/PortalLayout';
+import { Plus, Search, Edit2, Trash2, Check, X, Shield, Building2, Layers, Percent, HelpCircle, Scale, Trash } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
+import { useAuth } from '@/components/AuthProvider';
 
-interface ShipperPlan {
-  id: number;
-  attributes: {
-    name: string;
-    charge_type: 'percentage' | 'fixed_rupees' | 'tier_based';
-    charge_value: number;
-    rto_charge_type?: 'percentage' | 'fixed_rupees';
-    rto_charge_value?: number;
-    replacement_charge_type?: 'percentage' | 'fixed_rupees';
-    replacement_charge_value?: number;
-    cod_charge_type?: 'percentage' | 'fixed_rupees';
-    cod_charge_value?: number;
-    max_parcels_per_month?: number;
-    support_level?: string;
-    api_access: boolean;
-    shippers?: { data: { id: number; attributes: { name: string } }[] };
-  };
+export interface WeightTier {
+  id: string;
+  label: string; // e.g. "0.01 to 0.5 kg", "0.51 to 1.0 kg", "1.01 to 2.0 kg", "Additional KG"
 }
 
-interface Shipper {
-  id: number;
-  attributes: {
-    name: string;
-  };
+export interface ZoneRates {
+  zoneName: string; // e.g. "Within City", "Zone A", "Zone B", "Zone C", "Zone D"
+  tierRates: { [tierId: string]: number }; // rate per weight tier id
+  returnCharges: number; // Return charges (RTO)
+  insurance: number | string; // Insurance charge or '-'
 }
 
-export default function CourierPlansPage() {
-  const [plans, setPlans] = React.useState<ShipperPlan[]>([]);
-  const [shippers, setShippers] = React.useState<Shipper[]>([]);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  
+export interface DynamicTariffPlan {
+  id: number;
+  name: string;
+  cashHandlingType: 'percentage' | 'fixed';
+  cashHandlingValue: number;
+  cashHandlingMinFee?: number;
+  weightTiers: WeightTier[];
+  zones: ZoneRates[];
+  shippers: { id: number; name: string }[];
+}
+
+const DEFAULT_WEIGHT_TIERS: WeightTier[] = [
+  { id: 'tier_half_kg', label: '0.01 to 0.5 kg' },
+  { id: 'tier_one_kg', label: '0.51 to 1.0 kg' },
+  { id: 'tier_add_kg', label: 'Additional KG' },
+];
+
+const DEFAULT_ZONES: ZoneRates[] = [
+  { zoneName: 'Within City', tierRates: { tier_half_kg: 135, tier_one_kg: 150, tier_add_kg: 150 }, returnCharges: 50, insurance: '-' },
+  { zoneName: 'Zone A', tierRates: { tier_half_kg: 165, tier_one_kg: 180, tier_add_kg: 180 }, returnCharges: 50, insurance: '-' },
+  { zoneName: 'Zone B', tierRates: { tier_half_kg: 175, tier_one_kg: 195, tier_add_kg: 195 }, returnCharges: 100, insurance: '-' },
+  { zoneName: 'Zone C', tierRates: { tier_half_kg: 185, tier_one_kg: 205, tier_add_kg: 205 }, returnCharges: 100, insurance: '-' },
+  { zoneName: 'Zone D', tierRates: { tier_half_kg: 195, tier_one_kg: 220, tier_add_kg: 220 }, returnCharges: 100, insurance: '-' },
+];
+
+const INITIAL_PLANS: DynamicTariffPlan[] = [
+  {
+    id: 1,
+    name: 'Standard Tariff & Price Plan',
+    cashHandlingType: 'percentage',
+    cashHandlingValue: 1.5,
+    cashHandlingMinFee: 30,
+    weightTiers: DEFAULT_WEIGHT_TIERS,
+    zones: DEFAULT_ZONES,
+    shippers: [
+      { id: 101, name: 'Metro Fashion Store' },
+      { id: 102, name: 'Silk Threads Pakistan' }
+    ]
+  },
+  {
+    id: 2,
+    name: 'Corporate Heavy Freight Plan',
+    cashHandlingType: 'fixed',
+    cashHandlingValue: 40,
+    cashHandlingMinFee: 40,
+    weightTiers: [
+      { id: 'tier_half_kg', label: '0.01 to 0.5 kg' },
+      { id: 'tier_one_kg', label: '0.51 to 1.0 kg' },
+      { id: 'tier_two_kg', label: '1.01 to 2.0 kg' },
+      { id: 'tier_five_kg', label: '2.01 to 5.0 kg' },
+      { id: 'tier_add_kg', label: 'Additional KG' },
+    ],
+    zones: [
+      { zoneName: 'Within City', tierRates: { tier_half_kg: 120, tier_one_kg: 140, tier_two_kg: 180, tier_five_kg: 280, tier_add_kg: 130 }, returnCharges: 40, insurance: '-' },
+      { zoneName: 'Zone A', tierRates: { tier_half_kg: 150, tier_one_kg: 165, tier_two_kg: 210, tier_five_kg: 330, tier_add_kg: 160 }, returnCharges: 40, insurance: '-' },
+      { zoneName: 'Zone B', tierRates: { tier_half_kg: 160, tier_one_kg: 180, tier_two_kg: 230, tier_five_kg: 360, tier_add_kg: 175 }, returnCharges: 80, insurance: '-' },
+      { zoneName: 'Zone C', tierRates: { tier_half_kg: 170, tier_one_kg: 190, tier_two_kg: 250, tier_five_kg: 390, tier_add_kg: 185 }, returnCharges: 80, insurance: '-' },
+      { zoneName: 'Zone D', tierRates: { tier_half_kg: 180, tier_one_kg: 200, tier_two_kg: 270, tier_five_kg: 420, tier_add_kg: 195 }, returnCharges: 80, insurance: '-' },
+    ],
+    shippers: [
+      { id: 103, name: 'MedTech Supplies Ltd' }
+    ]
+  }
+];
+
+export default function TariffPlansPage() {
+  const { user, activeBusinessId } = useAuth();
+  const [plans, setPlans] = React.useState<DynamicTariffPlan[]>(INITIAL_PLANS);
+  const [selectedPlanId, setSelectedPlanId] = React.useState<number>(INITIAL_PLANS[0].id);
+  const [shippersList, setShippersList] = React.useState<any[]>([]);
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [editingPlan, setEditingPlan] = React.useState<ShipperPlan | null>(null);
-  
-  // Form states
+  const [editingPlan, setEditingPlan] = React.useState<DynamicTariffPlan | null>(null);
+
+  // Form states for Modal
   const [formName, setFormName] = React.useState('');
-  const [formChargeType, setFormChargeType] = React.useState<'percentage' | 'fixed_rupees' | 'tier_based'>('percentage');
-  const [formChargeValue, setFormChargeValue] = React.useState<number>(0);
-  const [formRtoChargeType, setFormRtoChargeType] = React.useState<'percentage' | 'fixed_rupees'>('percentage');
-  const [formRtoChargeValue, setFormRtoChargeValue] = React.useState<number>(0);
-  const [formReplacementChargeType, setFormReplacementChargeType] = React.useState<'percentage' | 'fixed_rupees'>('percentage');
-  const [formReplacementChargeValue, setFormReplacementChargeValue] = React.useState<number>(0);
-  const [formCodChargeType, setFormCodChargeType] = React.useState<'percentage' | 'fixed_rupees'>('percentage');
-  const [formCodChargeValue, setFormCodChargeValue] = React.useState<number>(0);
-  const [formApiAccess, setFormApiAccess] = React.useState(false);
+  const [formCashHandlingType, setFormCashHandlingType] = React.useState<'percentage' | 'fixed'>('percentage');
+  const [formCashHandlingValue, setFormCashHandlingValue] = React.useState<number>(1.5);
+  const [formCashHandlingMinFee, setFormCashHandlingMinFee] = React.useState<number>(30);
+  const [formWeightTiers, setFormWeightTiers] = React.useState<WeightTier[]>(DEFAULT_WEIGHT_TIERS);
+  const [formZones, setFormZones] = React.useState<ZoneRates[]>(DEFAULT_ZONES);
   const [selectedShipperIds, setSelectedShipperIds] = React.useState<number[]>([]);
 
+  const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
+
+  // Fetch shippers from backend API
   React.useEffect(() => {
-    fetchPlans();
-    fetchShippers();
+    const fetchMetadata = async () => {
+      try {
+        const shippersRes = await apiClient.get('/shippers').catch(() => null);
+        if (shippersRes?.data?.data) {
+          setShippersList(shippersRes.data.data);
+        }
+      } catch (err) {
+        console.warn('Could not fetch shippers list:', err);
+      }
+    };
+    fetchMetadata();
   }, []);
 
-  const fetchPlans = async () => {
-    try {
-      const res = await apiClient.get('/shipper-plan/list');
-      setPlans(res.data?.data || []);
-    } catch (err) {
-      console.error('Failed to fetch shipper plans:', err);
+  // Selected active plan
+  const activePlan = React.useMemo(() => {
+    if (isShipper) {
+      if (activeBusinessId) {
+        const assigned = plans.find(p => p.shippers.some(s => s.id === activeBusinessId));
+        if (assigned) return assigned;
+      }
+      return plans[0];
     }
-  };
+    return plans.find(p => p.id === selectedPlanId) || plans[0];
+  }, [plans, isShipper, activeBusinessId, selectedPlanId]);
 
-  const fetchShippers = async () => {
-    try {
-      // Fetching shippers using standard Strapi core route
-      const res = await apiClient.get('/shippers');
-      setShippers(res.data?.data || []);
-    } catch (err) {
-      console.error('Failed to fetch shippers:', err);
-    }
-  };
-
+  // Open Create Modal
   const handleOpenCreate = () => {
     setEditingPlan(null);
     setFormName('');
-    setFormChargeType('percentage');
-    setFormChargeValue(0);
-    setFormRtoChargeType('percentage');
-    setFormRtoChargeValue(0);
-    setFormReplacementChargeType('percentage');
-    setFormReplacementChargeValue(0);
-    setFormCodChargeType('percentage');
-    setFormCodChargeValue(0);
-    setFormApiAccess(false);
+    setFormCashHandlingType('percentage');
+    setFormCashHandlingValue(1.5);
+    setFormCashHandlingMinFee(30);
+    setFormWeightTiers(JSON.parse(JSON.stringify(DEFAULT_WEIGHT_TIERS)));
+    setFormZones(JSON.parse(JSON.stringify(DEFAULT_ZONES)));
     setSelectedShipperIds([]);
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (plan: ShipperPlan) => {
+  // Open Edit Modal
+  const handleOpenEdit = (plan: DynamicTariffPlan) => {
     setEditingPlan(plan);
-    setFormName(plan.attributes.name || '');
-    setFormChargeType(plan.attributes.charge_type || 'percentage');
-    setFormChargeValue(plan.attributes.charge_value || 0);
-    setFormRtoChargeType(plan.attributes.rto_charge_type || 'percentage');
-    setFormRtoChargeValue(plan.attributes.rto_charge_value || 0);
-    setFormReplacementChargeType(plan.attributes.replacement_charge_type || 'percentage');
-    setFormReplacementChargeValue(plan.attributes.replacement_charge_value || 0);
-    setFormCodChargeType(plan.attributes.cod_charge_type || 'percentage');
-    setFormCodChargeValue(plan.attributes.cod_charge_value || 0);
-    setFormApiAccess(plan.attributes.api_access || false);
-    
-    if (plan.attributes.shippers?.data) {
-      setSelectedShipperIds(plan.attributes.shippers.data.map(s => s.id));
-    } else {
-      setSelectedShipperIds([]);
-    }
-    
+    setFormName(plan.name);
+    setFormCashHandlingType(plan.cashHandlingType);
+    setFormCashHandlingValue(plan.cashHandlingValue);
+    setFormCashHandlingMinFee(plan.cashHandlingMinFee || 0);
+    setFormWeightTiers(JSON.parse(JSON.stringify(plan.weightTiers)));
+    setFormZones(JSON.parse(JSON.stringify(plan.zones)));
+    setSelectedShipperIds(plan.shippers.map(s => s.id));
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this plan?')) return;
-    try {
-      await apiClient.delete(`/shipper-plan/delete/${id}`);
-      fetchPlans();
-    } catch (err) {
-      console.error('Failed to delete plan:', err);
-    }
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        name: formName,
-        charge_type: formChargeType,
-        charge_value: Number(formChargeValue),
-        rto_charge_type: formRtoChargeType,
-        rto_charge_value: Number(formRtoChargeValue),
-        replacement_charge_type: formReplacementChargeType,
-        replacement_charge_value: Number(formReplacementChargeValue),
-        cod_charge_type: formCodChargeType,
-        cod_charge_value: Number(formCodChargeValue),
-        api_access: formApiAccess,
-        shippers: selectedShipperIds
-      };
-
-      if (editingPlan) {
-        await apiClient.put(`/shipper-plan/update/${editingPlan.id}`, payload);
-      } else {
-        await apiClient.post('/shipper-plan/create', payload);
+  // Add a new dynamic weight tier row (Admin only)
+  const handleAddWeightTier = () => {
+    const newTierId = `tier_${Date.now()}`;
+    const newTierLabel = `1.01 to 2.0 kg`;
+    
+    setFormWeightTiers(prev => [...prev, { id: newTierId, label: newTierLabel }]);
+    
+    // Initialize rates for the new tier across all zones
+    setFormZones(prev => prev.map(z => ({
+      ...z,
+      tierRates: {
+        ...z.tierRates,
+        [newTierId]: 200 // default rate
       }
-      setIsModalOpen(false);
-      fetchPlans();
-    } catch (err) {
-      console.error('Failed to save plan:', err);
+    })));
+  };
+
+  // Update a weight tier label
+  const handleUpdateWeightTierLabel = (tierId: string, newLabel: string) => {
+    setFormWeightTiers(prev => prev.map(t => t.id === tierId ? { ...t, label: newLabel } : t));
+  };
+
+  // Remove a weight tier row
+  const handleRemoveWeightTier = (tierId: string) => {
+    if (formWeightTiers.length <= 1) {
+      alert('A tariff plan must have at least one weight tier range.');
+      return;
+    }
+    setFormWeightTiers(prev => prev.filter(t => t.id !== tierId));
+    setFormZones(prev => prev.map(z => {
+      const copyRates = { ...z.tierRates };
+      delete copyRates[tierId];
+      return { ...z, tierRates: copyRates };
+    }));
+  };
+
+  // Update rate for specific zone and tier
+  const handleUpdateTierRate = (zoneIndex: number, tierId: string, rate: number) => {
+    setFormZones(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      if (!copy[zoneIndex].tierRates) copy[zoneIndex].tierRates = {};
+      copy[zoneIndex].tierRates[tierId] = rate;
+      return copy;
+    });
+  };
+
+  // Update return charges or insurance for zone
+  const handleUpdateZoneMeta = (zoneIndex: number, field: 'returnCharges' | 'insurance', value: any) => {
+    setFormZones(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      copy[zoneIndex][field] = value;
+      return copy;
+    });
+  };
+
+  // Save Modal Form
+  const handleSavePlan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+
+    const assignedShippers = selectedShipperIds.map(id => {
+      const found = shippersList.find(s => s.id === id);
+      return { id, name: found?.attributes?.name || found?.name || `Shipper #${id}` };
+    });
+
+    if (editingPlan) {
+      const updated = plans.map(p => {
+        if (p.id === editingPlan.id) {
+          return {
+            ...p,
+            name: formName,
+            cashHandlingType: formCashHandlingType,
+            cashHandlingValue: Number(formCashHandlingValue),
+            cashHandlingMinFee: Number(formCashHandlingMinFee),
+            weightTiers: formWeightTiers,
+            zones: formZones,
+            shippers: assignedShippers
+          };
+        }
+        return p;
+      });
+      setPlans(updated);
+    } else {
+      const newPlan: DynamicTariffPlan = {
+        id: Date.now(),
+        name: formName,
+        cashHandlingType: formCashHandlingType,
+        cashHandlingValue: Number(formCashHandlingValue),
+        cashHandlingMinFee: Number(formCashHandlingMinFee),
+        weightTiers: formWeightTiers,
+        zones: formZones,
+        shippers: assignedShippers
+      };
+      setPlans(prev => [...prev, newPlan]);
+      setSelectedPlanId(newPlan.id);
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDeletePlan = (id: number) => {
+    if (plans.length <= 1) {
+      alert('You must have at least one tariff plan in the system.');
+      return;
+    }
+    if (confirm('Are you sure you want to delete this tariff plan?')) {
+      const filtered = plans.filter(p => p.id !== id);
+      setPlans(filtered);
+      setSelectedPlanId(filtered[0].id);
     }
   };
-
-  const toggleShipperSelection = (id: number) => {
-    setSelectedShipperIds(prev => 
-      prev.includes(id) ? prev.filter(sId => sId !== id) : [...prev, id]
-    );
-  };
-
-  const filteredPlans = plans.filter(p => 
-    p.attributes.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Shipper Plans</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage billing plans and features for your shippers.</p>
-        </div>
-        <button
-          onClick={handleOpenCreate}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Create Plan
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="relative">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search plans by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-          />
-        </div>
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPlans.map((plan) => (
-          <div key={plan.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group">
-            <div className="p-5 border-b border-slate-100 flex-1">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="font-semibold text-lg text-slate-900">{plan.attributes.name}</h3>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200`}>
-                  {plan.attributes.charge_type.replace('_', ' ').toUpperCase()}
-                </span>
-              </div>
-
-              <div className="flex items-end gap-2 mb-6">
-                <span className="text-3xl font-bold text-slate-900">
-                  {plan.attributes.charge_type === 'percentage' ? `${plan.attributes.charge_value}%` : `Rs ${plan.attributes.charge_value}`}
-                </span>
-                <span className="text-sm text-slate-500 mb-1 font-medium">/ delivery</span>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <div className="w-5 flex justify-center"><Check className="w-4 h-4 text-emerald-500" /></div>
-                  COD Fee: {plan.attributes.cod_charge_type === 'percentage' ? `${plan.attributes.cod_charge_value}%` : `Rs ${plan.attributes.cod_charge_value}`}
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <div className="w-5 flex justify-center"><Check className="w-4 h-4 text-emerald-500" /></div>
-                  RTO Fee: {plan.attributes.rto_charge_type === 'percentage' ? `${plan.attributes.rto_charge_value}%` : `Rs ${plan.attributes.rto_charge_value}`}
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <div className="w-5 flex justify-center"><Check className="w-4 h-4 text-emerald-500" /></div>
-                  Replacement Fee: {plan.attributes.replacement_charge_type === 'percentage' ? `${plan.attributes.replacement_charge_value}%` : `Rs ${plan.attributes.replacement_charge_value}`}
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <div className="w-5 flex justify-center">
-                    {plan.attributes.api_access ? <Check className="w-4 h-4 text-emerald-500" /> : <X className="w-4 h-4 text-slate-300" />}
-                  </div>
-                  <span className={!plan.attributes.api_access ? 'text-slate-400 line-through' : ''}>API Integration</span>
-                </div>
-              </div>
+    <PortalLayout>
+      <div className="space-y-6 max-w-[1920px] w-full mx-auto p-lg pb-16">
+        
+        {/* Top Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-primary font-bold text-xs mb-1 uppercase tracking-wider">
+              <Layers className="w-4 h-4" /> Administration & Rate Cards
             </div>
-            
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">
-                {plan.attributes.shippers?.data?.length || 0} Businesses Assigned
-              </span>
+            <h1 className="text-2xl font-bold text-slate-900 font-display">Tariff & Price Plans</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {isShipper
+                ? 'Your active rate card agreement table for weight tier ranges, regional zones, return charges, and cash handling fees.'
+                : 'Configure customizable weight tier ranges, regional zone rates, return charges, insurance rates, and COD handling fees.'}
+            </p>
+          </div>
+
+          {!isShipper && (
+            <button
+              onClick={handleOpenCreate}
+              className="bg-primary text-white px-4 py-2.5 rounded-xl font-bold text-xs hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+            >
+              <Plus className="w-4 h-4" /> Create New Tariff Plan
+            </button>
+          )}
+
+          {isShipper && (
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs">
+              <Building2 className="w-4 h-4 text-emerald-600" /> Active Shipper Agreement (Read-Only)
+            </span>
+          )}
+        </div>
+
+        {/* Admin Plan Selector Tabs */}
+        {!isShipper && (
+          <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex-wrap gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Select Tariff Plan:</span>
+              {plans.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPlanId(p.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    selectedPlanId === p.id
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            {activePlan && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleOpenEdit(plan)}
-                  className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
-                  title="Edit Plan"
+                  onClick={() => handleOpenEdit(activePlan)}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200"
                 >
-                  <Edit2 className="w-4 h-4" />
+                  <Edit2 className="w-3.5 h-3.5" /> Edit Active Tariff
                 </button>
                 <button
-                  onClick={() => handleDelete(plan.id)}
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                  title="Delete Plan"
+                  onClick={() => handleDeletePlan(activePlan.id)}
+                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-red-200"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
               </div>
-            </div>
-          </div>
-        ))}
-
-        {filteredPlans.length === 0 && (
-          <div className="col-span-full py-12 bg-white rounded-xl border border-slate-200 border-dashed text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-              <Search className="w-6 h-6 text-slate-400" />
-            </div>
-            <h3 className="text-sm font-medium text-slate-900">No plans found</h3>
-            <p className="text-sm text-slate-500 mt-1">Adjust your search or create a new plan.</p>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Create/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">
-                {editingPlan ? 'Edit Shipper Plan' : 'Create Shipper Plan'}
+        {/* TARIFF & PRICE PLANS MATRIX SECTION (MATCHING REFERENCE IMAGE WITH DYNAMIC ROW TIERS) */}
+        {activePlan && (
+          <div className="bg-slate-100/70 p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
+            
+            {/* Tariff Matrix Title Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-900 pb-3 gap-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight underline underline-offset-8 decoration-slate-900">
+                Tariff & Price Plans
               </h2>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="text-xs text-slate-600 font-semibold flex items-center gap-2">
+                <span className="font-bold text-slate-900">{activePlan.name}</span>
+                <span className="text-slate-400">•</span>
+                <span>{activePlan.shippers.length} Shipper Accounts Assigned</span>
+              </div>
             </div>
 
-            <div className="p-6 overflow-y-auto custom-scrollbar">
-              <form id="plan-form" onSubmit={handleSave} className="space-y-6">
+            {/* Matrix Table Grid */}
+            <div className="overflow-x-auto rounded-2xl shadow-sm">
+              <div className="min-w-[900px] grid grid-cols-6 gap-2 bg-slate-200 p-2 rounded-2xl">
                 
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Basic Details</h3>
-                  
-                  <Input
-                    label="Plan Name"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    required
-                    placeholder="e.g. Standard Delivery Plan"
-                  />
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">Delivery Charge Type</label>
-                      <select
-                        value={formChargeType}
-                        onChange={(e) => setFormChargeType(e.target.value as any)}
-                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed_rupees">Fixed Rupees (PKR)</option>
-                        <option value="tier_based">Tier Based</option>
-                      </select>
-                    </div>
-
-                    <Input
-                      label="Delivery Charge Value"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={formChargeValue}
-                      onChange={(e) => setFormChargeValue(Number(e.target.value))}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">COD Handling Charge Type</label>
-                      <select
-                        value={formCodChargeType}
-                        onChange={(e) => setFormCodChargeType(e.target.value as any)}
-                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed_rupees">Fixed Rupees (PKR)</option>
-                      </select>
-                    </div>
-
-                    <Input
-                      label="COD Handling Charge Value"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={formCodChargeValue}
-                      onChange={(e) => setFormCodChargeValue(Number(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">RTO (Return) Charge Type</label>
-                      <select
-                        value={formRtoChargeType}
-                        onChange={(e) => setFormRtoChargeType(e.target.value as any)}
-                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed_rupees">Fixed Rupees (PKR)</option>
-                      </select>
-                    </div>
-
-                    <Input
-                      label="RTO Charge Value"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={formRtoChargeValue}
-                      onChange={(e) => setFormRtoChargeValue(Number(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">Replacement Charge Type</label>
-                      <select
-                        value={formReplacementChargeType}
-                        onChange={(e) => setFormReplacementChargeType(e.target.value as any)}
-                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed_rupees">Fixed Rupees (PKR)</option>
-                      </select>
-                    </div>
-
-                    <Input
-                      label="Replacement Charge Value"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={formReplacementChargeValue}
-                      onChange={(e) => setFormReplacementChargeValue(Number(e.target.value))}
-                    />
-                  </div>
+                {/* Column Headers */}
+                {/* 1. Row Header Box */}
+                <div className="bg-[#5c6b73] text-white p-6 rounded-xl flex flex-col items-center justify-center text-center shadow-sm">
+                  <span className="font-bold text-base leading-tight">Weight Charges</span>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Features & Access</h3>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formApiAccess}
-                      onChange={(e) => setFormApiAccess(e.target.checked)}
-                      className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">API Access</div>
-                      <div className="text-xs text-slate-500">Allow this shipper to integrate via REST API</div>
-                    </div>
-                  </label>
+                {/* 2. Within City Header */}
+                <div className="bg-[#5c6b73] text-white p-6 rounded-xl flex flex-col items-center justify-center text-center shadow-sm">
+                  <span className="font-bold text-base leading-tight">Within City</span>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Assign Shippers (Businesses)</h3>
-                  <p className="text-xs text-slate-500">Select one or more businesses that should be on this plan.</p>
-                  
-                  <div className="max-h-[200px] overflow-y-auto border border-slate-200 rounded-lg bg-slate-50 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {shippers.length === 0 && (
-                      <div className="col-span-full text-center text-sm text-slate-500 py-4">
-                        No businesses available to assign.
+                {/* 3 to 6. Zone Headers (Dynamic Regions) */}
+                {activePlan.zones.slice(1).map((z, idx) => (
+                  <div key={idx} className="bg-[#5c6b73] text-white p-6 rounded-xl flex flex-col items-center justify-center text-center shadow-sm">
+                    <span className="font-bold text-base leading-tight">{z.zoneName}</span>
+                  </div>
+                ))}
+
+                {/* DYNAMIC WEIGHT TIER ROWS (EDITABLE TIERS BY ADMIN) */}
+                {activePlan.weightTiers.map((tier) => (
+                  <React.Fragment key={tier.id}>
+                    <div className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs text-center">
+                      {tier.label}
+                    </div>
+                    {activePlan.zones.map((z, idx) => (
+                      <div key={idx} className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs">
+                        Rs.{z.tierRates?.[tier.id] ?? '-'}
                       </div>
-                    )}
-                    {shippers.map(shipper => (
-                      <label key={shipper.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-primary-300 transition-colors">
+                    ))}
+                  </React.Fragment>
+                ))}
+
+                {/* ROW: Return Charges */}
+                <div className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs">
+                  Return Charges
+                </div>
+                {activePlan.zones.map((z, idx) => (
+                  <div key={idx} className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs">
+                    Rs. {z.returnCharges}
+                  </div>
+                ))}
+
+                {/* ROW: Insurance */}
+                <div className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs">
+                  Insurance
+                </div>
+                {activePlan.zones.map((z, idx) => (
+                  <div key={idx} className="bg-[#0e4963] text-white p-3.5 rounded-xl font-bold text-sm flex items-center justify-center shadow-xs">
+                    {z.insurance || '-'}
+                  </div>
+                ))}
+
+              </div>
+            </div>
+
+            {/* CASH HANDLING CHARGES BANNER SECTION */}
+            <div className="bg-[#cba161] text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-3 shadow-md border border-[#b88e4e]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold shrink-0">
+                  <Percent className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg tracking-tight">Cash Handling Charges (Rs.)</h3>
+                  <p className="text-xs text-amber-50 font-medium">Applied on collected Cash on Delivery (COD) amounts upon delivery confirmation.</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/40 px-5 py-2.5 rounded-xl border border-white/20 font-bold text-sm tracking-wide">
+                {activePlan.cashHandlingType === 'percentage'
+                  ? `${activePlan.cashHandlingValue}% of COD Amount (Min Rs. ${activePlan.cashHandlingMinFee || 0})`
+                  : `Flat Rs. ${activePlan.cashHandlingValue} per COD Order`
+                }
+              </div>
+            </div>
+
+            {/* Assigned Shippers List */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-primary" /> Accounts Assigned to this Tariff Plan ({activePlan.shippers.length})
+              </span>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {activePlan.shippers.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">No specific shippers assigned (Global default plan).</span>
+                ) : (
+                  activePlan.shippers.map((s) => (
+                    <span key={s.id} className="bg-slate-100 text-slate-800 border border-slate-200 px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-600" /> {s.name}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* CREATE / EDIT TARIFF PLAN MODAL (COURIER ADMIN ONLY WITH EDITABLE TIER RANGES) */}
+        {isModalOpen && !isShipper && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
+              
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {editingPlan ? 'Edit Tariff Plan & Weight Tier Ranges' : 'Create New Tariff & Price Plan'}
+                  </h2>
+                  <p className="text-xs text-slate-500">Configure customizable weight tier ranges, per-zone rates, return charges, and COD fees.</p>
+                </div>
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 p-2 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <form id="dynamic-tariff-form" onSubmit={handleSavePlan} className="p-6 overflow-y-auto flex flex-col gap-6">
+                
+                {/* Plan Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-1 md:col-span-1">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Plan Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Corporate Standard Plan"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">COD Charge Type</label>
+                    <select
+                      value={formCashHandlingType}
+                      onChange={(e) => setFormCashHandlingType(e.target.value as any)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="percentage">Percentage (%) of COD</option>
+                      <option value="fixed">Fixed Rupees (Rs.) per order</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">COD Charge Value</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={formCashHandlingValue}
+                      onChange={(e) => setFormCashHandlingValue(Number(e.target.value))}
+                      required
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* DYNAMIC WEIGHT TIER RANGE MANAGER (COURIER ADMIN ONLY) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Scale className="w-4 h-4 text-primary" /> Weight Tier Range Manager (Courier Admin Only)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">Add, edit, or remove row weight ranges according to courier-shipper contract.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddWeightTier}
+                      className="px-3 py-1.5 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1 hover:shadow-md transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Weight Tier Row
+                    </button>
+                  </div>
+
+                  {/* List of Editable Weight Tiers */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                    {formWeightTiers.map((tier) => (
+                      <div key={tier.id} className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-xl shadow-2xs">
                         <input
-                          type="checkbox"
-                          checked={selectedShipperIds.includes(shipper.id)}
-                          onChange={() => toggleShipperSelection(shipper.id)}
-                          className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                          type="text"
+                          value={tier.label}
+                          onChange={(e) => handleUpdateWeightTierLabel(tier.id, e.target.value)}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg py-1 px-2.5 text-xs font-bold focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary"
                         />
-                        <span className="text-sm font-medium text-slate-900">{shipper.attributes.name}</span>
-                      </label>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWeightTier(tier.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Remove this weight tier row"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
+
+                {/* DYNAMIC RATE MATRIX INPUT TABLE */}
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Zone Rates Matrix for Configured Tiers</h3>
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#5c6b73] text-white font-bold text-[11px] uppercase tracking-wider">
+                        <tr>
+                          <th className="p-3">Weight Tier Row Range</th>
+                          {formZones.map((z, idx) => (
+                            <th key={idx} className="p-3 text-center">{z.zoneName}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 font-medium">
+                        
+                        {/* Dynamic Weight Tier Rate Rows */}
+                        {formWeightTiers.map((tier) => (
+                          <tr key={tier.id} className="hover:bg-slate-50">
+                            <td className="p-3 font-bold text-slate-900 bg-slate-100/80">{tier.label} (Rs)</td>
+                            {formZones.map((z, idx) => (
+                              <td key={idx} className="p-2 text-center">
+                                <input
+                                  type="number"
+                                  value={z.tierRates?.[tier.id] ?? 0}
+                                  onChange={(e) => handleUpdateTierRate(idx, tier.id, Number(e.target.value))}
+                                  className="w-20 bg-white border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold focus:ring-1 focus:ring-primary"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+
+                        {/* Return Charges Row */}
+                        <tr className="bg-slate-50">
+                          <td className="p-3 font-bold text-slate-900 bg-slate-100">Return Charges (Rs)</td>
+                          {formZones.map((z, idx) => (
+                            <td key={idx} className="p-2 text-center">
+                              <input
+                                type="number"
+                                value={z.returnCharges}
+                                onChange={(e) => handleUpdateZoneMeta(idx, 'returnCharges', Number(e.target.value))}
+                                className="w-20 bg-white border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold text-red-600 focus:ring-1 focus:ring-primary"
+                              />
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* Insurance Row */}
+                        <tr>
+                          <td className="p-3 font-bold text-slate-900 bg-slate-100">Insurance Rate</td>
+                          {formZones.map((z, idx) => (
+                            <td key={idx} className="p-2 text-center">
+                              <input
+                                type="text"
+                                value={z.insurance}
+                                onChange={(e) => handleUpdateZoneMeta(idx, 'insurance', e.target.value)}
+                                className="w-20 bg-white border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold focus:ring-1 focus:ring-primary"
+                              />
+                            </td>
+                          ))}
+                        </tr>
+
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Shipper Assignment */}
+                <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assign Shippers (Businesses) to this Plan</h3>
+                  <div className="max-h-[160px] overflow-y-auto border border-slate-200 rounded-2xl bg-slate-50 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {shippersList.length === 0 ? (
+                      <span className="text-xs text-slate-400 col-span-full text-center py-2">No shipper accounts found.</span>
+                    ) : (
+                      shippersList.map(s => {
+                        const sId = s.id;
+                        const sName = s.attributes?.name || s.name || `Shipper #${sId}`;
+                        const isChecked = selectedShipperIds.includes(sId);
+                        return (
+                          <label key={sId} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-primary transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setSelectedShipperIds(prev =>
+                                  prev.includes(sId) ? prev.filter(id => id !== sId) : [...prev, id]
+                                );
+                              }}
+                              className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"
+                            />
+                            <span className="text-xs font-bold text-slate-800">{sName}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" /> {editingPlan ? 'Update Tariff Plan' : 'Create Tariff Plan'}
+                  </button>
+                </div>
+
               </form>
             </div>
-
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                form="plan-form"
-                className="px-6 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 flex items-center gap-2 shadow-sm"
-              >
-                {editingPlan ? 'Update Plan' : 'Create Plan'}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+      </div>
+    </PortalLayout>
   );
 }

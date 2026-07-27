@@ -5,60 +5,83 @@ import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
+import { Printer, Search, X, Package, Check, Layers, ChevronRight, Eye, Edit2 } from 'lucide-react';
 
 type OrderRow = {
   id: number | string;
   trackingNumber: string;
   customerName: string;
   avatar: string;
+  phone: string;
   origin: string;
   destination: string;
   address: string;
-  status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked' | string;
-  eta: string;
+  shipperName: string;
+  shipperAddress: string;
+  codAmount: number;
+  weightKg: number;
+  status: string;
+  dateCreated: string;
 };
 
 const FALLBACK_ROWS: OrderRow[] = [
   {
     id: 1,
-    trackingNumber: 'FL-9283-XK',
-    customerName: 'Jameson Distilleries',
-    avatar: 'JD',
-    origin: 'Seattle',
-    destination: 'WA',
-    address: '482 Industrial Way, Port of Seattle, WA 98134',
-    status: 'Out For delivery',
-    eta: 'Today, 18:45',
+    trackingNumber: 'DBA-9283-XK',
+    customerName: 'Zeeshan Ahmed',
+    avatar: 'ZA',
+    phone: '+92 300 1234567',
+    origin: 'Lahore',
+    destination: 'Karachi',
+    address: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
+    shipperName: 'Metro Fashion Store',
+    shipperAddress: 'Shop 12, Liberty Market, Gulberg III, Lahore',
+    codAmount: 4500,
+    weightKg: 1.5,
+    status: 'booked',
+    dateCreated: new Date().toISOString(),
   },
   {
     id: 2,
-    trackingNumber: 'FL-1104-ZA',
-    customerName: 'TechCorp Logistics',
-    avatar: 'TC',
-    origin: 'Palo Alto',
-    destination: 'CA',
-    address: '92 Innovation Blvd, Palo Alto, CA 94304',
-    status: 'Delivered',
-    eta: 'May 14, 09:20',
+    trackingNumber: 'DBA-1104-ZA',
+    customerName: 'Mariam Khan',
+    avatar: 'MK',
+    phone: '+92 321 9876543',
+    origin: 'Faisalabad',
+    destination: 'Karachi',
+    address: 'House 42, Street 5, DHA Phase 6, Karachi',
+    shipperName: 'Silk Threads Pakistan',
+    shipperAddress: 'Plot 88, Industrial Area, Faisalabad',
+    codAmount: 2800,
+    weightKg: 0.8,
+    status: 'booked',
+    dateCreated: new Date(Date.now() - 86400000).toISOString(),
   },
   {
     id: 3,
-    trackingNumber: 'FL-8742-MM',
-    customerName: 'Global Solar Inc.',
-    avatar: 'GS',
-    origin: 'Phoenix',
-    destination: 'AZ',
-    address: '11 Energy Park, Phoenix, AZ 85001',
+    trackingNumber: 'DBA-8742-MM',
+    customerName: 'Dr. Faisal Qureshi',
+    avatar: 'FQ',
+    phone: '+92 333 4567890',
+    origin: 'Karachi',
+    destination: 'Islamabad',
+    address: 'Aga Khan University Hospital, Stadium Road, Karachi',
+    shipperName: 'MedTech Supplies Ltd',
+    shipperAddress: 'Suite 404, Business Plaza, I.I. Chundrigar Road, Karachi',
+    codAmount: 12500,
+    weightKg: 3.2,
     status: 'booked',
-    eta: 'Tomorrow, 14:00',
+    dateCreated: new Date(Date.now() - 172800000).toISOString(),
   },
 ];
 
 export default function OrderList() {
   const [data, setData] = React.useState<OrderRow[]>(FALLBACK_ROWS);
-  const [filteredData, setFilteredData] = React.useState<OrderRow[]>(FALLBACK_ROWS);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
+
+  // Individual Order Label Print Modal State
+  const [printOrder, setPrintOrder] = React.useState<OrderRow | null>(null);
 
   React.useEffect(() => {
     const fetchParcels = async () => {
@@ -67,28 +90,30 @@ export default function OrderList() {
         const parcels = response.data?.data || [];
         
         if (parcels.length > 0) {
-          const mapped: OrderRow[] = parcels.map((item: Parcel) => {
-            const customerName = item.recipient_name || 'Unknown';
+          const mapped: OrderRow[] = parcels.map((item: any) => {
+            const customerName = item.recipient_name || 'Unknown Consignee';
             const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'UN';
-            const destination = item.recipient_address?.split(',').pop()?.trim() || 'Unknown';
-            
-            let uiStatus = item.status || 'booked';
-            if (uiStatus === 'Total Booking') uiStatus = 'booked';
+            const destination = item.recipient_address?.split(',').pop()?.trim() || 'Pakistan';
             
             return {
               id: item.id,
               trackingNumber: `${item.tracking_number}`,
               customerName,
               avatar: initials,
-              origin: 'Karachi',
-              destination,
+              phone: item.recipient_phone || '+92 300 0000000',
+              origin: item.origin_hub?.name || 'Karachi',
+              destination: item.destination_hub?.name || destination,
               address: item.recipient_address || 'No address provided',
-              status: uiStatus,
-              eta: new Date(item.createdAt).toLocaleDateString(),
+              shipperName: item.shipper?.name || 'Standard Shipper Account',
+              shipperAddress: 'Warehouse Hub 01, Logistics Center',
+              codAmount: item.cod_amount || 0,
+              weightKg: item.weight || 1.0,
+              status: item.status || 'booked',
+              dateCreated: item.createdAt || new Date().toISOString(),
             };
           });
+          // Show booked orders primarily
           setData(mapped);
-          setFilteredData(mapped);
         }
       } catch (error) {
         console.warn('Could not fetch orders, using fallback data:', error);
@@ -100,211 +125,153 @@ export default function OrderList() {
     fetchParcels();
   }, []);
 
-  React.useEffect(() => {
-    if (!searchQuery) {
-      setFilteredData(data);
-    } else {
-      const lower = searchQuery.toLowerCase();
-      const filtered = data.filter(
-        (row) =>
-          row.trackingNumber.toLowerCase().includes(lower) ||
-          row.customerName.toLowerCase().includes(lower) ||
-          row.address.toLowerCase().includes(lower) ||
-          row.status.toLowerCase().includes(lower)
-      );
-      setFilteredData(filtered);
-    }
-  }, [searchQuery, data]);
-
-  const getStatusBadge = (status: string) => {
-    const s = status.toLowerCase();
-    if (s.includes('out') || s.includes('transit')) {
-      return (
-        <span className="inline-flex items-center gap-xs px-sm py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-700 animate-pulse"></span>
-          In Transit
-        </span>
-      );
-    }
-    if (s.includes('delivered') || s.includes('arrived')) {
-      return (
-        <span className="inline-flex items-center gap-xs px-sm py-1 rounded-full bg-green-100 text-green-700 font-bold text-[10px] uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-700"></span>
-          Delivered
-        </span>
-      );
-    }
-    if (s.includes('fail') || s.includes('return') || s.includes('delay')) {
-      return (
-        <span className="inline-flex items-center gap-xs px-sm py-1 rounded-full bg-error-container text-on-error-container font-bold text-[10px] uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-          {status}
-        </span>
-      );
-    }
+  const filteredData = data.filter((row) => {
+    if (!searchQuery) return true;
+    const lower = searchQuery.toLowerCase();
     return (
-      <span className="inline-flex items-center gap-xs px-sm py-1 rounded-full bg-orange-100 text-orange-700 font-bold text-[10px] uppercase">
-        <span className="w-1.5 h-1.5 rounded-full bg-orange-700"></span>
-        {status}
-      </span>
+      row.trackingNumber.toLowerCase().includes(lower) ||
+      row.customerName.toLowerCase().includes(lower) ||
+      row.address.toLowerCase().includes(lower) ||
+      row.status.toLowerCase().includes(lower)
     );
+  });
+
+  const handlePrintIndividualOrder = (row: OrderRow) => {
+    setPrintOrder(row);
+    setTimeout(() => {
+      window.print();
+    }, 300);
   };
 
   return (
     <PortalLayout>
-      <div className="p-lg max-w-[1400px] mx-auto w-full space-y-lg">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #print-label-area, #print-label-area * {
+            visibility: visible !important;
+          }
+          #print-label-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}} />
+
+      <div className="p-lg max-w-[1920px] w-full mx-auto space-y-lg no-print">
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-md">
           <div>
             <div className="flex items-center gap-xs text-secondary mb-xs">
-              <span className="font-label-md text-label-md">Main Fleet</span>
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-              <span className="font-label-md text-label-md text-primary font-bold">Order Management</span>
+              <span className="font-label-md text-label-md">Booking Order</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="font-label-md text-label-md text-primary font-bold">Booked Order List</span>
             </div>
-            <h2 className="font-display-lg text-display-lg text-on-surface">Order Management</h2>
-            <p className="font-body-md text-body-md text-secondary mt-xs">Real-time oversight of all active and historical logistical movements.</p>
+            <h2 className="font-display-lg text-display-lg text-on-surface font-bold">Booking Order Management</h2>
+            <p className="font-body-md text-body-md text-secondary mt-xs">
+              Review all booked orders and print individual shipping labels to paste on singular parcels.
+            </p>
           </div>
           <div className="flex items-center gap-sm">
-            <button className="flex items-center gap-xs px-md py-sm bg-surface-container-highest text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-dim transition-colors active:scale-95 cursor-pointer">
-              <span className="material-symbols-outlined">print</span>
-              Batch Print
-            </button>
-            <button className="flex items-center gap-xs px-md py-sm bg-primary text-on-primary font-label-md text-label-md rounded-lg hover:brightness-110 shadow-sm transition-all active:scale-95 cursor-pointer">
-              <span className="material-symbols-outlined">ios_share</span>
-              Export Data
-            </button>
-          </div>
-        </div>
-
-        {/* Dashboard Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-md">
-          <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl flex items-center justify-between shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
-            <div>
-              <p className="font-label-md text-label-md text-secondary uppercase tracking-wider">In Transit</p>
-              <p className="font-display-lg text-display-lg mt-xs">{isLoading ? '-' : data.filter(d => d.status.toLowerCase().includes('out')).length}</p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined">local_shipping</span>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl flex items-center justify-between shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
-            <div>
-              <p className="font-label-md text-label-md text-secondary uppercase tracking-wider">Processing</p>
-              <p className="font-display-lg text-display-lg mt-xs">{isLoading ? '-' : data.filter(d => d.status.toLowerCase().includes('booked')).length}</p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
-              <span className="material-symbols-outlined">sync</span>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl flex items-center justify-between shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
-            <div>
-              <p className="font-label-md text-label-md text-secondary uppercase tracking-wider">Delivered</p>
-              <p className="font-display-lg text-display-lg mt-xs">{isLoading ? '-' : data.filter(d => d.status.toLowerCase().includes('delivered')).length}</p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-700">
-              <span className="material-symbols-outlined">task_alt</span>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl flex items-center justify-between shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
-            <div>
-              <p className="font-label-md text-label-md text-secondary uppercase tracking-wider">Issues</p>
-              <p className="font-display-lg text-display-lg mt-xs text-error">{isLoading ? '-' : data.filter(d => d.status.toLowerCase().includes('fail') || d.status.toLowerCase().includes('return')).length}</p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-error-container flex items-center justify-center text-on-error-container">
-              <span className="material-symbols-outlined">warning</span>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+              <input
+                type="text"
+                placeholder="Search Booked Orders..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4 py-2 text-xs font-medium border border-outline-variant bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+              />
             </div>
           </div>
         </div>
 
-        {/* Table Section */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-[0px_1px_3px_rgba(0,0,0,0.05)]">
-          <div className="p-md border-b border-outline-variant flex flex-col md:flex-row md:items-center justify-between gap-md bg-surface-container-lowest">
-            <div className="flex items-center gap-md">
-              <div className="flex border border-outline-variant rounded-lg overflow-hidden">
-                <button className="px-md py-xs bg-surface-container-high font-label-md text-label-md font-bold cursor-pointer">Active</button>
-                <button className="px-md py-xs hover:bg-surface-container-low font-label-md text-label-md text-secondary transition-colors cursor-pointer">Pending</button>
-                <button className="px-md py-xs hover:bg-surface-container-low font-label-md text-label-md text-secondary transition-colors cursor-pointer">Archived</button>
-              </div>
-              <div className="relative">
-                <select className="appearance-none bg-surface-container-low border border-outline-variant rounded-lg pl-sm pr-xl py-xs font-label-md text-label-md focus:ring-primary-container outline-none cursor-pointer">
-                  <option>Sort by: Newest</option>
-                  <option>Sort by: Oldest</option>
-                  <option>Status</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-xs top-1/2 -translate-y-1/2 pointer-events-none text-outline text-[16px]">expand_more</span>
-              </div>
-            </div>
-            <div className="text-secondary font-body-md text-body-md flex items-center gap-sm">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search orders..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1 text-sm border border-outline-variant rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
-              </div>
-              <div>
-                Showing <span className="text-on-surface font-bold">1 - {filteredData.length}</span> of {data.length} orders
-              </div>
-            </div>
+        {/* Orders Table */}
+        <div className="bg-white border border-outline-variant rounded-2xl overflow-hidden shadow-sm flex flex-col">
+          <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50">
+            <h4 className="font-bold text-sm text-on-surface flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary" /> Booked Orders Listing
+            </h4>
+            <span className="text-xs font-semibold text-outline">
+              Showing {filteredData.length} booked order{filteredData.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          
-          <div className="overflow-x-auto custom-scrollbar">
+
+          <div className="overflow-x-auto min-h-[350px]">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-surface-container-low font-label-md text-label-md text-secondary uppercase tracking-tighter">
-                <tr>
-                  <th className="px-md py-sm font-semibold w-12">
-                    <input className="rounded-sm border-outline text-primary focus:ring-primary-container cursor-pointer" type="checkbox" />
-                  </th>
-                  <th className="px-md py-sm font-semibold">Booking #</th>
-                  <th className="px-md py-sm font-semibold">Name</th>
-                  <th className="px-md py-sm font-semibold">Consignee Address</th>
-                  <th className="px-md py-sm font-semibold">Status</th>
-                  <th className="px-md py-sm font-semibold text-right">Actions</th>
+              <thead>
+                <tr className="bg-slate-50/60 border-b border-outline-variant text-xs font-bold text-on-surface-variant uppercase tracking-wider">
+                  <th className="px-4 py-3">Booking # / Tracking ID</th>
+                  <th className="px-4 py-3">Consignee Details</th>
+                  <th className="px-4 py-3">Consignee Address</th>
+                  <th className="px-4 py-3">Shipper Account</th>
+                  <th className="px-4 py-3">COD Amount</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Individual Print</th>
                 </tr>
               </thead>
-              <tbody className="font-tabular-nums text-tabular-nums divide-y divide-outline-variant">
+              <tbody className="divide-y divide-outline-variant text-xs font-medium">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-md py-xl text-center text-secondary">
-                      Loading orders...
+                    <td colSpan={7} className="px-4 py-12 text-center text-secondary">
+                      Loading booked orders...
                     </td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-md py-xl text-center text-secondary">
-                      No orders found.
+                    <td colSpan={7} className="px-4 py-12 text-center text-secondary">
+                      No booked orders found.
                     </td>
                   </tr>
                 ) : (
                   filteredData.map((row) => (
-                    <tr key={row.id} className="hover:bg-surface-container-low transition-colors group">
-                      <td className="px-md py-md">
-                        <input className="rounded-sm border-outline text-primary focus:ring-primary-container cursor-pointer" type="checkbox" />
+                    <tr key={row.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-4 py-4 font-mono font-bold text-primary text-sm">
+                        {row.trackingNumber}
                       </td>
-                      <td className="px-md py-md">
-                        <span className="font-bold text-primary hover:underline cursor-pointer">{row.trackingNumber}</span>
-                      </td>
-                      <td className="px-md py-md">
-                        <div className="flex items-center gap-sm">
-                          <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary font-bold">{row.avatar}</div>
-                          <span>{row.customerName}</span>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px]">
+                            {row.avatar}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-900">{row.customerName}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{row.phone}</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-md py-md text-secondary max-w-xs truncate">
+                      <td className="px-4 py-4 text-slate-700 max-w-[240px] truncate">
                         {row.address}
                       </td>
-                      <td className="px-md py-md">
-                        {getStatusBadge(row.status)}
+                      <td className="px-4 py-4 text-slate-800 font-semibold">{row.shipperName}</td>
+                      <td className="px-4 py-4 font-bold text-slate-900">PKR {row.codAmount?.toLocaleString() || 0}</td>
+                      <td className="px-4 py-4">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                          {row.status === 'booked' ? 'Booked' : row.status}
+                        </span>
                       </td>
-                      <td className="px-md py-md text-right">
-                        <div className="flex items-center justify-end gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="material-symbols-outlined p-1 hover:bg-primary-container hover:text-white rounded transition-colors text-outline cursor-pointer">visibility</button>
-                          <button className="material-symbols-outlined p-1 hover:bg-primary-container hover:text-white rounded transition-colors text-outline cursor-pointer">edit</button>
-                          <button className="material-symbols-outlined p-1 hover:bg-error-container hover:text-error rounded transition-colors text-outline cursor-pointer">more_vert</button>
-                        </div>
+                      <td className="px-4 py-4 text-right">
+                        <button
+                          onClick={() => handlePrintIndividualOrder(row)}
+                          className="px-3 py-1.5 bg-primary text-white rounded-lg font-bold text-xs hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5 ml-auto cursor-pointer"
+                          title="Print singular order shipping label"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> Print Label
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -312,59 +279,125 @@ export default function OrderList() {
               </tbody>
             </table>
           </div>
-          
-          <div className="p-md flex items-center justify-between bg-surface-container-low border-t border-outline-variant">
-            <button className="flex items-center gap-xs px-md py-xs hover:bg-surface-container-highest rounded transition-colors text-secondary font-label-md text-label-md cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-              Previous
-            </button>
-            <div className="flex items-center gap-xs">
-              <button className="w-8 h-8 flex items-center justify-center rounded bg-primary text-on-primary font-bold text-[12px] cursor-pointer">1</button>
-            </div>
-            <button className="flex items-center gap-xs px-md py-xs hover:bg-surface-container-highest rounded transition-colors text-secondary font-label-md text-label-md cursor-pointer">
-              Next
-              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Operational Insights (Asymmetric Layout) */}
-        <div className="flex flex-col xl:flex-row gap-lg">
-          <div className="flex-grow bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-            <h3 className="font-headline-md text-headline-md mb-md">Delivery Performance Trends</h3>
-            <div className="h-48 flex items-end justify-between gap-sm px-md">
-              <div className="w-full bg-primary/20 rounded-t h-3/4 hover:bg-primary transition-colors cursor-help group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-sm py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Mon: 84%</div>
-              </div>
-              <div className="w-full bg-primary/20 rounded-t h-4/5 hover:bg-primary transition-colors cursor-help group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-sm py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Tue: 91%</div>
-              </div>
-              <div className="w-full bg-primary/20 rounded-t h-2/3 hover:bg-primary transition-colors cursor-help group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-sm py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Wed: 78%</div>
-              </div>
-              <div className="w-full bg-primary/20 rounded-t h-5/6 hover:bg-primary transition-colors cursor-help group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-sm py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Thu: 94%</div>
-              </div>
-              <div className="w-full bg-primary/20 rounded-t h-full hover:bg-primary transition-colors cursor-help group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-sm py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Fri: 98%</div>
-              </div>
-            </div>
-            <div className="flex justify-between mt-sm font-label-md text-label-md text-secondary">
-              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
-            </div>
-          </div>
-          <div className="xl:w-80 bg-primary-container text-on-primary-container rounded-xl p-md flex flex-col justify-between shadow-lg">
-            <div>
-              <div className="flex items-center gap-sm mb-sm">
-                <span className="material-symbols-outlined">auto_awesome</span>
-                <span className="font-label-md text-label-md uppercase font-bold">AI Logistics Tip</span>
-              </div>
-              <p className="font-body-md text-body-md opacity-90">Based on historical traffic and weather patterns, shifting departures for Chicago by <span className="font-bold underline">45 minutes</span> could improve delivery reliability by 12% today.</p>
-            </div>
-            <button className="mt-md w-full bg-white/20 hover:bg-white/30 py-sm rounded-lg font-bold text-tabular-nums text-tabular-nums transition-colors cursor-pointer">Apply Route Optimization</button>
-          </div>
         </div>
       </div>
+
+      {/* INDIVIDUAL SINGULAR ORDER SHIPPING LABEL PRINT MODAL */}
+      {printOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-outline-variant pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Singular Shipping Label Preview</h3>
+                <p className="text-xs text-slate-500 font-mono">{printOrder.trackingNumber}</p>
+              </div>
+              <button onClick={() => setPrintOrder(null)} className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Label Sticker Graphic Preview */}
+            <div className="border-2 border-slate-900 rounded-xl p-4 bg-white font-mono text-slate-900 text-xs flex flex-col gap-3 shadow-inner">
+              <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2">
+                <span className="font-bold text-base tracking-tight text-primary">DBArc Express</span>
+                <span className="text-[10px] font-bold border border-slate-900 px-1.5 py-0.5 rounded">STANDARD COD</span>
+              </div>
+
+              {/* Barcode Graphic */}
+              <div className="flex flex-col items-center justify-center py-2 bg-slate-50 border border-dashed border-slate-300 rounded">
+                <div className="flex items-center gap-0.5 h-10">
+                  {[4,2,6,1,3,5,2,4,1,6,3,2,5,1,4,2,6,3,1,5,2,4,6,1,3,2,5,1,4].map((w, idx) => (
+                    <div key={idx} className="bg-slate-900 h-full" style={{ width: `${w}px` }}></div>
+                  ))}
+                </div>
+                <span className="text-sm font-bold tracking-widest mt-1">{printOrder.trackingNumber}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] border-t border-b border-slate-900 py-2">
+                <div>
+                  <span className="font-bold block uppercase text-slate-500">Shipper (From):</span>
+                  <span className="font-bold">{printOrder.shipperName}</span>
+                  <p className="text-slate-600 line-clamp-2">{printOrder.shipperAddress}</p>
+                </div>
+                <div>
+                  <span className="font-bold block uppercase text-slate-500">Consignee (To):</span>
+                  <span className="font-bold">{printOrder.customerName}</span>
+                  <p className="text-slate-600">{printOrder.phone}</p>
+                  <p className="text-slate-800 font-semibold line-clamp-2">{printOrder.address}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-1 font-sans">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 block">WEIGHT: {printOrder.weightKg} KG</span>
+                  <span className="text-[9px] font-bold text-slate-500 block">DEST: {printOrder.destination.toUpperCase()}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-bold text-slate-500 block">COD AMOUNT</span>
+                  <span className="text-base font-bold text-slate-900">PKR {printOrder.codAmount?.toLocaleString() || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPrintOrder(null)}
+                className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+              >
+                <Printer className="w-4 h-4" /> Print Singular Order Label
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ISOLATED PRINT STICKER AREA FOR BROWSER PRINT */}
+      {printOrder && (
+        <div id="print-label-area" className="hidden">
+          <div style={{ width: '4in', height: '6in', border: '3px solid black', padding: '16px', fontFamily: 'monospace', color: 'black', background: 'white' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid black', paddingBottom: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 'bold' }}>DBArc Express</span>
+              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>COD ORDER</span>
+            </div>
+            
+            <div style={{ textAlign: 'center', margin: '16px 0', padding: '12px', border: '1px solid black' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px' }}>||| | ||| || ||| |||</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '6px' }}>{printOrder.trackingNumber}</div>
+            </div>
+
+            <div style={{ borderTop: '1px solid black', borderBottom: '1px solid black', padding: '12px 0', fontSize: '12px' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>SHIPPER:</strong> {printOrder.shipperName}<br />
+                {printOrder.shipperAddress}
+              </div>
+              <div>
+                <strong>CONSIGNEE:</strong> {printOrder.customerName} ({printOrder.phone})<br />
+                <strong>ADDRESS:</strong> {printOrder.address}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontSize: '14px' }}>
+              <div>
+                <strong>WEIGHT:</strong> {printOrder.weightKg} KG<br />
+                <strong>DESTINATION:</strong> {printOrder.destination.toUpperCase()}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong>COD AMOUNT:</strong><br />
+                <span style={{ fontSize: '18px', fontWeight: 'bold' }}>PKR {printOrder.codAmount?.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </PortalLayout>
   );
 }

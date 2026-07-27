@@ -22,3 +22,15 @@ apiClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
+// Response interceptor for graceful error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Log warnings for dev mode to avoid Next.js overlay triggers
+    if (typeof window !== 'undefined' && error.response?.status === 401) {
+      console.warn('API Client 401 Unauthorized:', error.config?.url);
+    }
+    return Promise.reject(error);
+  }
+);

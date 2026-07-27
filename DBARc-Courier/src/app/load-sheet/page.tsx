@@ -38,10 +38,9 @@ export default function LoadSheetPage() {
   const [riders, setRiders] = React.useState<any[]>([]);
   const [unassignedParcels, setUnassignedParcels] = React.useState<any[]>([]);
 
-  // Filter states
-  const [statusFilter, setStatusFilter] = React.useState('');
-  const [dateFilter, setDateFilter] = React.useState('');
-  const [hubFilter, setHubFilter] = React.useState('');
+  // Filter states (Only Date Range filter required)
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = React.useState(false);
@@ -75,14 +74,11 @@ export default function LoadSheetPage() {
       };
       
       const filters: any = {};
-      if (statusFilter && statusFilter !== 'All Statuses') {
-        filters.status = { $eq: statusFilter };
+      if (startDate) {
+        filters.date_created = { ...filters.date_created, $gte: startDate };
       }
-      if (dateFilter) {
-        filters.date_created = { $contains: dateFilter };
-      }
-      if (hubFilter && hubFilter !== 'All Stations') {
-        filters.origin_hub = { name: { $eq: hubFilter } };
+      if (endDate) {
+        filters.date_created = { ...filters.date_created, $lte: endDate };
       }
 
       if (Object.keys(filters).length > 0) {
@@ -114,10 +110,12 @@ export default function LoadSheetPage() {
 
   const fetchUnassignedParcels = async () => {
     try {
+      // Only booked orders will show
       const response = await apiClient.get('/parcels', {
         params: {
           filters: {
-            load_sheet: { id: { $null: true } }
+            load_sheet: { id: { $null: true } },
+            status: { $eq: 'booked' }
           },
           populate: '*'
         }
@@ -131,7 +129,7 @@ export default function LoadSheetPage() {
   React.useEffect(() => {
     fetchLoadSheets();
     fetchMetadata();
-  }, [statusFilter, dateFilter, hubFilter]);
+  }, [startDate, endDate]);
 
   // Open Create Modal
   const handleOpenCreateModal = () => {
@@ -284,7 +282,7 @@ export default function LoadSheetPage() {
         }
       `}} />
 
-      <div className="p-lg max-w-[1280px] mx-auto w-full flex flex-col gap-lg no-print">
+      <div className="p-lg max-w-[1920px] mx-auto w-full flex flex-col gap-lg no-print">
         
         {/* Success / Error Toast */}
         {toast.show && (
@@ -312,7 +310,7 @@ export default function LoadSheetPage() {
               Load Sheet Management
             </h2>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-              Create, review, and print bulk shipment cargo sheets for rider dispatches.
+              Create, review, and print bulk shipment cargo sheets for booked orders.
             </p>
           </div>
           <div className="flex items-center gap-sm">
@@ -326,58 +324,53 @@ export default function LoadSheetPage() {
           </div>
         </div>
 
-        {/* Filters Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-sm bg-white p-sm border border-outline-variant rounded-2xl shadow-sm">
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-md text-label-md text-outline">Date Created</label>
+        {/* Date Range Filter Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-md bg-white p-4 border border-outline-variant rounded-2xl shadow-sm items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-outline uppercase tracking-wider">Start Date</label>
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
               <input 
-                className="w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-outline-variant rounded-xl font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container" 
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-outline-variant rounded-xl font-body-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary" 
                 type="date" 
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
           </div>
           
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-md text-label-md text-outline">Origin Hub</label>
-            <select 
-              className="w-full px-3 py-2 bg-slate-50/50 border border-outline-variant rounded-xl font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container cursor-pointer"
-              value={hubFilter}
-              onChange={(e) => setHubFilter(e.target.value)}
-            >
-              <option value="">All Stations</option>
-              {hubs.map((hub) => (
-                <option key={hub.id} value={hub.name}>{hub.name}</option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-outline uppercase tracking-wider">End Date</label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
+              <input 
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-outline-variant rounded-xl font-body-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary" 
+                type="date" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
 
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-md text-label-md text-outline">Sheet Status</label>
-            <select 
-              className="w-full px-3 py-2 bg-slate-50/50 border border-outline-variant rounded-xl font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container cursor-pointer"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Dispatched">Dispatched</option>
-              <option value="On-Route">On-Route</option>
-              <option value="Delivered">Delivered</option>
-            </select>
-          </div>
-
-          <div className="flex items-end">
+          <div className="flex items-center gap-2">
             <button 
               onClick={fetchLoadSheets}
-              className="w-full h-[42px] bg-slate-100 hover:bg-slate-200 text-secondary font-semibold text-sm rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-outline-variant"
+              className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
             >
               <Search className="w-4 h-4" />
-              Refresh / Search
+              Filter Date Range
             </button>
+            {(startDate || endDate) && (
+              <button 
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-outline-variant"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
