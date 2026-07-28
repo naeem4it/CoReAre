@@ -1,11 +1,13 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
-import { Printer, Search, X, Package, Check, Layers, ChevronRight, Eye, Edit2 } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
+import { Printer, Search, X, Package, Check, Layers, ChevronRight, Eye, Edit2, Plus } from 'lucide-react';
 
 type OrderRow = {
   id: number | string;
@@ -24,106 +26,83 @@ type OrderRow = {
   dateCreated: string;
 };
 
-const FALLBACK_ROWS: OrderRow[] = [
-  {
-    id: 1,
-    trackingNumber: 'DBA-9283-XK',
-    customerName: 'Zeeshan Ahmed',
-    avatar: 'ZA',
-    phone: '+92 300 1234567',
-    origin: 'Lahore',
-    destination: 'Karachi',
-    address: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
-    shipperName: 'Metro Fashion Store',
-    shipperAddress: 'Shop 12, Liberty Market, Gulberg III, Lahore',
-    codAmount: 4500,
-    weightKg: 1.5,
-    status: 'booked',
-    dateCreated: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    trackingNumber: 'DBA-1104-ZA',
-    customerName: 'Mariam Khan',
-    avatar: 'MK',
-    phone: '+92 321 9876543',
-    origin: 'Faisalabad',
-    destination: 'Karachi',
-    address: 'House 42, Street 5, DHA Phase 6, Karachi',
-    shipperName: 'Silk Threads Pakistan',
-    shipperAddress: 'Plot 88, Industrial Area, Faisalabad',
-    codAmount: 2800,
-    weightKg: 0.8,
-    status: 'booked',
-    dateCreated: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 3,
-    trackingNumber: 'DBA-8742-MM',
-    customerName: 'Dr. Faisal Qureshi',
-    avatar: 'FQ',
-    phone: '+92 333 4567890',
-    origin: 'Karachi',
-    destination: 'Islamabad',
-    address: 'Aga Khan University Hospital, Stadium Road, Karachi',
-    shipperName: 'MedTech Supplies Ltd',
-    shipperAddress: 'Suite 404, Business Plaza, I.I. Chundrigar Road, Karachi',
-    codAmount: 12500,
-    weightKg: 3.2,
-    status: 'booked',
-    dateCreated: new Date(Date.now() - 172800000).toISOString(),
-  },
-];
-
 export default function OrderList() {
-  const [data, setData] = React.useState<OrderRow[]>(FALLBACK_ROWS);
+  const { user, activeBusinessId } = useAuth();
+  const [data, setData] = React.useState<OrderRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
 
   // Individual Order Label Print Modal State
   const [printOrder, setPrintOrder] = React.useState<OrderRow | null>(null);
 
+  const isShipper = React.useMemo(() => {
+    if (!user) return false;
+    const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
+    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
+    return hasShipperRelation || hasShipperRoles;
+  }, [user]);
+
+  const shipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
+    if (user?.shipper) {
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) {
+        return user.shipper[0].id;
+      } else if (typeof user.shipper === 'object' && user.shipper.id) {
+        return user.shipper.id;
+      }
+    }
+    return null;
+  }, [user, activeBusinessId]);
+
   React.useEffect(() => {
     const fetchParcels = async () => {
       try {
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*');
+        setIsLoading(true);
+        let parcelsUrl = '/parcels?populate=*';
+        if (isShipper && shipperId) {
+          parcelsUrl += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
+        }
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
         const parcels = response.data?.data || [];
         
         if (parcels.length > 0) {
           const mapped: OrderRow[] = parcels.map((item: any) => {
-            const customerName = item.recipient_name || 'Unknown Consignee';
-            const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'UN';
-            const destination = item.recipient_address?.split(',').pop()?.trim() || 'Pakistan';
+            const customerName = item.recipient_name || 'Customer';
+            const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'CU';
+            const destination = item.destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Pakistan';
+            const origin = item.source_city?.name || 'Karachi';
             
             return {
               id: item.id,
               trackingNumber: `${item.tracking_number}`,
               customerName,
               avatar: initials,
-              phone: item.recipient_phone || '+92 300 0000000',
-              origin: item.origin_hub?.name || 'Karachi',
-              destination: item.destination_hub?.name || destination,
+              phone: item.recipient_phone || 'N/A',
+              origin,
+              destination,
               address: item.recipient_address || 'No address provided',
-              shipperName: item.shipper?.name || 'Standard Shipper Account',
-              shipperAddress: 'Warehouse Hub 01, Logistics Center',
+              shipperName: item.shipper?.name || item.pickup_location?.shipper?.name || 'Shipper Account',
+              shipperAddress: item.pickup_location?.address || 'Pickup Warehouse',
               codAmount: item.cod_amount || 0,
               weightKg: item.weight || 1.0,
               status: item.status || 'booked',
               dateCreated: item.createdAt || new Date().toISOString(),
             };
           });
-          // Show booked orders primarily
           setData(mapped);
+        } else {
+          setData([]);
         }
       } catch (error) {
-        console.warn('Could not fetch orders, using fallback data:', error);
+        console.warn('Could not fetch orders:', error);
+        setData([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchParcels();
-  }, []);
+  }, [isShipper, shipperId]);
 
   const filteredData = data.filter((row) => {
     if (!searchQuery) return true;
@@ -197,6 +176,12 @@ export default function OrderList() {
                 className="pl-9 pr-4 py-2 text-xs font-medium border border-outline-variant bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
               />
             </div>
+            <Link
+              href="/shipments/book"
+              className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-xs hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Add Order
+            </Link>
           </div>
         </div>
 

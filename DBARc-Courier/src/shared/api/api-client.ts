@@ -9,12 +9,12 @@ export const apiClient = axios.create({
   },
 });
 
-// Attach token interceptor if token exists in localStorage
+// Attach token interceptor if token exists in localStorage and is a real Strapi JWT
 apiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
-      if (token && config.headers) {
+      if (token && !token.startsWith('mock-') && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
@@ -27,9 +27,8 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Log warnings for dev mode to avoid Next.js overlay triggers
-    if (typeof window !== 'undefined' && error.response?.status === 401) {
-      console.warn('API Client 401 Unauthorized:', error.config?.url);
+    if (typeof window !== 'undefined' && (error.response?.status === 401 || error.response?.status === 403)) {
+      console.warn(`API Client ${error.response?.status} (${error.config?.url})`);
     }
     return Promise.reject(error);
   }

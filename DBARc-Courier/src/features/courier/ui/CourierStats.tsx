@@ -4,6 +4,7 @@ import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
+import { useAuth } from '@/components/AuthProvider';
 
 type StatsData = {
   totalShipments: number;
@@ -12,47 +13,96 @@ type StatsData = {
   delivered: number;
 };
 
-export const CourierStats = () => {
+interface CourierStatsProps {
+  fromDate?: string;
+  toDate?: string;
+}
+
+export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
+  const { user, activeBusinessId } = useAuth();
   const [stats, setStats] = React.useState<StatsData>({
-    totalShipments: 4821, // Design defaults as fallback
-    notArrived: 342,
-    arrived: 1208,
-    delivered: 3271,
+    totalShipments: 0,
+    notArrived: 0,
+    arrived: 0,
+    delivered: 0,
   });
   const [isLoading, setIsLoading] = React.useState(true);
+
+  const isShipper = React.useMemo(() => {
+    if (!user) return false;
+    const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
+    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
+    return hasShipperRelation || hasShipperRoles;
+  }, [user]);
+
+  const shipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
+    if (user?.shipper) {
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) {
+        return user.shipper[0].id;
+      } else if (typeof user.shipper === 'object' && user.shipper.id) {
+        return user.shipper.id;
+      }
+    }
+    return null;
+  }, [user, activeBusinessId]);
 
   React.useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*');
-        const parcels = response.data?.data || [];
-        
-        if (parcels.length > 0) {
-          const total = parcels.length;
-          const pending = parcels.filter((p: Parcel) => 
-            p.status === 'Total Booking' || p.status === 'Not Arrived'
-          ).length;
-          const inTransit = parcels.filter((p: Parcel) => 
-            p.status === 'Arrived' || p.status === 'Arrived At Destination' || p.status === 'Out For delivery' || p.status === 'Ready To Return' || p.status === 'Return Dispatched'
-          ).length;
-          const deliveredCount = parcels.filter((p: Parcel) => p.status === 'Delivered').length;
+        setIsLoading(true);
+        let parcelsUrl = '/parcels?populate=*';
+        if (isShipper && shipperId) {
+          parcelsUrl += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
+        }
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
+        let parcels = response.data?.data || [];
 
-          setStats({
-            totalShipments: total,
-            notArrived: pending,
-            arrived: inTransit,
-            delivered: deliveredCount,
+        // Apply Date Range Filter if set
+        if (fromDate || toDate) {
+          parcels = parcels.filter((item: any) => {
+            if (!item.createdAt) return true;
+            const itemDate = new Date(item.createdAt);
+            if (fromDate) {
+              const from = new Date(fromDate);
+              from.setHours(0, 0, 0, 0);
+              if (itemDate < from) return false;
+            }
+            if (toDate) {
+              const to = new Date(toDate);
+              to.setHours(23, 59, 59, 999);
+              if (itemDate > to) return false;
+            }
+            return true;
           });
         }
+
+        setStats({
+          totalShipments: parcels.length,
+          notArrived: parcels.filter((p: Parcel) => p.status === 'Total Booking' || p.status === 'Not Arrived').length,
+          arrived: parcels.filter((p: Parcel) => ['Arrived', 'Arrived At Destination', 'Out For delivery', 'Ready To Return', 'Return Dispatched'].includes(p.status || '')).length,
+          delivered: parcels.filter((p: Parcel) => p.status === 'Delivered').length,
+        });
       } catch (error) {
-        console.warn('Could not fetch dynamic stats, using fallback design data:', error);
+        console.warn('Could not fetch dynamic stats:', error);
+        setStats({ totalShipments: 0, notArrived: 0, arrived: 0, delivered: 0 });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchStats();
-  }, []);
+  }, [isShipper, shipperId, fromDate, toDate]);
+
+  const deliveryRate = React.useMemo(() => {
+    if (!stats.totalShipments || stats.totalShipments === 0) return 0;
+    return (stats.delivered / stats.totalShipments) * 100;
+  }, [stats.totalShipments, stats.delivered]);
+
+  const activeRate = React.useMemo(() => {
+    if (!stats.totalShipments || stats.totalShipments === 0) return 0;
+    return ((stats.arrived + stats.delivered) / stats.totalShipments) * 100;
+  }, [stats.totalShipments, stats.arrived, stats.delivered]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mb-xl">
@@ -62,7 +112,13 @@ export const CourierStats = () => {
           <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
             <span className="material-symbols-outlined">sailing</span>
           </div>
-          <span className="text-emerald-600 flex items-center font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">+12.5%</span>
+          {stats.totalShipments === 0 ? (
+            <span className="text-slate-500 font-tabular-nums text-[12px] bg-slate-100 px-2 py-0.5 rounded-full">0.0%</span>
+          ) : activeRate >= 50 ? (
+            <span className="text-emerald-600 flex items-center font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">+{activeRate.toFixed(1)}%</span>
+          ) : (
+            <span className="text-rose-600 flex items-center font-tabular-nums text-[12px] bg-rose-50 px-2 py-0.5 rounded-full">{activeRate.toFixed(1)}%</span>
+          )}
         </div>
         <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Total Shipments</h3>
         <p className="font-display-lg text-display-lg mt-1 tabular-nums">
@@ -116,7 +172,13 @@ export const CourierStats = () => {
           <div className="p-2 rounded-lg bg-primary-container text-white group-hover:bg-primary transition-colors">
             <span className="material-symbols-outlined">check_circle</span>
           </div>
-          <span className="text-emerald-600 font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">98% Goal</span>
+          {stats.totalShipments === 0 ? (
+            <span className="text-slate-500 font-tabular-nums text-[12px] bg-slate-100 px-2 py-0.5 rounded-full">0.0% Goal</span>
+          ) : deliveryRate >= 75 ? (
+            <span className="text-emerald-600 font-tabular-nums text-[12px] bg-emerald-50 px-2 py-0.5 rounded-full">{deliveryRate.toFixed(1)}% Goal</span>
+          ) : (
+            <span className="text-rose-600 font-tabular-nums text-[12px] bg-rose-50 px-2 py-0.5 rounded-full">{deliveryRate.toFixed(1)}% Goal</span>
+          )}
         </div>
         <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Delivered</h3>
         <p className="font-display-lg text-display-lg mt-1 tabular-nums text-primary-container">

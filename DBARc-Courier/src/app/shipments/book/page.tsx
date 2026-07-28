@@ -30,7 +30,13 @@ import {
   RefreshCw,
   Search,
   Edit,
-  Trash
+  Trash,
+  Printer, 
+  Barcode as BarcodeIcon, 
+  Layers, 
+  Upload, 
+  Plus, 
+  HelpCircle
 } from 'lucide-react';
 
 import PortalLayout from '@/components/PortalLayout';
@@ -83,6 +89,79 @@ interface UploadHistoryItem {
   error?: string;
 }
 
+interface BulkOrderItem {
+  itemId: string;
+  itemName: string;
+  codAmount: number;
+}
+
+interface GroupedBulkOrder {
+  orderId: string;
+  consigneeName: string;
+  consigneePhone: string;
+  consigneeAddress: string;
+  shipperName: string;
+  shipperAddress: string;
+  shippingType: 'In-House' | '3PL';
+  primaryBarcode: string;
+  secondary3PLBarcode?: string;
+  items: BulkOrderItem[];
+  totalCod: number;
+  createdAt: string;
+}
+
+const DEMO_BULK_ORDERS: GroupedBulkOrder[] = [
+  {
+    orderId: 'ORD-88210',
+    consigneeName: 'Zeeshan Ahmed',
+    consigneePhone: '+92 300 1234567',
+    consigneeAddress: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
+    shipperName: 'Metro Fashion Store',
+    shipperAddress: 'Shop 12, Liberty Market, Gulberg III, Lahore',
+    shippingType: 'In-House',
+    primaryBarcode: 'DBA-88210-IH',
+    items: [
+      { itemId: 'ITM-01', itemName: 'Denim Jacket (Blue, L)', codAmount: 2500 },
+      { itemId: 'ITM-02', itemName: 'Cotton T-Shirt (White, M)', codAmount: 1500 }
+    ],
+    totalCod: 4000,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    orderId: 'ORD-88211',
+    consigneeName: 'Mariam Khan',
+    consigneePhone: '+92 321 9876543',
+    consigneeAddress: 'House 42, Street 5, DHA Phase 6, Karachi',
+    shipperName: 'Silk Threads Pakistan',
+    shipperAddress: 'Plot 88, Industrial Area, Faisalabad',
+    shippingType: '3PL',
+    primaryBarcode: 'DBA-88211-3P',
+    secondary3PLBarcode: 'TCS-99482103-PK',
+    items: [
+      { itemId: 'ITM-01', itemName: 'Embroidered Lawn Suit (Unstitched 3pc)', codAmount: 5500 }
+    ],
+    totalCod: 5500,
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    orderId: 'ORD-88212',
+    consigneeName: 'Dr. Faisal Qureshi',
+    consigneePhone: '+92 333 4567890',
+    consigneeAddress: 'Aga Khan University Hospital, Stadium Road, Karachi',
+    shipperName: 'MedTech Supplies Ltd',
+    shipperAddress: 'Suite 404, Business Plaza, I.I. Chundrigar Road, Karachi',
+    shippingType: 'In-House',
+    primaryBarcode: 'DBA-88212-IH',
+    items: [
+      { itemId: 'ITM-01', itemName: 'Digital Stethoscope', codAmount: 8500 },
+      { itemId: 'ITM-02', itemName: 'Pulse Oximeter Pack', codAmount: 2200 },
+      { itemId: 'ITM-03', itemName: 'N95 Respirator Masks Box', codAmount: 1800 }
+    ],
+    totalCod: 12500,
+    createdAt: new Date().toISOString(),
+  }
+];
+
 // Validator for uploader spreadsheet rows
 const validateSpreadsheetRow = (row: any) => {
   const rowErrors: Record<string, string> = {};
@@ -107,18 +186,6 @@ const validateSpreadsheetRow = (row: any) => {
   return rowErrors;
 };
 
-// Form Dropdown Options mapping to SearchableDropdownOption format
-const CITY_OPTIONS = [
-  { label: 'Karachi', value: 'Karachi' },
-  { label: 'Lahore', value: 'Lahore' },
-  { label: 'Islamabad', value: 'Islamabad' },
-  { label: 'Faisalabad', value: 'Faisalabad' },
-  { label: 'Rawalpindi', value: 'Rawalpindi' },
-  { label: 'Multan', value: 'Multan' },
-  { label: 'Peshawar', value: 'Peshawar' },
-  { label: 'Quetta', value: 'Quetta' },
-];
-
 const SERVICE_OPTIONS = [
   { label: 'Overnight', value: 'Overnight' },
   { label: 'Detained', value: 'Detained' },
@@ -140,7 +207,7 @@ function BookShipmentForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // User auth state read directly from localStorage (aligned with local auth)
+  // User auth state read directly from localStorage
   const [user, setUser] = React.useState<any>(null);
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -171,7 +238,15 @@ function BookShipmentForm() {
   // Offices state for default pickup location
   const [offices, setOffices] = React.useState<{label: string, value: number}[]>([]);
 
-  // Sync mode with query parameter tab state
+  // Grouped Bulk Orders & Printing States
+  const [groupedOrders, setGroupedOrders] = React.useState<GroupedBulkOrder[]>(DEMO_BULK_ORDERS);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [typeFilter, setTypeFilter] = React.useState<'All' | 'In-House' | '3PL'>('All');
+  const [selectedOrderForLabel, setSelectedOrderForLabel] = React.useState<GroupedBulkOrder | null>(null);
+  const [showPasteModal, setShowPasteModal] = React.useState(false);
+  const [rawCsvText, setRawCsvText] = React.useState('');
+
+  // Sync mode with query parameter tab state (?tab=bulk or ?tab=manual)
   React.useEffect(() => {
     const tab = searchParams?.get('tab');
     if (tab === 'bulk') {
@@ -180,6 +255,7 @@ function BookShipmentForm() {
       setBookingMode('manual');
     }
   }, [searchParams]);
+
   const [showDetailsModal, setShowDetailsModal] = React.useState(false);
 
   // Bulk Upload States
@@ -194,9 +270,8 @@ function BookShipmentForm() {
   const [editFormData, setEditFormData] = React.useState<any>({});
 
   const [uploadHistory, setUploadHistory] = React.useState<UploadHistoryItem[]>([
-    { id: '1', fileName: 'shipments_karachi_june.xlsx', date: '2026-06-07 10:30 AM', count: 42, status: 'processed' },
+    { id: '1', fileName: 'orders_karachi_june.xlsx', date: '2026-06-07 10:30 AM', count: 42, status: 'processed' },
     { id: '2', fileName: 'bulk_delivery_orders_v2.csv', date: '2026-06-06 02:15 PM', count: 120, status: 'processed' },
-    { id: '3', fileName: 'test_shipments_invalid.xlsx', date: '2026-06-05 04:40 PM', count: 15, status: 'failed', error: 'Missing destinationCity column header' },
   ]);
 
   const todayStr = React.useMemo(() => {
@@ -236,31 +311,103 @@ function BookShipmentForm() {
         if (mappedOffices.length > 0) {
           setValue('pickupLocation', mappedOffices[0].value);
         }
-      }).catch(err => console.error(err));
+      }).catch(err => console.warn('Could not fetch user offices:', err));
     }
   }, [user, setValue]);
 
-  // Watch fields for estimated cost calculation
+  // Watch fields for live estimated cost calculation
   const weight = watch('weight') || 0.5;
+  const codAmount = watch('codAmount') || 0;
+  const serviceType = watch('serviceType') || 'Overnight';
+  const destinationCityId = watch('destinationCity');
+  const destinationCityName = watch('destinationCityName') || '';
 
-  // Calculate live quotes
   const pricing = React.useMemo(() => {
-    const extraWeight = Math.max(0, weight - 0.5);
-    const extraUnits = Math.ceil(extraWeight / 0.5);
-    const baseRate = 250 + (extraUnits * 100);
+    const activePlanName = user?.tariffPlan || user?.planName || (typeof window !== 'undefined' ? localStorage.getItem('activeBusinessTariffPlan') : null) || 'Standard Tariff Plan';
+    const cityLower = String(destinationCityName || '').toLowerCase();
+    let zoneName = 'Within City';
+    if (cityLower.includes('karachi') || cityLower.includes('lahore') || cityLower.includes('islamabad') || cityLower.includes('rawalpindi')) {
+      zoneName = 'Zone A (Major Hubs)';
+    } else if (cityLower.includes('faisalabad') || cityLower.includes('multan') || cityLower.includes('peshawar') || cityLower.includes('gujranwala') || cityLower.includes('sialkot') || cityLower.includes('hyderabad')) {
+      zoneName = 'Zone B (Regional)';
+    } else if (cityLower.includes('quetta') || cityLower.includes('sukkur') || cityLower.includes('bahawalpur') || cityLower.includes('sargodha') || cityLower.includes('abbottabad')) {
+      zoneName = 'Zone C (Remote)';
+    } else if (destinationCityId) {
+      zoneName = 'Zone D (Other)';
+    }
+
+    const isCorporate = activePlanName.toLowerCase().includes('corporate');
+    const isVip = activePlanName.toLowerCase().includes('vip');
+
+    let halfKgRate = isVip ? 110 : isCorporate ? 120 : 135;
+    let oneKgRate = isVip ? 130 : isCorporate ? 140 : 150;
+    let addKgRate = isVip ? 120 : isCorporate ? 130 : 150;
+
+    if (zoneName.includes('Zone A')) {
+      halfKgRate = Math.round(halfKgRate * 1.2);
+      oneKgRate = Math.round(oneKgRate * 1.2);
+      addKgRate = Math.round(addKgRate * 1.2);
+    } else if (zoneName.includes('Zone B')) {
+      halfKgRate = Math.round(halfKgRate * 1.3);
+      oneKgRate = Math.round(oneKgRate * 1.3);
+      addKgRate = Math.round(addKgRate * 1.3);
+    } else if (zoneName.includes('Zone C')) {
+      halfKgRate = Math.round(halfKgRate * 1.4);
+      oneKgRate = Math.round(oneKgRate * 1.4);
+      addKgRate = Math.round(addKgRate * 1.4);
+    } else if (zoneName.includes('Zone D')) {
+      halfKgRate = Math.round(halfKgRate * 1.5);
+      oneKgRate = Math.round(oneKgRate * 1.5);
+      addKgRate = Math.round(addKgRate * 1.5);
+    }
+
+    const numWeight = Math.max(0.1, Number(weight) || 0.5);
+    let weightCharge = halfKgRate;
+
+    if (numWeight <= 0.5) {
+      weightCharge = halfKgRate;
+    } else if (numWeight <= 1.0) {
+      weightCharge = oneKgRate;
+    } else {
+      const extraKg = Math.ceil(numWeight - 1.0);
+      weightCharge = oneKgRate + (extraKg * addKgRate);
+    }
+
+    if (serviceType === 'Same Day') {
+      weightCharge = Math.round(weightCharge * 1.5);
+    } else if (serviceType === 'Cargo / Economy') {
+      weightCharge = Math.round(weightCharge * 0.85);
+    }
+
+    const numCod = Math.max(0, Number(codAmount) || 0);
+    let codFee = 0;
+    if (numCod > 0) {
+      if (isCorporate) {
+        codFee = 40;
+      } else if (isVip) {
+        codFee = Math.max(20, Math.round(numCod * 0.01));
+      } else {
+        codFee = Math.max(30, Math.round(numCod * 0.015));
+      }
+    }
+
     const surcharge = 35;
-    const gst = Math.round((baseRate + surcharge) * 0.17 * 100) / 100;
-    const total = Math.round((baseRate + surcharge + gst) * 100) / 100;
+    const subtotal = weightCharge + codFee + surcharge;
+    const gst = Math.round(subtotal * 0.17 * 100) / 100;
+    const total = Math.round((subtotal + gst) * 100) / 100;
 
     return {
-      baseRate,
+      planName: activePlanName,
+      zoneName,
+      weightCharge,
+      codFee,
       surcharge,
       gst,
       total,
     };
-  }, [weight]);
+  }, [weight, codAmount, serviceType, destinationCityId, destinationCityName, user]);
 
-  // Handle Autocomplete Search for Reference Number
+  // Search Reference Order
   React.useEffect(() => {
     if (refSearchQuery.trim().length < 3) {
       setRefParcelsList([]);
@@ -292,7 +439,7 @@ function BookShipmentForm() {
     setShowRefDropdown(false);
   };
 
-  // Handle Manual Form Submission
+  // Submit Manual Single Order
   const onSubmit = async (data: BookingFormValues) => {
     setBookingStatus('submitting');
     setErrorMessage('');
@@ -300,6 +447,9 @@ function BookShipmentForm() {
     try {
       const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
+      const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
+      const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
+      const shipperId = activeBusinessId || (Array.isArray(user?.shipper) ? user.shipper[0]?.id : user?.shipper?.id);
 
       const parcelRes = await apiClient.post('/parcels', {
         data: {
@@ -316,6 +466,7 @@ function BookShipmentForm() {
           allow_to_open: data.allowToOpen,
           comments: data.comments,
           tenant: tenantId,
+          shipper: shipperId || null,
           origin_office: data.pickupLocation || null,
         }
       });
@@ -367,13 +518,13 @@ function BookShipmentForm() {
       }, 3000);
 
     } catch (err: any) {
-      console.error('Failed to book shipment:', err);
+      console.error('Failed to book order:', err);
       setErrorMessage(err.response?.data?.error?.message || 'Failed to connect to the server. Please try again.');
       setBookingStatus('error');
     }
   };
 
-  // Drag and Drop handlers
+  // Drag and Drop Handlers
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -401,7 +552,6 @@ function BookShipmentForm() {
     }
   };
 
-  // Process the uploaded file
   const processUploadedFile = (file: File) => {
     const extension = file.name.split('.').pop()?.toLowerCase();
     if (!['xlsx', 'xls', 'csv'].includes(extension || '')) {
@@ -454,7 +604,6 @@ function BookShipmentForm() {
           setBulkProgress(100);
           setBulkStatus('loaded');
         } else {
-          // Mock parse xlsx/xls with demonstration rows
           setTimeout(() => {
             const mockRows = [
               {
@@ -462,69 +611,29 @@ function BookShipmentForm() {
                 consigneeName: 'Mohsin Khan',
                 consigneePhone: '+923001234567',
                 consigneeEmail: 'mohsin@example.com',
-                consigneeAltPhone: '',
                 deliveryAddress: 'House 56, Block D, Gulshan',
                 destinationCity: 'Karachi',
-                area: 'Gulshan-e-Iqbal',
                 weight: 1.2,
                 pieces: 1,
                 codAmount: 3500,
                 productDescription: 'Leather jacket',
                 serviceType: 'Overnight',
                 allowToOpen: 'Yes',
-                comments: '',
-                pickupDate: todayStr,
-                pickupTimeSlot: 'Morning (09 AM - 12 PM)',
-                specialInstructions: '',
                 errors: {}
               },
               {
                 id: 'row-2',
                 consigneeName: 'Ayesha Bibi',
-                consigneePhone: '+923', // Intentional error for edit demonstration
+                consigneePhone: '+923331122334',
                 consigneeEmail: 'ayesha@example.com',
-                consigneeAltPhone: '',
                 deliveryAddress: 'Street 4, Sector G-9',
-                destinationCity: '', // Intentional error for edit demonstration
-                area: 'G-9/2',
+                destinationCity: 'Islamabad',
                 weight: 0.5,
                 pieces: 1,
-                codAmount: 0,
+                codAmount: 1500,
                 productDescription: 'Winter shawls',
                 serviceType: 'Overnight',
                 allowToOpen: 'No',
-                comments: '',
-                pickupDate: todayStr,
-                pickupTimeSlot: 'Afternoon (12 PM - 04 PM)',
-                specialInstructions: '',
-                errors: {
-                  consigneePhone: 'Invalid phone number format',
-                  destinationCity: 'City required'
-                }
-              },
-              {
-                id: 'row-3',
-                consigneeName: 'Usman Ali',
-                consigneePhone: '+923331122334',
-                consigneeEmail: 'usman@example.com',
-                consigneeAltPhone: '',
-                deliveryAddress: 'Office 12, Level 4, Tech Plaza, DHA',
-                destinationCity: 'Lahore',
-                area: 'DHA Phase 6',
-                weight: 2.0,
-                pieces: 2,
-                codAmount: 12000,
-                productDescription: 'Wireless earbuds',
-                serviceType: 'Overnight',
-                allowToOpen: 'No',
-                comments: 'Urgent delivery',
-                pickupDate: todayStr,
-                pickupTimeSlot: 'Evening (04 PM - 08 PM)',
-                specialInstructions: '',
-                referenceNo: 'DBA-MOCK987',
-                collectReplacement: 'Yes',
-                parcelDetail: 'Old wired headphones',
-                collectRs: 150,
                 errors: {}
               }
             ];
@@ -555,6 +664,65 @@ function BookShipmentForm() {
     setBulkStatus('idle');
   };
 
+  // Parse Raw Sheet Paste
+  const handleProcessBulkSheetPaste = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rawCsvText.trim()) return;
+
+    const lines = rawCsvText.trim().split('\n');
+    const orderMap: { [orderId: string]: GroupedBulkOrder } = {};
+
+    lines.forEach((line, idx) => {
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length < 5) return;
+
+      const orderId = parts[0] || `ORD-${Date.now()}-${idx}`;
+      const consigneeName = parts[1] || 'Unknown Consignee';
+      const consigneePhone = parts[2] || '+92 300 0000000';
+      const consigneeAddress = parts[3] || 'No Address Provided';
+      const shipperName = parts[4] || 'Shipper Business';
+      const shipperAddress = parts[5] || 'Warehouse Center';
+      const itemName = parts[6] || 'Item Product';
+      const codAmount = Number(parts[7]) || 0;
+      const shippingType = (parts[8]?.toUpperCase() === '3PL' ? '3PL' : 'In-House') as 'In-House' | '3PL';
+      const secondary3PLBarcode = parts[9] || (shippingType === '3PL' ? `3PL-${Math.floor(100000 + Math.random() * 900000)}` : undefined);
+
+      if (!orderMap[orderId]) {
+        orderMap[orderId] = {
+          orderId,
+          consigneeName,
+          consigneePhone,
+          consigneeAddress,
+          shipperName,
+          shipperAddress,
+          shippingType,
+          primaryBarcode: `DBA-${orderId}`,
+          secondary3PLBarcode,
+          items: [],
+          totalCod: 0,
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      orderMap[orderId].items.push({
+        itemId: `ITM-${orderMap[orderId].items.length + 1}`,
+        itemName,
+        codAmount
+      });
+      orderMap[orderId].totalCod += codAmount;
+    });
+
+    const parsedOrders = Object.values(orderMap);
+    if (parsedOrders.length > 0) {
+      setGroupedOrders(prev => [...parsedOrders, ...prev]);
+      setShowPasteModal(false);
+      setRawCsvText('');
+      alert(`Successfully processed and grouped ${parsedOrders.length} unique orders!`);
+    } else {
+      alert('Could not parse valid lines. Please verify formatting.');
+    }
+  };
+
   // Inline Row Editor Handlers
   const startEditingRow = (row: any) => {
     setEditingRowId(row.id);
@@ -571,7 +739,6 @@ function BookShipmentForm() {
   const saveRowEdits = () => {
     const updatedForm = { ...editFormData };
     updatedForm.errors = validateSpreadsheetRow(updatedForm);
-
     setParsedRows(prev => prev.map(row => (row.id === updatedForm.id ? updatedForm : row)));
     setEditingRowId(null);
   };
@@ -584,12 +751,10 @@ function BookShipmentForm() {
     setParsedRows(prev => prev.filter(row => row.id !== rowId));
   };
 
-  // Check if grid has any validation errors
   const gridHasErrors = React.useMemo(() => {
     return parsedRows.some(row => Object.keys(row.errors || {}).length > 0);
   }, [parsedRows]);
 
-  // Real CSV template downloader
   const downloadTemplate = () => {
     const headers = [
       'consigneeName',
@@ -638,19 +803,16 @@ function BookShipmentForm() {
       '150'
     ];
     
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), sampleRow.join(",")].join("\n");
-      
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), sampleRow.join(",")].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "dbarc_bulk_shipment_template.csv");
+    link.setAttribute("download", "dbarc_bulk_order_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Batch booking creator
   const importAndProcessShipments = async () => {
     if (parsedRows.length === 0) {
       alert("Please upload a spreadsheet first.");
@@ -671,13 +833,11 @@ function BookShipmentForm() {
     try {
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
-        
         const extraWeight = Math.max(0, row.weight - 0.5);
         const extraUnits = Math.ceil(extraWeight / 0.5);
         const deliveryCharge = 250 + (extraUnits * 100) + 35;
         const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-        // 1. Post Parcel
         const parcelRes = await apiClient.post('/parcels', {
           data: {
             tracking_number: trackingId,
@@ -698,7 +858,6 @@ function BookShipmentForm() {
 
         const newParcelId = parcelRes.data.data.id;
 
-        // 2. Post Replacement if reference number is associated
         if (row.referenceNo && row.referenceNo.trim().length > 3) {
           const oldParcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${row.referenceNo.trim()}`);
           const oldParcel = oldParcelRes.data.data?.[0];
@@ -724,7 +883,7 @@ function BookShipmentForm() {
 
       const newHistoryItem: UploadHistoryItem = {
         id: String(Date.now()),
-        fileName: selectedFile?.name || 'bulk_shipments.csv',
+        fileName: selectedFile?.name || 'bulk_orders.csv',
         date: new Date().toLocaleString(),
         count: successCount,
         status: 'processed'
@@ -742,42 +901,75 @@ function BookShipmentForm() {
     }
   };
 
-  const autofillRecent = () => {
-    setBookingMode('manual');
-    setValue('consigneeName', 'Muhammad Ahmed');
-    setValue('consigneePhone', '+923214567890');
-    setValue('consigneeEmail', 'muhammad.ahmed@example.com');
-    setValue('consigneeAltPhone', '+923009876543');
-    setValue('deliveryAddress', 'Apartment 4B, Building C, DHA Phase 5');
-    setValue('destinationCity', 'Lahore');
-    setValue('area', 'DHA Phase 5');
-    setValue('productDescription', 'Clothing Apparel');
-    setValue('allowToOpen', 'Yes');
-    setValue('comments', 'Open packaging check allowed by shipper.');
+  const filteredGroupedOrders = React.useMemo(() => {
+    return groupedOrders.filter(ord => {
+      const matchesSearch = !searchQuery || (
+        ord.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ord.consigneeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ord.consigneePhone.includes(searchQuery)
+      );
+      const matchesType = typeFilter === 'All' || ord.shippingType === typeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [groupedOrders, searchQuery, typeFilter]);
+
+  const handleTriggerPrint = () => {
+    setTimeout(() => {
+      window.print();
+    }, 300);
   };
 
   return (
     <PortalLayout>
-      <div className="max-w-[1280px] mx-auto space-y-lg relative">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #bulk-label-print-area, #bulk-label-print-area * {
+            visibility: visible !important;
+          }
+          #bulk-label-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            display: block !important;
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}} />
+
+      <div className="w-full space-y-md relative no-print">
         {/* Page Header */}
-        <div className="flex items-center justify-between mb-xl">
+        <div className="flex items-center justify-between mb-md">
           <div>
             <nav className="flex gap-xs text-label-md font-label-md text-on-surface-variant mb-xs">
-              <Link href="/shipments" className="hover:text-primary transition-colors cursor-pointer">Shipments</Link>
+              <Link href="/orders" className="hover:text-primary transition-colors cursor-pointer">Booking Order</Link>
               <span>/</span>
-              <span className="text-on-surface">Book Shipment</span>
+              <span className="text-on-surface">{bookingMode === 'manual' ? 'Book Order' : 'Bulk Booking'}</span>
             </nav>
-            <h1 className="font-display-lg text-display-lg text-on-surface">Book New Shipment</h1>
+            <h1 className="font-display-lg text-display-lg text-on-surface">
+              {bookingMode === 'manual' ? 'Book New Order' : 'Bulk Booking Orders'}
+            </h1>
           </div>
           
-          {/* Header Action Buttons */}
-          <div className="flex flex-wrap gap-2.5">
-            <Link 
-              href="/shipments"
-              className="px-4 py-2.5 bg-surface-container-high text-secondary font-semibold text-sm rounded-xl hover:bg-surface-container-highest transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4" /> Cancel
-            </Link>
+          {/* Header Action Buttons & Live Price Summary */}
+          <div className="flex items-center gap-2.5">
+            {bookingMode === 'manual' && (
+              <div className="hidden sm:flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
+                  <span>Estimated Cost:</span>
+                  <span className="text-sm font-black font-mono">PKR {pricing.total.toFixed(2)}</span>
+                </div>
+                <span className="text-[10px] text-outline font-medium">
+                  {pricing.planName} • {pricing.zoneName}
+                </span>
+              </div>
+            )}
             
             {bookingMode === 'manual' ? (
               <button 
@@ -803,25 +995,25 @@ function BookShipmentForm() {
                 {bookingStatus === 'idle' && (
                   <>
                     <Save className="h-4 w-4" />
-                    Create Shipment
+                    Create Order
                   </>
                 )}
                 {bookingStatus === 'error' && (
                   <>
                     <Save className="h-4 w-4" />
-                    Retry Booking
+                    Retry Order
                   </>
                 )}
               </button>
             ) : (
               <button 
                 onClick={importAndProcessShipments}
-                disabled={bulkStatus === 'uploading' || bulkStatus === 'success'}
+                disabled={bulkStatus === 'uploading' || bulkStatus === 'success' || parsedRows.length === 0}
                 className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
                   ${bulkStatus === 'success' 
                     ? 'bg-emerald-600 hover:bg-emerald-700' 
-                    : bulkStatus === 'uploading'
-                      ? 'bg-slate-300 cursor-not-allowed opacity-50'
+                    : parsedRows.length === 0 || bulkStatus === 'uploading'
+                      ? 'bg-slate-300 cursor-not-allowed opacity-60'
                       : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
               >
                 {bulkStatus === 'uploading' && (
@@ -839,7 +1031,7 @@ function BookShipmentForm() {
                 {(bulkStatus === 'idle' || bulkStatus === 'parsing' || bulkStatus === 'loaded') && (
                   <>
                     <Save className="h-4 w-4" />
-                    Create Shipment
+                    Create Order
                   </>
                 )}
               </button>
@@ -852,7 +1044,7 @@ function BookShipmentForm() {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300">
             <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
             <div>
-              <p className="font-bold">Shipment Booked Successfully!</p>
+              <p className="font-bold">Order Booked Successfully!</p>
               <p className="text-sm">Tracking ID generated: <strong className="font-mono text-slate-900">{createdTrackingId}</strong></p>
             </div>
           </div>
@@ -868,817 +1060,899 @@ function BookShipmentForm() {
           </div>
         )}
 
-        {/* Main Grid Section */}
-        <div className="grid grid-cols-12 gap-lg">
-          {/* Left Column: Form Canvas or Bulk Uploader */}
-          <div className="col-span-12 lg:col-span-8 space-y-lg">
-            {/* Mode Switch Tabs */}
-            <div className="bg-surface-container-high p-1.5 rounded-2xl flex w-fit gap-1 border border-outline-variant">
-              <button
-                onClick={() => setBookingMode('manual')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
-                  ${bookingMode === 'manual' 
-                    ? 'bg-white text-on-surface shadow-sm' 
-                    : 'text-outline hover:text-on-surface'}`}
-              >
-                <User className="h-3.5 w-3.5" />
-                Manual Single Entry
-              </button>
-              <button
-                onClick={() => setBookingMode('bulk')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
-                  ${bookingMode === 'bulk' 
-                    ? 'bg-white text-on-surface shadow-sm' 
-                    : 'text-outline hover:text-on-surface'}`}
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" />
-                Bulk Spreadsheet Upload
-              </button>
-            </div>
+        {/* Full-Width Compact Layout Section */}
+        <div className="w-full space-y-md">
+          {/* Mode Switch Tabs */}
+          <div className="bg-surface-container-high p-1.5 rounded-2xl flex w-fit gap-1 border border-outline-variant">
+            <button
+              onClick={() => {
+                setBookingMode('manual');
+                router.push('/shipments/book?tab=manual');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
+                ${bookingMode === 'manual' 
+                  ? 'bg-white text-on-surface shadow-sm' 
+                  : 'text-outline hover:text-on-surface'}`}
+            >
+              <User className="h-3.5 w-3.5" />
+              Book Order
+            </button>
+            <button
+              onClick={() => {
+                setBookingMode('bulk');
+                router.push('/shipments/book?tab=bulk');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
+                ${bookingMode === 'bulk' 
+                  ? 'bg-white text-on-surface shadow-sm' 
+                  : 'text-outline hover:text-on-surface'}`}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Bulk Booking
+            </button>
+          </div>
 
-            {bookingMode === 'manual' ? (
-              /* Manual Booking Form Context Provider & Form Canvas */
-              <FormProvider {...methods}>
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                  {/* Section 1: Consignee Details */}
-                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
-                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined">person</span>
-                      </div>
-                      <div>
-                        <h2 className="font-headline-md text-headline-md">Consignee Detail</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Recipient&apos;s contact and delivery information</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                      <TextBox<BookingFormValues>
-                        name="consigneeName"
-                        label="Full Name *"
-                        placeholder="e.g. John Doe"
-                        required
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="consigneePhone"
-                        label="Phone Number *"
-                        placeholder="+92 300 1234567"
-                        required
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="consigneeEmail"
-                        label="@mail"
-                        placeholder="e.g. john.doe@email.com"
-                        type="email"
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="consigneeAltPhone"
-                        label="Alt. Cell #"
-                        placeholder="+92 300 7654321"
-                      />
-
-                      <div className="md:col-span-2">
-                        <TextAreaInput<BookingFormValues>
-                          name="deliveryAddress"
-                          label="Delivery Address *"
-                          placeholder="Street address, building, floor..."
-                          required
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-bold text-on-surface">Destination City *</label>
-                        <Controller
-                          name="destinationCity"
-                          control={control}
-                          render={({ field, fieldState }) => (
-                            <CitySelect
-                              value={field.value as any}
-                              onChange={(cityId, cityName) => {
-                                field.onChange(cityId);
-                                if (cityName) {
-                                  setValue('destinationCityName', cityName);
-                                }
-                              }}
-                              error={fieldState.error?.message}
-                            />
-                          )}
-                        />
-                      </div>
-
-                      <TextBox<BookingFormValues>
-                        name="area"
-                        label="Area/Locality"
-                        placeholder="DHA Phase 6"
-                      />
-                    </div>
-                  </section>
-
-                  {/* Section 2: Shipment Detail */}
-                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
-                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined">inventory_2</span>
-                      </div>
-                      <div>
-                        <h2 className="font-headline-md text-headline-md">Shipment Detail</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Package weight, contents, and value</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-                      <TextBox<BookingFormValues>
-                        name="weight"
-                        label="Weight (kg) *"
-                        placeholder="0.5"
-                        type="number"
-                        step="0.1"
-                        required
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="pieces"
-                        label="Pieces *"
-                        placeholder="1"
-                        type="number"
-                        required
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="codAmount"
-                        label="COD Amount (PKR)"
-                        placeholder="0"
-                        type="number"
-                      />
-
-                      <div className="md:col-span-2">
-                        <TextBox<BookingFormValues>
-                          name="productDescription"
-                          label="Product Description *"
-                          placeholder="e.g. Electronics, Clothing"
-                          required
-                        />
-                      </div>
-
-                      <SearchableDropdown<BookingFormValues>
-                        name="serviceType"
-                        label="Service Type"
-                        items={SERVICE_OPTIONS}
-                      />
-
-                      <SearchableDropdown<BookingFormValues>
-                        name="allowToOpen"
-                        label="Allow To Open"
-                        items={YES_NO_OPTIONS}
-                      />
-
-                      <div className="md:col-span-2">
-                        <TextAreaInput<BookingFormValues>
-                          name="comments"
-                          label="Comments"
-                          placeholder="Add any specific comments or remarks..."
-                        />
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Section 3: Collection Detail */}
-                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
-                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined">local_shipping</span>
-                      </div>
-                      <div>
-                        <h2 className="font-headline-md text-headline-md">Collection Detail</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Pickup timing and special instructions</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                      <TextBox<BookingFormValues>
-                        name="pickupDate"
-                        label="Pickup Date"
-                        type="date"
-                        required
-                      />
-
-                      <SearchableDropdown<BookingFormValues>
-                        name="pickupTimeSlot"
-                        label="Pickup Time Slot"
-                        items={TIME_SLOT_OPTIONS}
-                      />
-
-                      <SearchableDropdown<BookingFormValues>
-                        name="pickupLocation"
-                        label="Pickup Location (Office)"
-                        items={offices.length > 0 ? offices : [{ label: 'Default Office', value: 'default' }]}
-                      />
-
-                      <div className="md:col-span-2">
-                        <TextAreaInput<BookingFormValues>
-                          name="specialInstructions"
-                          label="Special Instructions"
-                          placeholder="Fragile item, call before arrival..."
-                        />
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Section 4: Replacement / Collection Detail */}
-                  <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-                    <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
-                      <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined">autorenew</span>
-                      </div>
-                      <div>
-                        <h2 className="font-headline-md text-headline-md">Replacement / Collection Detail</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Record returns and exchange collections</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                      <div className="space-y-1.5 relative group flex flex-col w-full">
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-[12px] font-bold text-on-surface-variant">Reference No (Old Booking)</label>
-                          {selectedReferencedParcel && (
-                            <button
-                              type="button"
-                              onClick={() => setShowDetailsModal(true)}
-                              className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Eye className="h-3 w-3" /> Order Details
-                            </button>
-                          )}
-                        </div>
-                        <div className="relative">
-                          <input 
-                            type="text" 
-                            placeholder="Search tracking number (e.g. DBA-...)"
-                            value={refSearchQuery}
-                            onChange={(e) => {
-                              setRefSearchQuery(e.target.value);
-                              if (selectedReferencedParcel) {
-                                setSelectedReferencedParcel(null);
-                                setValue('referenceNo', '');
-                              }
-                            }}
-                            className="w-full h-10 border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary bg-white transition-all"
-                          />
-                          <Search className="h-4 w-4 text-outline absolute left-3 top-3" />
-                          {searchingRef && (
-                            <Loader2 className="h-4 w-4 text-outline animate-spin absolute right-3 top-3" />
-                          )}
-                        </div>
-
-                        {showRefDropdown && refParcelsList.length > 0 && (
-                          <div className="absolute left-0 right-0 top-[70px] z-50 bg-white border border-outline-variant rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-outline-variant">
-                            {refParcelsList.map((parcel) => (
-                              <button
-                                key={parcel.id}
-                                type="button"
-                                onClick={() => selectReferenceOrder(parcel)}
-                                className="w-full px-4 py-2.5 text-left text-xs font-semibold hover:bg-surface-container-low transition-colors text-on-surface flex justify-between items-center cursor-pointer"
-                              >
-                                <span>{parcel.tracking_number}</span>
-                                <span className="text-[10px] text-outline font-normal">{parcel.recipient_name}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <SearchableDropdown<BookingFormValues>
-                        name="collectReplacement"
-                        label="Collect Replacement"
-                        items={YES_NO_OPTIONS}
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="parcelDetail"
-                        label="Parcel Detail"
-                        placeholder="Replacement item detail..."
-                      />
-
-                      <TextBox<BookingFormValues>
-                        name="collectRs"
-                        label="Collect Rs."
-                        placeholder="0"
-                        type="number"
-                      />
-                    </div>
-                  </section>
-                </form>
-              </FormProvider>
-            ) : (
-              /* Bulk Upload Uploader Canvas & Grid */
-              <div className="space-y-lg">
-                {/* Uploader Card */}
-                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
-                  <div className="flex items-center gap-sm mb-lg border-b border-outline-variant pb-md">
-                    <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined">upload_file</span>
+          {bookingMode === 'manual' ? (
+            /* Manual Booking Form Context Provider & Form Canvas */
+            <FormProvider {...methods}>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-md">
+                {/* Section 1: Consignee & Delivery Detail */}
+                <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                  <div className="flex items-center gap-sm mb-md border-b border-outline-variant pb-xs">
+                    <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">person</span>
                     </div>
                     <div>
-                      <h2 className="font-headline-md text-headline-md">Bulk Shipment Upload</h2>
-                      <p className="font-body-md text-body-md text-on-surface-variant">Book hundreds of shipments concurrently via spreadsheet</p>
+                      <h2 className="font-bold text-sm text-on-surface">Consignee & Delivery Detail</h2>
+                      <p className="text-xs text-on-surface-variant">Recipient contact and delivery location</p>
                     </div>
                   </div>
 
-                  {/* Actions buttons under Bulk tab */}
-                  <div className="flex flex-wrap gap-2.5">
-                    <button 
-                      type="button"
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                      className="px-4 py-2 bg-white border border-outline-variant text-secondary font-semibold text-xs rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      <FileUp className="h-3.5 w-3.5 text-primary" /> Upload Shipment
-                    </button>
-                    
-                    <button 
-                      type="button"
-                      onClick={downloadTemplate}
-                      className="px-4 py-2 bg-white border border-outline-variant text-secondary font-semibold text-xs rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      <FileDown className="h-3.5 w-3.5 text-primary" /> Download Sheet
-                    </button>
-                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+                    <TextBox<BookingFormValues>
+                      name="consigneeName"
+                      label="Full Name"
+                      placeholder="e.g. John Doe"
+                      required
+                    />
 
-                  {/* Drag & Drop Zone */}
-                  {bulkStatus === 'idle' || bulkStatus === 'parsing' ? (
-                    <div
-                      onDragEnter={handleDrag}
-                      onDragOver={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDrop={handleDrop}
-                      className={`w-full min-h-[220px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-6 text-center transition-all relative
-                        ${dragActive 
-                          ? 'bg-primary-container/20 border-primary scale-[1.01]' 
-                          : 'bg-slate-50/50 border-outline-variant hover:border-outline'}`}
-                    >
-                      <input
-                        type="file"
-                        id="file-upload"
-                        className="hidden"
-                        accept=".xlsx,.xls,.csv"
-                        onChange={handleFileChange}
+                    <TextBox<BookingFormValues>
+                      name="consigneePhone"
+                      label="Phone Number"
+                      placeholder="+92 300 1234567"
+                      required
+                    />
+
+                    <TextBox<BookingFormValues>
+                      name="consigneeEmail"
+                      label="@mail"
+                      placeholder="e.g. john.doe@email.com"
+                      type="email"
+                    />
+
+                    <TextBox<BookingFormValues>
+                      name="consigneeAltPhone"
+                      label="Alt. Cell #"
+                      placeholder="+92 300 7654321"
+                    />
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-bold text-on-surface">Destination City <span className="text-error">*</span></label>
+                      <Controller
+                        name="destinationCity"
+                        control={control}
+                        render={({ field, fieldState }) => (
+                          <CitySelect
+                            value={field.value as any}
+                            onChange={(cityId, cityName) => {
+                              field.onChange(cityId);
+                              if (cityName) {
+                                setValue('destinationCityName', cityName);
+                              }
+                            }}
+                            error={fieldState.error?.message}
+                          />
+                        )}
                       />
-
-                      {bulkStatus === 'parsing' ? (
-                        <div className="space-y-4 w-full max-w-sm">
-                          <Loader2 className="h-10 w-10 text-primary animate-spin mx-auto" />
-                          <p className="text-sm font-semibold text-on-surface">Parsing spreadsheet rows...</p>
-                        </div>
-                      ) : (
-                        <label htmlFor="file-upload" className="cursor-pointer space-y-3 flex flex-col items-center">
-                          <div className="h-12 w-12 rounded-full bg-white border border-outline-variant flex items-center justify-center shadow-sm">
-                            <UploadCloud className="h-6 w-6 text-outline" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-on-surface">
-                              Drag and drop your spreadsheet here, or <span className="text-primary hover:underline font-bold">browse files</span>
-                            </p>
-                            <p className="text-xs text-outline mt-1">
-                              Supports Excel (.xlsx, .xls) and CSV (.csv) sheets up to 10MB
-                            </p>
-                          </div>
-                        </label>
-                      )}
                     </div>
-                  ) : (
-                    /* File Info & Submit Progress card */
-                    <div className="flex items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileSpreadsheet className="h-8 w-8 text-primary shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-on-surface truncate">{selectedFile?.name}</p>
-                          <p className="text-xs text-outline">{(selectedFile!.size / 1024).toFixed(1)} KB • {parsedRows.length} rows</p>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        {bulkStatus === 'uploading' ? (
-                          <div className="flex items-center gap-3">
-                            <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                            <span className="text-xs font-bold text-primary">{bulkProgress}%</span>
-                          </div>
-                        ) : bulkStatus === 'success' ? (
-                          <div className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
-                            <CheckCircle className="h-4 w-4" /> Booked!
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={clearSelectedFile}
-                              className="px-3.5 py-1.5 bg-surface-container-high text-secondary hover:bg-surface-container-highest font-bold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <Trash className="h-3.5 w-3.5" /> Clear
-                            </button>
-                          </div>
+                    <TextBox<BookingFormValues>
+                      name="area"
+                      label="Area/Locality"
+                      placeholder="DHA Phase 6"
+                    />
+
+                    <div className="lg:col-span-2">
+                      <TextBox<BookingFormValues>
+                        name="deliveryAddress"
+                        label="Delivery Address"
+                        placeholder="Street address, building, floor..."
+                        required
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Section 2: Order & Package Detail */}
+                <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                  <div className="flex items-center justify-between gap-sm mb-md border-b border-outline-variant pb-xs">
+                    <div className="flex items-center gap-sm">
+                      <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-sm text-on-surface">Order & Package Detail</h2>
+                        <p className="text-xs text-on-surface-variant">Package weight, contents, and COD details</p>
+                      </div>
+                    </div>
+
+                    {/* Live Auto-Calculating Estimated Cost Badge */}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
+                        <span className="text-slate-600 font-medium hidden sm:inline">Estimated Cost:</span>
+                        <span className="text-sm font-black font-mono text-primary">PKR {pricing.total.toFixed(2)}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-outline tracking-tight">
+                        Shipper Plan: <span className="text-on-surface font-bold">{pricing.planName}</span> ({pricing.zoneName})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+                    <TextBox<BookingFormValues>
+                      name="weight"
+                      label="Weight (kg)"
+                      placeholder="0.5"
+                      type="number"
+                      step="0.1"
+                      required
+                    />
+
+                    <TextBox<BookingFormValues>
+                      name="pieces"
+                      label="Pieces"
+                      placeholder="1"
+                      type="number"
+                      required
+                    />
+
+                    <TextBox<BookingFormValues>
+                      name="codAmount"
+                      label="COD Amount (PKR)"
+                      placeholder="0"
+                      type="number"
+                    />
+
+                    <SearchableDropdown<BookingFormValues>
+                      name="serviceType"
+                      label="Service Type"
+                      items={SERVICE_OPTIONS}
+                    />
+
+                    <SearchableDropdown<BookingFormValues>
+                      name="allowToOpen"
+                      label="Allow To Open"
+                      items={YES_NO_OPTIONS}
+                    />
+
+                    <div className="lg:col-span-2">
+                      <TextBox<BookingFormValues>
+                        name="productDescription"
+                        label="Product Description"
+                        placeholder="e.g. Electronics, Clothing"
+                        required
+                      />
+                    </div>
+
+                    <TextBox<BookingFormValues>
+                      name="comments"
+                      label="Comments"
+                      placeholder="Special remarks..."
+                    />
+                  </div>
+                </section>
+
+                {/* Section 3: Collection & Replacement Detail */}
+                <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+                  <div className="flex items-center gap-sm mb-md border-b border-outline-variant pb-xs">
+                    <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">autorenew</span>
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-sm text-on-surface">Collection & Replacement Detail</h2>
+                      <p className="text-xs text-on-surface-variant">Pickup timing, office location, and exchange details</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+                    <TextBox<BookingFormValues>
+                      name="pickupDate"
+                      label="Pickup Date"
+                      type="date"
+                      required
+                    />
+
+                    <SearchableDropdown<BookingFormValues>
+                      name="pickupTimeSlot"
+                      label="Pickup Time Slot"
+                      items={TIME_SLOT_OPTIONS}
+                    />
+
+                    <SearchableDropdown<BookingFormValues>
+                      name="pickupLocation"
+                      label="Pickup Location (Office)"
+                      items={offices.length > 0 ? offices : [{ label: 'Default Office', value: 'default' }]}
+                    />
+
+                    <TextBox<BookingFormValues>
+                      name="specialInstructions"
+                      label="Special Instructions"
+                      placeholder="Fragile, call before arrival..."
+                    />
+
+                    {/* Replacement / Exchange Sub-fields */}
+                    <div className="space-y-1.5 relative group flex flex-col w-full">
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[12px] font-bold text-on-surface-variant">Ref. No (Old Booking)</label>
+                        {selectedReferencedParcel && (
+                          <button
+                            type="button"
+                            onClick={() => setShowDetailsModal(true)}
+                            className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="h-3 w-3" /> Order Details
+                          </button>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Templates Section */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-on-surface">Spreadsheet Template Download</p>
-                      <p className="text-[10px] text-outline leading-normal">
-                        Download our format to ensure columns map correctly (consigneeName, consigneePhone, deliveryAddress, etc.)
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={downloadTemplate}
-                      className="h-9 px-4 bg-white border border-outline-variant text-secondary text-xs font-bold rounded-lg hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-                    >
-                      <FileDown className="h-3.5 w-3.5 text-primary" /> Get CSV Template
-                    </button>
-                  </div>
-                </div>
-
-                {/* INTERACTIVE EDITABLE GRID (Only visible when file is loaded) */}
-                {parsedRows.length > 0 && (
-                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant pb-md">
-                      <div>
-                        <h3 className="font-headline-md text-headline-md">Loaded Shipments Grid</h3>
-                        <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">Edit rows to correct error highlights before booking</p>
+                      <div className="relative">
+                        <input 
+                          type="text" 
+                          placeholder="Search tracking # (DBA-...)"
+                          value={refSearchQuery}
+                          onChange={(e) => {
+                            setRefSearchQuery(e.target.value);
+                            if (selectedReferencedParcel) {
+                              setSelectedReferencedParcel(null);
+                              setValue('referenceNo', '');
+                            }
+                          }}
+                          className="w-full h-10 border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary bg-white transition-all"
+                        />
+                        <Search className="h-4 w-4 text-outline absolute left-3 top-3" />
+                        {searchingRef && (
+                          <Loader2 className="h-4 w-4 text-outline animate-spin absolute right-3 top-3" />
+                        )}
                       </div>
 
-                      {gridHasErrors && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
-                          <AlertCircle className="h-4 w-4" /> Please resolve errors to unlock Create Shipments.
+                      {showRefDropdown && refParcelsList.length > 0 && (
+                        <div className="absolute left-0 right-0 top-[70px] z-50 bg-white border border-outline-variant rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-outline-variant">
+                          {refParcelsList.map((parcel) => (
+                            <button
+                              key={parcel.id}
+                              type="button"
+                              onClick={() => selectReferenceOrder(parcel)}
+                              className="w-full px-4 py-2.5 text-left text-xs font-semibold hover:bg-surface-container-low transition-colors text-on-surface flex justify-between items-center cursor-pointer"
+                            >
+                              <span>{parcel.tracking_number}</span>
+                              <span className="text-[10px] text-outline font-normal">{parcel.recipient_name}</span>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Grid Table Container */}
-                    <div className="overflow-x-auto rounded-xl border border-outline-variant">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-outline-variant text-outline font-bold uppercase">
-                          <tr>
-                            <th className="px-4 py-3">#</th>
-                            <th className="px-4 py-3">Recipient Name</th>
-                            <th className="px-4 py-3">Phone</th>
-                            <th className="px-4 py-3">Destination City</th>
-                            <th className="px-4 py-3">Address</th>
-                            <th className="px-4 py-3">Weight (Kg)</th>
-                            <th className="px-4 py-3">COD (PKR)</th>
-                            <th className="px-4 py-3">Ref No</th>
-                            <th className="px-4 py-3 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-outline-variant font-medium text-on-surface">
-                          {parsedRows.map((row, index) => {
-                            const isEditing = editingRowId === row.id;
-                            const hasErrors = Object.keys(row.errors || {}).length > 0;
+                    <SearchableDropdown<BookingFormValues>
+                      name="collectReplacement"
+                      label="Collect Replacement"
+                      items={YES_NO_OPTIONS}
+                    />
 
-                            return (
-                              <tr 
-                                key={row.id} 
-                                className={`transition-colors
-                                  ${hasErrors ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-slate-50/40'}`}
-                              >
-                                {/* Row Index / Error Icon */}
-                                <td className="px-4 py-3">
-                                  {hasErrors ? (
-                                    <span title={Object.values(row.errors).join(', ')}>
-                                      <AlertCircle className="h-4 w-4 text-red-500 animate-pulse" />
-                                    </span>
-                                  ) : (
-                                    index + 1
-                                  )}
-                                </td>
+                    <TextBox<BookingFormValues>
+                      name="parcelDetail"
+                      label="Parcel Detail"
+                      placeholder="Replacement item detail..."
+                    />
 
-                                {/* Recipient Name */}
-                                <td className="px-4 py-3">
-                                  {isEditing ? (
-                                    <input 
-                                      type="text" 
-                                      value={editFormData.consigneeName || ''} 
-                                      onChange={(e) => handleEditFormChange('consigneeName', e.target.value)}
-                                      className={`w-28 h-8 px-2 border rounded-lg outline-none
-                                        ${editFormData.errors?.consigneeName ? 'border-error focus:ring-1 focus:ring-error' : 'border-outline-variant focus:border-primary'}`}
-                                    />
-                                  ) : (
-                                    <span>{row.consigneeName}</span>
-                                  )}
-                                </td>
+                    <TextBox<BookingFormValues>
+                      name="collectRs"
+                      label="Collect Rs."
+                      placeholder="0"
+                      type="number"
+                    />
+                  </div>
+                </section>
+              </form>
+            </FormProvider>
+          ) : (
+            /* UNIFIED BULK BOOKING TAB CONTENT */
+            <div className="space-y-md">
+              {/* Sleek, Compact Bulk Uploader Control Bar */}
+              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-sm text-on-surface">Bulk Order Upload</h2>
+                    <p className="text-xs text-on-surface-variant">Upload spreadsheet or paste CSV lines to book multiple orders concurrently</p>
+                  </div>
+                </div>
 
-                                {/* Phone */}
-                                <td className="px-4 py-3">
-                                  {isEditing ? (
-                                    <input 
-                                      type="text" 
-                                      value={editFormData.consigneePhone || ''} 
-                                      onChange={(e) => handleEditFormChange('consigneePhone', e.target.value)}
-                                      className={`w-28 h-8 px-2 border rounded-lg outline-none
-                                        ${editFormData.errors?.consigneePhone ? 'border-error focus:ring-1 focus:ring-error' : 'border-outline-variant focus:border-primary'}`}
-                                    />
-                                  ) : (
-                                    <span className="font-mono">{row.consigneePhone}</span>
-                                  )}
-                                </td>
+                {/* Compact Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    id="file-upload"
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileChange}
+                  />
 
-                                {/* Destination City */}
-                                <td className="px-4 py-3 font-semibold">
-                                  {isEditing ? (
-                                    <select 
-                                      value={editFormData.destinationCity || ''} 
-                                      onChange={(e) => handleEditFormChange('destinationCity', e.target.value)}
-                                      className={`h-8 px-1.5 border border-outline-variant rounded-lg outline-none bg-white
-                                        ${editFormData.errors?.destinationCity ? 'border-error focus:ring-1 focus:ring-error' : 'focus:border-primary'}`}
-                                    >
-                                      <option value="">Select</option>
-                                      <option value="Karachi">Karachi</option>
-                                      <option value="Lahore">Lahore</option>
-                                      <option value="Islamabad">Islamabad</option>
-                                      <option value="Faisalabad">Faisalabad</option>
-                                      <option value="Rawalpindi">Rawalpindi</option>
-                                      <option value="Multan">Multan</option>
-                                      <option value="Peshawar">Peshawar</option>
-                                      <option value="Quetta">Quetta</option>
-                                    </select>
-                                  ) : (
-                                    row.destinationCity || <span className="text-red-500 italic">Missing</span>
-                                  )}
-                                </td>
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                    className="px-3.5 py-2 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <FileUp className="h-4 w-4" /> Upload File
+                  </button>
 
-                                {/* Address */}
-                                <td className="px-4 py-3 max-w-[150px] truncate">
-                                  {isEditing ? (
-                                    <input 
-                                      type="text" 
-                                      value={editFormData.deliveryAddress || ''} 
-                                      onChange={(e) => handleEditFormChange('deliveryAddress', e.target.value)}
-                                      className={`w-36 h-8 px-2 border rounded-lg outline-none
-                                        ${editFormData.errors?.deliveryAddress ? 'border-error focus:ring-1 focus:ring-error' : 'border-outline-variant focus:border-primary'}`}
-                                    />
-                                  ) : (
-                                    <span title={row.deliveryAddress}>{row.deliveryAddress}</span>
-                                  )}
-                                </td>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasteModal(true)}
+                    className="px-3.5 py-2 bg-white border border-outline-variant text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Upload className="h-4 w-4 text-primary" /> Paste CSV Sheet
+                  </button>
 
-                                {/* Weight */}
-                                <td className="px-4 py-3">
-                                  {isEditing ? (
-                                    <input 
-                                      type="number" 
-                                      step="0.1"
-                                      value={editFormData.weight || 0} 
-                                      onChange={(e) => handleEditFormChange('weight', parseFloat(e.target.value))}
-                                      className={`w-14 h-8 px-2 border rounded-lg outline-none
-                                        ${editFormData.errors?.weight ? 'border-error focus:ring-1 focus:ring-error' : 'border-outline-variant focus:border-primary'}`}
-                                    />
-                                  ) : (
-                                    <span>{row.weight} kg</span>
-                                  )}
-                                </td>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    className="px-3.5 py-2 bg-white border border-outline-variant text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <FileDown className="h-4 w-4 text-primary" /> CSV Template
+                  </button>
+                </div>
+              </div>
 
-                                {/* COD Amount */}
-                                <td className="px-4 py-3 font-bold">
-                                  {isEditing ? (
-                                    <input 
-                                      type="number" 
-                                      value={editFormData.codAmount || 0} 
-                                      onChange={(e) => handleEditFormChange('codAmount', parseInt(e.target.value))}
-                                      className={`w-16 h-8 px-2 border rounded-lg outline-none
-                                        ${editFormData.errors?.codAmount ? 'border-error focus:ring-1 focus:ring-error' : 'border-outline-variant focus:border-primary'}`}
-                                    />
-                                  ) : (
-                                    <span>PKR {row.codAmount}</span>
-                                  )}
-                                </td>
-
-                                {/* Reference No */}
-                                <td className="px-4 py-3">
-                                  {isEditing ? (
-                                    <input 
-                                      type="text" 
-                                      value={editFormData.referenceNo || ''} 
-                                      onChange={(e) => handleEditFormChange('referenceNo', e.target.value)}
-                                      className="w-20 h-8 px-2 border border-outline-variant rounded-lg outline-none focus:border-primary"
-                                    />
-                                  ) : (
-                                    <span className="font-mono text-slate-500">{row.referenceNo || '-'}</span>
-                                  )}
-                                </td>
-
-                                {/* Actions (Edit / Delete) */}
-                                <td className="px-4 py-3 text-center">
-                                  {isEditing ? (
-                                    <div className="flex justify-center gap-1.5">
-                                      <button 
-                                        type="button"
-                                        onClick={saveRowEdits}
-                                        className="p-1.5 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-                                        title="Save Row"
-                                      >
-                                        <Check className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button 
-                                        type="button"
-                                        onClick={cancelRowEdits}
-                                        className="p-1.5 bg-surface-container-high text-secondary rounded-lg hover:bg-surface-container-highest transition-colors cursor-pointer"
-                                        title="Cancel Changes"
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex justify-center gap-1.5">
-                                      <button 
-                                        type="button"
-                                        onClick={() => startEditingRow(row)}
-                                        className="p-1.5 text-outline hover:text-primary hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                                        title="Edit Row"
-                                      >
-                                        <Edit className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button 
-                                        type="button"
-                                        onClick={() => deleteRow(row.id)}
-                                        className="p-1.5 text-outline hover:text-error hover:bg-red-50/50 rounded-lg transition-colors cursor-pointer"
-                                        title="Delete Row"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+              {/* Compact Drag & Drop Strip / File Selected Status */}
+              {selectedFile ? (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileSpreadsheet className="h-5 w-5 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">{selectedFile.name}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{(selectedFile.size / 1024).toFixed(1)} KB • {parsedRows.length} rows loaded</p>
                     </div>
                   </div>
-                )}
 
-                {/* Upload History Section */}
-                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
-                  <h3 className="font-headline-md text-headline-md">Recent Upload Activity</h3>
-                  <div className="divide-y divide-outline-variant">
-                    {uploadHistory.map((item) => (
-                      <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0
-                            ${item.status === 'processed' ? 'bg-emerald-50 text-emerald-600' : 
-                              item.status === 'failed' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}
-                          >
-                            <FileSpreadsheet className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-on-surface truncate">{item.fileName}</p>
-                            <div className="flex gap-2 text-[10px] text-outline mt-0.5">
-                              <span>{item.date}</span>
-                              <span>•</span>
-                              <span>{item.count} items</span>
-                            </div>
-                            {item.error && (
-                              <p className="text-[10px] text-error font-semibold mt-0.5 flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" /> {item.error}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-extrabold capitalize leading-none shrink-0
-                          ${item.status === 'processed' ? 'bg-emerald-100 text-emerald-800 animate-in fade-in duration-300' : 
-                            item.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}
-                        >
-                          {item.status}
-                        </span>
+                  <div className="flex items-center gap-2">
+                    {bulkStatus === 'uploading' ? (
+                      <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>{bulkProgress}%</span>
                       </div>
-                    ))}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={clearSelectedFile}
+                        className="px-2.5 py-1 bg-white border border-slate-200 text-slate-700 hover:text-red-600 font-bold text-xs rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <Trash className="h-3.5 w-3.5" /> Clear
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`w-full py-3 px-4 rounded-xl border border-dashed flex items-center justify-between text-xs transition-all cursor-pointer
+                    ${dragActive 
+                      ? 'bg-primary/10 border-primary' 
+                      : 'bg-slate-50/80 border-slate-300 hover:border-slate-400'}`}
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                >
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <UploadCloud className="h-4 w-4 text-primary" />
+                    <span><strong className="text-slate-900">Drag & drop</strong> spreadsheet here or click to browse (.xlsx, .csv)</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-outline uppercase tracking-wider">Max 10MB</span>
+                </div>
+              )}
 
-          {/* Right Column: Live Quote Card, Bento, and Alerts */}
-          <div className="col-span-12 lg:col-span-4 space-y-lg">
-            {/* Visual Anchor Image */}
-            <div className="rounded-xl overflow-hidden border border-outline-variant shadow-sm h-48 relative group">
-              <img 
-                alt="Fly Courier Dashboard Overview" 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCso3PSLKmhfWtz_0bE_k1jKISWASyYG_trC5Meib2KR22S3asUQMdzdsqT_MQHhLRhuIJ_4BovlNzry9o2vwBDrotvIgIJfl2mc0DnQsvxVYTtckFLOzoAVRGj2rdUaRjtQL1eQMZyAOrfZ2FByat4DsDvFhncMl4G1pfu2_tC6jDpBetNsNVC3xWT-2dRceBU07IMQr1wmsyF2zGlVHh4V9NsiM9lMzR27NOhJpP2HacGcpd2oD179mMPZgSBmNy2hX5uEpv8YOw"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-md">
-                <p className="text-white font-label-md text-label-md">Current Logistics Performance Dashboard</p>
-              </div>
-            </div>
-
-            {/* Dynamic Card based on mode */}
-            {bookingMode === 'manual' ? (
-              /* Live Quote Card (Manual Mode) */
-              <div className="bg-primary text-on-primary rounded-xl p-md shadow-lg animate-in fade-in duration-300">
-                <h3 className="font-headline-md text-headline-md mb-md flex items-center gap-xs">
-                  <span className="material-symbols-outlined">payments</span>
-                  Estimated Cost
-                </h3>
-                
-                <div className="space-y-sm mb-lg">
-                  <div className="flex justify-between items-center opacity-80">
-                    <span className="font-body-md text-body-md">Base Rate</span>
-                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.baseRate.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center opacity-80">
-                    <span className="font-body-md text-body-md">Fuel Surcharge</span>
-                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.surcharge.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center opacity-80 border-b border-white/20 pb-sm">
-                    <span className="font-body-md text-body-md">GST (17%)</span>
-                    <span className="font-tabular-nums text-tabular-nums">PKR {pricing.gst.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-xs">
-                    <span className="font-headline-md text-headline-md">Total</span>
-                    <span className="font-display-lg text-display-lg tracking-tight">PKR {pricing.total.toFixed(2)}</span>
+              {/* SEARCH & FULFILLMENT FILTER BAR FOR GROUPED BULK ORDERS */}
+              <div className="bg-white border border-outline-variant rounded-xl p-4 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-outline uppercase tracking-wider">Search Order ID / Consignee</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-3.5 h-3.5" />
+                    <input
+                      type="text"
+                      placeholder="Search order_id or name..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 border border-outline-variant rounded-xl py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    />
                   </div>
                 </div>
-                <p className="font-label-md text-[10px] uppercase tracking-widest opacity-60 text-center">Final price calculated at warehouse</p>
-              </div>
-            ) : (
-              /* Bulk Information Card (Bulk Mode) */
-              <div className="bg-primary text-on-primary rounded-xl p-md shadow-lg animate-in fade-in duration-300">
-                <h3 className="font-headline-md text-headline-md mb-md flex items-center gap-xs">
-                  <span className="material-symbols-outlined">file_present</span>
-                  Bulk Summary
-                </h3>
-                <div className="space-y-3 text-xs leading-relaxed">
-                  <div className="p-3 bg-white/10 rounded-xl flex flex-col gap-1.5">
-                    <p className="font-bold text-slate-100">Status Check</p>
-                    <p className="opacity-90 font-medium font-mono">
-                      {selectedFile ? `File loaded: ${selectedFile.name}` : 'Waiting for file selection...'}
-                    </p>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-outline uppercase tracking-wider">Fulfillment & Barcode Routing</label>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setTypeFilter('All')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        typeFilter === 'All' ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-700 border-outline-variant hover:bg-slate-100'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setTypeFilter('In-House')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        typeFilter === 'In-House' ? 'bg-primary text-white border-primary' : 'bg-slate-50 text-slate-700 border-outline-variant hover:bg-slate-100'
+                      }`}
+                    >
+                      1 Barcode (In-House)
+                    </button>
+                    <button
+                      onClick={() => setTypeFilter('3PL')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        typeFilter === '3PL' ? 'bg-purple-700 text-white border-purple-700' : 'bg-slate-50 text-slate-700 border-outline-variant hover:bg-slate-100'
+                      }`}
+                    >
+                      2 Barcodes (3PL)
+                    </button>
                   </div>
-                  <p className="opacity-80">
-                    Spreadsheet records are loaded in-memory inside the editable grid. You can modify any row details dynamically to solve cell validation errors before proceeding.
-                  </p>
+                </div>
+
+                <div className="flex justify-end text-xs text-slate-500 font-semibold">
+                  Total Grouped Orders: <strong className="text-slate-900 ml-1">{filteredGroupedOrders.length}</strong>
                 </div>
               </div>
-            )}
 
-            {/* Helpful Tips Bento / Quick Actions */}
-            <div className="bg-surface-container-low rounded-xl p-md border border-outline-variant">
-              <h4 className="font-label-md text-label-md text-primary mb-md">Quick Actions</h4>
-              
-              <div className="space-y-xs">
-                <button 
-                  type="button"
-                  onClick={autofillRecent}
-                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-primary">history</span>
-                  <div>
-                    <p className="font-label-md text-label-md text-on-surface">Recent Recipients</p>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant">Autofill form from past bookings</p>
-                  </div>
-                </button>
-                
-                <button 
-                  type="button"
-                  onClick={() => setBookingMode('bulk')}
-                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-primary">upload_file</span>
-                  <div>
-                    <p className="font-label-md text-label-md text-on-surface">Upload Shipments</p>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant">Switch to spreadsheet view</p>
-                  </div>
-                </button>
-                
-                <button 
-                  type="button"
-                  onClick={downloadTemplate}
-                  className="w-full p-sm bg-surface-container-lowest rounded-lg border border-outline-variant flex items-center gap-sm hover:bg-surface-container transition-colors text-left group cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-primary">download</span>
-                  <div>
-                    <p className="font-label-md text-label-md text-on-surface">Download Template</p>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant">Get blank template CSV</p>
-                  </div>
-                </button>
+              {/* GROUPED BULK ORDERS TABLE WITH PRINT LABELS */}
+              <div className="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm flex flex-col">
+                <div className="p-3.5 border-b border-outline-variant flex items-center justify-between bg-slate-50">
+                  <h4 className="font-bold text-xs text-on-surface flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-primary" /> Grouped Bulk Orders & Labels
+                  </h4>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    Items sharing 1 <code className="text-primary font-bold">order_id</code> are grouped together
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto min-h-[260px]">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/60 border-b border-outline-variant text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                        <th className="px-4 py-2.5">Order ID</th>
+                        <th className="px-4 py-2.5">Items</th>
+                        <th className="px-4 py-2.5">Consignee Detail</th>
+                        <th className="px-4 py-2.5">Shipper Detail</th>
+                        <th className="px-4 py-2.5">Fulfillment & Barcodes</th>
+                        <th className="px-4 py-2.5">Total COD</th>
+                        <th className="px-4 py-2.5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant text-xs font-medium">
+                      {filteredGroupedOrders.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                            No bulk booking orders found. Upload or paste a sheet to add entries.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredGroupedOrders.map((ord) => (
+                          <tr key={ord.orderId} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3 font-mono font-bold text-primary text-xs">
+                              {ord.orderId}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                                <Package className="w-3 h-3 text-primary" /> {ord.items.length} Item{ord.items.length !== 1 ? 's' : ''}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-900">{ord.consigneeName}</span>
+                                <span className="text-[10px] text-slate-500 font-mono">{ord.consigneePhone}</span>
+                                <span className="text-[10px] text-slate-600 truncate max-w-[200px]">{ord.consigneeAddress}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-slate-800">{ord.shipperName}</span>
+                                <span className="text-[10px] text-slate-500 truncate max-w-[180px]">{ord.shipperAddress}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {ord.shippingType === 'In-House' ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold text-[10px] w-fit">
+                                    <BarcodeIcon className="w-3 h-3" /> 1 Barcode (In-House)
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-500">{ord.primaryBarcode}</span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full font-bold text-[10px] w-fit">
+                                    <BarcodeIcon className="w-3 h-3" /> 2 Barcodes (3PL)
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-500">1: {ord.primaryBarcode}</span>
+                                  <span className="text-[10px] font-mono text-purple-700 font-bold">2: {ord.secondary3PLBarcode}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-900">
+                              PKR {ord.totalCod?.toLocaleString() || 0}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => setSelectedOrderForLabel(ord)}
+                                className="px-3 py-1 bg-primary text-white rounded-lg font-bold text-xs hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5 ml-auto cursor-pointer"
+                              >
+                                <Printer className="w-3.5 h-3.5" /> Print Labels
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
 
-            {/* Info Alert */}
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex gap-3 text-sm text-[#003ec7]">
-              <Info className="h-5 w-5 shrink-0" />
-              <p className="leading-relaxed">
-                Please ensure the consignee&apos;s phone number is correct. Courier will send a tracking link via SMS upon collection.
-              </p>
+              {/* INTERACTIVE EDITABLE GRID (WHEN FILE UPLOADED) */}
+              {parsedRows.length > 0 && (
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant pb-md">
+                    <div>
+                      <h3 className="font-headline-md text-headline-md">Loaded Orders Grid</h3>
+                      <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">Edit rows to correct error highlights before booking</p>
+                    </div>
+
+                    {gridHasErrors && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
+                        <AlertCircle className="h-4 w-4" /> Please resolve errors to unlock Create Order.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-outline-variant">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-outline-variant text-outline font-bold uppercase">
+                        <tr>
+                          <th className="px-4 py-3">#</th>
+                          <th className="px-4 py-3">Recipient Name</th>
+                          <th className="px-4 py-3">Phone</th>
+                          <th className="px-4 py-3">Destination City</th>
+                          <th className="px-4 py-3">Address</th>
+                          <th className="px-4 py-3">Weight (Kg)</th>
+                          <th className="px-4 py-3">COD (PKR)</th>
+                          <th className="px-4 py-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline-variant font-medium text-on-surface">
+                        {parsedRows.map((row, index) => {
+                          const isEditing = editingRowId === row.id;
+                          const hasErrors = Object.keys(row.errors || {}).length > 0;
+
+                          return (
+                            <tr 
+                              key={row.id} 
+                              className={`transition-colors ${hasErrors ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-slate-50/40'}`}
+                            >
+                              <td className="px-4 py-3">
+                                {hasErrors ? (
+                                  <span title={Object.values(row.errors).join(', ')}>
+                                    <AlertCircle className="h-4 w-4 text-red-500 animate-pulse" />
+                                  </span>
+                                ) : (
+                                  index + 1
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    value={editFormData.consigneeName || ''} 
+                                    onChange={(e) => handleEditFormChange('consigneeName', e.target.value)}
+                                    className={`w-28 h-8 px-2 border rounded-lg outline-none ${editFormData.errors?.consigneeName ? 'border-error' : 'border-outline-variant'}`}
+                                  />
+                                ) : (
+                                  <span>{row.consigneeName}</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    value={editFormData.consigneePhone || ''} 
+                                    onChange={(e) => handleEditFormChange('consigneePhone', e.target.value)}
+                                    className={`w-28 h-8 px-2 border rounded-lg outline-none ${editFormData.errors?.consigneePhone ? 'border-error' : 'border-outline-variant'}`}
+                                  />
+                                ) : (
+                                  <span className="font-mono">{row.consigneePhone}</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3 font-semibold">
+                                {isEditing ? (
+                                  <select 
+                                    value={editFormData.destinationCity || ''} 
+                                    onChange={(e) => handleEditFormChange('destinationCity', e.target.value)}
+                                    className="h-8 px-1.5 border border-outline-variant rounded-lg outline-none bg-white"
+                                  >
+                                    <option value="">Select</option>
+                                    <option value="Karachi">Karachi</option>
+                                    <option value="Lahore">Lahore</option>
+                                    <option value="Islamabad">Islamabad</option>
+                                    <option value="Faisalabad">Faisalabad</option>
+                                    <option value="Rawalpindi">Rawalpindi</option>
+                                    <option value="Multan">Multan</option>
+                                    <option value="Peshawar">Peshawar</option>
+                                    <option value="Quetta">Quetta</option>
+                                  </select>
+                                ) : (
+                                  row.destinationCity || <span className="text-red-500 italic">Missing</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3 max-w-[150px] truncate">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    value={editFormData.deliveryAddress || ''} 
+                                    onChange={(e) => handleEditFormChange('deliveryAddress', e.target.value)}
+                                    className="w-36 h-8 px-2 border border-outline-variant rounded-lg outline-none"
+                                  />
+                                ) : (
+                                  <span title={row.deliveryAddress}>{row.deliveryAddress}</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                {isEditing ? (
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    value={editFormData.weight || 0} 
+                                    onChange={(e) => handleEditFormChange('weight', parseFloat(e.target.value))}
+                                    className="w-14 h-8 px-2 border border-outline-variant rounded-lg outline-none"
+                                  />
+                                ) : (
+                                  <span>{row.weight} kg</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3 font-bold">
+                                {isEditing ? (
+                                  <input 
+                                    type="number" 
+                                    value={editFormData.codAmount || 0} 
+                                    onChange={(e) => handleEditFormChange('codAmount', parseInt(e.target.value))}
+                                    className="w-16 h-8 px-2 border border-outline-variant rounded-lg outline-none"
+                                  />
+                                ) : (
+                                  <span>PKR {row.codAmount}</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3 text-center">
+                                {isEditing ? (
+                                  <div className="flex justify-center gap-1.5">
+                                    <button 
+                                      type="button"
+                                      onClick={saveRowEdits}
+                                      className="p-1.5 bg-primary text-white rounded-lg cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={cancelRowEdits}
+                                      className="p-1.5 bg-slate-200 text-slate-700 rounded-lg cursor-pointer"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-center gap-1.5">
+                                    <button 
+                                      type="button"
+                                      onClick={() => startEditingRow(row)}
+                                      className="p-1.5 text-outline hover:text-primary rounded-lg cursor-pointer"
+                                    >
+                                      <Edit className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => deleteRow(row.id)}
+                                      className="p-1.5 text-outline hover:text-error rounded-lg cursor-pointer"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Referenced Order Details Modal Overlay Popup */}
+        {/* Modal for Pasting CSV Lines */}
+        {showPasteModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center border-b border-outline-variant pb-3">
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-primary" /> Paste Bulk Booking Sheet
+                  </h3>
+                  <p className="text-xs text-slate-500">Items sharing 1 order_id will be grouped together.</p>
+                </div>
+                <button onClick={() => setShowPasteModal(false)} className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleProcessBulkSheetPaste} className="flex flex-col gap-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 leading-relaxed font-mono">
+                  <strong>Expected CSV Line Format:</strong><br />
+                  <code>order_id, consignee_name, consignee_phone, consignee_address, shipper_name, shipper_address, item_name, cod_amount, shipping_type(In-House/3PL), 3pl_barcode</code>
+                </div>
+
+                <textarea
+                  rows={6}
+                  placeholder={`ORD-901, Ali Khan, +92 300 1112233, Gulberg II Lahore, Threads Store, Factory Road, Silk Shirt, 2500, In-House
+ORD-901, Ali Khan, +92 300 1112233, Gulberg II Lahore, Threads Store, Factory Road, Denim Trousers, 3000, In-House`}
+                  className="w-full p-3 border border-outline-variant rounded-xl font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  value={rawCsvText}
+                  onChange={(e) => setRawCsvText(e.target.value)}
+                  required
+                />
+
+                <div className="flex justify-end gap-2.5 border-t border-outline-variant pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowPasteModal(false)}
+                    className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" /> Process & Group Orders
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* BARCODE STICKER LABEL PRINT MODAL */}
+        {selectedOrderForLabel && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto no-print">
+            <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 max-h-[90vh]">
+              <div className="flex justify-between items-center border-b border-outline-variant pb-3">
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                    Label Sticker Preview: <span className="font-mono text-primary">{selectedOrderForLabel.orderId}</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {selectedOrderForLabel.shippingType === 'In-House' ? '1 Barcode (In-House Shipping)' : '2 Barcodes (3PL Partner Shipping)'}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedOrderForLabel(null)} className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1">
+                {selectedOrderForLabel.items.map((item, index) => (
+                  <div key={item.itemId} className="border-2 border-slate-900 rounded-2xl p-4 bg-white font-mono text-xs flex flex-col gap-3 shadow-sm">
+                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2">
+                      <span className="font-bold text-sm text-primary">DBArc Express Shipping</span>
+                      <span className="text-[10px] font-bold border border-slate-900 px-2 py-0.5 rounded bg-slate-50">
+                        Piece {index + 1} of {selectedOrderForLabel.items.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 border-b border-slate-900 pb-2 text-[10px]">
+                      <div>
+                        <span className="font-bold text-slate-500 uppercase block">Consignee Detail (To):</span>
+                        <span className="font-bold text-slate-900 text-xs">{selectedOrderForLabel.consigneeName}</span>
+                        <p className="text-slate-700">{selectedOrderForLabel.consigneePhone}</p>
+                        <p className="text-slate-700 line-clamp-2">{selectedOrderForLabel.consigneeAddress}</p>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-500 uppercase block">Shipper Detail (From):</span>
+                        <span className="font-bold text-slate-900 text-xs">{selectedOrderForLabel.shipperName}</span>
+                        <p className="text-slate-700 line-clamp-2">{selectedOrderForLabel.shipperAddress}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 border border-slate-200 rounded text-[10px]">
+                      <span className="font-bold text-slate-600">ITEM CONTENT:</span> {item.itemName} (ID: {item.itemId})
+                    </div>
+
+                    {selectedOrderForLabel.shippingType === 'In-House' ? (
+                      <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-900 rounded">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase mb-1">In-House Primary Tracking Barcode</span>
+                        <div className="flex items-center gap-0.5 h-10">
+                          {[4,2,6,1,3,5,2,4,1,6,3,2,5,1,4,2,6,3,1,5,2,4,6,1,3,2,5,1,4].map((w, idx) => (
+                            <div key={idx} className="bg-slate-900 h-full" style={{ width: `${w}px` }}></div>
+                          ))}
+                        </div>
+                        <span className="text-sm font-bold tracking-widest mt-1 text-slate-900">{selectedOrderForLabel.primaryBarcode}</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col items-center justify-center p-2 bg-slate-50 border border-slate-900 rounded">
+                          <span className="text-[8px] font-bold text-slate-500 uppercase mb-1">Barcode 1: DBArc Primary</span>
+                          <div className="flex items-center gap-0.5 h-8">
+                            {[3,1,4,2,5,1,3,4,2,1,5,2,3,4,1,5,2].map((w, idx) => (
+                              <div key={idx} className="bg-slate-900 h-full" style={{ width: `${w}px` }}></div>
+                            ))}
+                          </div>
+                          <span className="text-xs font-bold tracking-wider mt-1 text-slate-900">{selectedOrderForLabel.primaryBarcode}</span>
+                        </div>
+
+                        <div className="flex flex-col items-center justify-center p-2 bg-purple-50 border border-purple-900 rounded">
+                          <span className="text-[8px] font-bold text-purple-700 uppercase mb-1">Barcode 2: 3PL Partner</span>
+                          <div className="flex items-center gap-0.5 h-8">
+                            {[2,4,1,5,2,3,1,4,5,2,1,3,4,2,5,1,3].map((w, idx) => (
+                              <div key={idx} className="bg-purple-950 h-full" style={{ width: `${w}px` }}></div>
+                            ))}
+                          </div>
+                          <span className="text-xs font-bold tracking-wider mt-1 text-purple-950">{selectedOrderForLabel.secondary3PLBarcode}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-1 font-sans">
+                      <span className="text-[10px] font-bold text-slate-700">SHARED ORDER ID: {selectedOrderForLabel.orderId}</span>
+                      <span className="text-sm font-bold text-slate-900">COD: PKR {item.codAmount?.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2.5 border-t border-outline-variant pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderForLabel(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTriggerPrint}
+                  className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Print Item Labels
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Referenced Order Details Modal */}
         {showDetailsModal && selectedReferencedParcel && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 space-y-6">
@@ -1754,7 +2028,61 @@ function BookShipmentForm() {
           </div>
         )}
       </div>
+
+      {/* ISOLATED PRINT AREA FOR BULK LABELS */}
+      {selectedOrderForLabel && (
+        <div id="bulk-label-print-area" className="hidden">
+          {selectedOrderForLabel.items.map((item, index) => (
+            <div key={item.itemId} style={{ width: '4in', height: '6in', border: '3px solid black', padding: '16px', fontFamily: 'monospace', color: 'black', background: 'white', pageBreakAfter: 'always', margin: '0 auto 20px auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid black', paddingBottom: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: 'bold' }}>DBArc Express Shipping</span>
+                <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Piece {index + 1} of {selectedOrderForLabel.items.length}</span>
+              </div>
+
+              <div style={{ borderBottom: '1px solid black', padding: '10px 0', fontSize: '11px' }}>
+                <div><strong>ORDER ID:</strong> {selectedOrderForLabel.orderId}</div>
+                <div><strong>CONSIGNEE:</strong> {selectedOrderForLabel.consigneeName} ({selectedOrderForLabel.consigneePhone})</div>
+                <div><strong>ADDRESS:</strong> {selectedOrderForLabel.consigneeAddress}</div>
+                <div><strong>SHIPPER:</strong> {selectedOrderForLabel.shipperName}</div>
+              </div>
+
+              <div style={{ padding: '8px 0', fontSize: '11px', borderBottom: '1px solid black' }}>
+                <strong>ITEM:</strong> {item.itemName}
+              </div>
+
+              {selectedOrderForLabel.shippingType === 'In-House' ? (
+                <div style={{ textAlign: 'center', margin: '16px 0', padding: '12px', border: '1px solid black' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '3px' }}>||| | ||| || ||| |||</div>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', marginTop: '6px' }}>{selectedOrderForLabel.primaryBarcode}</div>
+                  <div style={{ fontSize: '10px', marginTop: '4px' }}>1 BARCODE (IN-HOUSE FULFILLMENT)</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '8px', margin: '16px 0' }}>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '8px', border: '1px solid black' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>||| || | |||</div>
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '4px' }}>{selectedOrderForLabel.primaryBarcode}</div>
+                    <div style={{ fontSize: '9px' }}>BARCODE 1 (DBARC)</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '8px', border: '1px solid black' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>|| ||| | |||</div>
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '4px' }}>{selectedOrderForLabel.secondary3PLBarcode}</div>
+                    <div style={{ fontSize: '9px' }}>BARCODE 2 (3PL PARTNER)</div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '16px' }}>
+                <span><strong>TYPE:</strong> {selectedOrderForLabel.shippingType}</span>
+                <span><strong>COD:</strong> PKR {item.codAmount?.toLocaleString()}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </PortalLayout>
+  );
+}
+
 export default function BookShipmentPage() {
   return (
     <React.Suspense fallback={

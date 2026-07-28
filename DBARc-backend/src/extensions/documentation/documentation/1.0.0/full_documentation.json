@@ -14,7 +14,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "x-generation-date": "2026-07-27T07:52:47.017Z"
+    "x-generation-date": "2026-07-28T15:01:25.100Z"
   },
   "x-strapi-config": {
     "plugins": [
@@ -24963,6 +24963,24 @@
                                                           }
                                                         }
                                                       },
+                                                      "shipper": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "oneOf": [
+                                                              {
+                                                                "type": "string"
+                                                              },
+                                                              {
+                                                                "type": "number"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "documentId": {
+                                                            "type": "string"
+                                                          }
+                                                        }
+                                                      },
                                                       "createdAt": {
                                                         "type": "string",
                                                         "format": "date-time"
@@ -33487,6 +33505,24 @@
                                                       }
                                                     }
                                                   },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
                                                   "createdAt": {
                                                     "type": "string",
                                                     "format": "date-time"
@@ -40197,6 +40233,24 @@
                                     }
                                   }
                                 },
+                                "shipper": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "oneOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -43879,6 +43933,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -48314,6 +48386,24 @@
                                                       }
                                                     }
                                                   },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
                                                   "createdAt": {
                                                     "type": "string",
                                                     "format": "date-time"
@@ -52568,6 +52658,24 @@
                                                               }
                                                             }
                                                           }
+                                                        }
+                                                      }
+                                                    },
+                                                    "shipper": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "id": {
+                                                          "oneOf": [
+                                                            {
+                                                              "type": "string"
+                                                            },
+                                                            {
+                                                              "type": "number"
+                                                            }
+                                                          ]
+                                                        },
+                                                        "documentId": {
+                                                          "type": "string"
                                                         }
                                                       }
                                                     },
@@ -57860,6 +57968,24 @@
                   }
                 }
               },
+              "shipper": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                }
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -61047,6 +61173,24 @@
                                                                 }
                                                               }
                                                             }
+                                                          }
+                                                        }
+                                                      },
+                                                      "shipper": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "oneOf": [
+                                                              {
+                                                                "type": "string"
+                                                              },
+                                                              {
+                                                                "type": "number"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "documentId": {
+                                                            "type": "string"
                                                           }
                                                         }
                                                       },
@@ -66513,6 +66657,24 @@
                   }
                 }
               },
+              "shipper": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                }
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -69673,6 +69835,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -75687,6 +75867,24 @@
                                                       }
                                                     }
                                                   },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
                                                   "createdAt": {
                                                     "type": "string",
                                                     "format": "date-time"
@@ -79999,6 +80197,24 @@
                                           }
                                         }
                                       },
+                                      "shipper": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "oneOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "number"
+                                              }
+                                            ]
+                                          },
+                                          "documentId": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
                                       "createdAt": {
                                         "type": "string",
                                         "format": "date-time"
@@ -84095,6 +84311,24 @@
                                                                 }
                                                               }
                                                             }
+                                                          }
+                                                        }
+                                                      },
+                                                      "shipper": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "oneOf": [
+                                                              {
+                                                                "type": "string"
+                                                              },
+                                                              {
+                                                                "type": "number"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "documentId": {
+                                                            "type": "string"
                                                           }
                                                         }
                                                       },
@@ -88725,6 +88959,24 @@
                                         }
                                       }
                                     },
+                                    "shipper": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "oneOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ]
+                                        },
+                                        "documentId": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
                                     "createdAt": {
                                       "type": "string",
                                       "format": "date-time"
@@ -89928,6 +90180,17 @@
                 "type": "boolean"
               },
               "origin_office": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "example": "string or id"
+              },
+              "shipper": {
                 "oneOf": [
                   {
                     "type": "integer"
@@ -92835,6 +93098,24 @@
                                                       }
                                                     }
                                                   },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
                                                   "createdAt": {
                                                     "type": "string",
                                                     "format": "date-time"
@@ -94136,6 +94417,24 @@
             "type": "boolean"
           },
           "origin_office": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "documentId": {
+                "type": "string"
+              }
+            }
+          },
+          "shipper": {
             "type": "object",
             "properties": {
               "id": {
@@ -98242,6 +98541,24 @@
                   }
                 }
               },
+              "shipper": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                }
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -101955,6 +102272,24 @@
                                       "type": "boolean"
                                     },
                                     "origin_office": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "oneOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ]
+                                        },
+                                        "documentId": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "shipper": {
                                       "type": "object",
                                       "properties": {
                                         "id": {
@@ -105863,6 +106198,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -110267,6 +110620,24 @@
                                                 }
                                               }
                                             }
+                                          }
+                                        }
+                                      },
+                                      "shipper": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "oneOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "number"
+                                              }
+                                            ]
+                                          },
+                                          "documentId": {
+                                            "type": "string"
                                           }
                                         }
                                       },
@@ -115498,6 +115869,24 @@
                   }
                 }
               },
+              "shipper": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                }
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -119015,6 +119404,24 @@
                                             "type": "boolean"
                                           },
                                           "origin_office": {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "oneOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "number"
+                                                  }
+                                                ]
+                                              },
+                                              "documentId": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "shipper": {
                                             "type": "object",
                                             "properties": {
                                               "id": {
@@ -122927,6 +123334,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -128417,6 +128842,24 @@
                   }
                 }
               },
+              "shipper": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                }
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -131630,6 +132073,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -135693,6 +136154,24 @@
                                                                 }
                                                               }
                                                             }
+                                                          }
+                                                        }
+                                                      },
+                                                      "shipper": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "oneOf": [
+                                                              {
+                                                                "type": "string"
+                                                              },
+                                                              {
+                                                                "type": "number"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "documentId": {
+                                                            "type": "string"
                                                           }
                                                         }
                                                       },
@@ -139967,6 +140446,24 @@
                                                                 }
                                                               }
                                                             }
+                                                          }
+                                                        }
+                                                      },
+                                                      "shipper": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "oneOf": [
+                                                              {
+                                                                "type": "string"
+                                                              },
+                                                              {
+                                                                "type": "number"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "documentId": {
+                                                            "type": "string"
                                                           }
                                                         }
                                                       },
@@ -144274,6 +144771,24 @@
                                                       }
                                                     }
                                                   },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
                                                   "createdAt": {
                                                     "type": "string",
                                                     "format": "date-time"
@@ -148453,6 +148968,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },
@@ -152769,6 +153302,24 @@
                                                 }
                                               }
                                             }
+                                          }
+                                        }
+                                      },
+                                      "shipper": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "oneOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "number"
+                                              }
+                                            ]
+                                          },
+                                          "documentId": {
+                                            "type": "string"
                                           }
                                         }
                                       },
@@ -157729,6 +158280,24 @@
                               }
                             }
                           },
+                          "shipper": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "oneOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              },
+                              "documentId": {
+                                "type": "string"
+                              }
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -161447,6 +162016,24 @@
                                                               }
                                                             }
                                                           }
+                                                        }
+                                                      }
+                                                    },
+                                                    "shipper": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "id": {
+                                                          "oneOf": [
+                                                            {
+                                                              "type": "string"
+                                                            },
+                                                            {
+                                                              "type": "number"
+                                                            }
+                                                          ]
+                                                        },
+                                                        "documentId": {
+                                                          "type": "string"
                                                         }
                                                       }
                                                     },
@@ -166922,6 +167509,24 @@
                                               }
                                             }
                                           },
+                                          "shipper": {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "oneOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "number"
+                                                  }
+                                                ]
+                                              },
+                                              "documentId": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
                                           "createdAt": {
                                             "type": "string",
                                             "format": "date-time"
@@ -172029,6 +172634,24 @@
                                                             }
                                                           }
                                                         }
+                                                      }
+                                                    }
+                                                  },
+                                                  "shipper": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "oneOf": [
+                                                          {
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "number"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "documentId": {
+                                                        "type": "string"
                                                       }
                                                     }
                                                   },

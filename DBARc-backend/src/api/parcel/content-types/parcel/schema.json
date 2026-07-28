@@ -147,6 +147,11 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::office.office"
+    },
+    "shipper": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::shipper.shipper"
     }
   }
 }

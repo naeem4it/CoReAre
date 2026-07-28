@@ -10,14 +10,42 @@ interface City {
 }
 
 interface CitySelectProps {
-  value: number | '';
-  onChange: (cityId: number | '', cityName?: string) => void;
+  value: number | string | '';
+  onChange: (cityId: number | string | '', cityName?: string) => void;
   placeholder?: string;
   error?: string;
 }
 
+const DEFAULT_CITIES: City[] = [
+  { id: 1, name: 'Karachi' },
+  { id: 2, name: 'Lahore' },
+  { id: 3, name: 'Islamabad' },
+  { id: 4, name: 'Faisalabad' },
+  { id: 5, name: 'Rawalpindi' },
+  { id: 6, name: 'Multan' },
+  { id: 7, name: 'Peshawar' },
+  { id: 8, name: 'Quetta' },
+  { id: 9, name: 'Gujranwala' },
+  { id: 10, name: 'Sialkot' },
+  { id: 11, name: 'Hyderabad' },
+  { id: 12, name: 'Sukkur' },
+  { id: 13, name: 'Bahawalpur' },
+  { id: 14, name: 'Sargodha' },
+  { id: 15, name: 'Abbottabad' },
+  { id: 16, name: 'Mardan' },
+  { id: 17, name: 'Gujrat' },
+  { id: 18, name: 'Sahiwal' },
+  { id: 19, name: 'Larkana' },
+  { id: 20, name: 'Sheikhupura' },
+  { id: 21, name: 'Jhelum' },
+  { id: 22, name: 'Okara' },
+  { id: 23, name: 'Rahim Yar Khan' },
+  { id: 24, name: 'Muzaffargarh' },
+  { id: 25, name: 'Dera Ghazi Khan' },
+];
+
 export const CitySelect = ({ value, onChange, placeholder = 'Search city...', error }: CitySelectProps) => {
-  const [cities, setCities] = React.useState<City[]>([]);
+  const [cities, setCities] = React.useState<City[]>(DEFAULT_CITIES);
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -26,14 +54,28 @@ export const CitySelect = ({ value, onChange, placeholder = 'Search city...', er
     const fetchCities = async () => {
       try {
         const res = await apiClient.get('/cities?pagination[limit]=200');
-        if (res.data?.data) {
-          setCities(res.data.data.map((c: any) => ({
-            id: c.id,
-            name: c.attributes?.name || c.name || '',
-          })));
+        const rawList = res.data?.data || res.data || [];
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          const apiMapped: City[] = rawList
+            .map((c: any) => ({
+              id: c.id || Math.random(),
+              name: (c.attributes?.name || c.name || c.cityName || c.title || '').trim(),
+            }))
+            .filter((c: City) => c.name.length > 0);
+
+          if (apiMapped.length > 0) {
+            // Merge with DEFAULT_CITIES to guarantee full city coverage
+            const merged = [...apiMapped];
+            DEFAULT_CITIES.forEach(def => {
+              if (!merged.some(m => m.name.toLowerCase() === def.name.toLowerCase())) {
+                merged.push(def);
+              }
+            });
+            setCities(merged);
+          }
         }
       } catch (err) {
-        console.error('Failed to fetch cities:', err);
+        console.warn('Could not fetch cities from API, using default list:', err);
       }
     };
     fetchCities();
@@ -50,10 +92,19 @@ export const CitySelect = ({ value, onChange, placeholder = 'Search city...', er
   }, []);
 
   const filteredCities = React.useMemo(() => {
-    return cities.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+    if (!search.trim()) return cities;
+    return cities.filter(c => c.name.toLowerCase().includes(search.trim().toLowerCase()));
   }, [cities, search]);
 
-  const selectedCity = cities.find(c => c.id === value);
+  const selectedCity = React.useMemo(() => {
+    if (!value) return null;
+    return cities.find(c => 
+      c.id === value || 
+      c.name === value || 
+      c.id === Number(value) || 
+      c.name.toLowerCase() === String(value).toLowerCase()
+    );
+  }, [cities, value]);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -61,41 +112,46 @@ export const CitySelect = ({ value, onChange, placeholder = 'Search city...', er
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full h-10 px-3 py-2 bg-white border ${error ? 'border-red-500' : 'border-slate-200'} rounded-lg text-sm flex items-center justify-between cursor-pointer focus:ring-2 focus:ring-primary-500`}
       >
-        <span className={selectedCity ? 'text-slate-800' : 'text-slate-400'}>
+        <span className={selectedCity ? 'text-slate-800 font-medium' : 'text-slate-400'}>
           {selectedCity ? selectedCity.name : placeholder}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-150">
           <div className="p-2 border-b border-slate-100 flex items-center gap-2">
-            <Search className="w-4 h-4 text-slate-400" />
+            <Search className="w-4 h-4 text-slate-400 shrink-0" />
             <input 
               type="text" 
               className="w-full text-sm outline-none bg-transparent"
-              placeholder="Search..."
+              placeholder="Search city name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
           </div>
-          <div className="max-h-60 overflow-y-auto p-1">
+          <div className="max-h-60 overflow-y-auto p-1 divide-y divide-slate-50">
             {filteredCities.length > 0 ? (
-              filteredCities.map((city) => (
-                <div
-                  key={city.id}
-                  onClick={() => {
-                    onChange(city.id, city.name);
-                    setIsOpen(false);
-                    setSearch('');
-                  }}
-                  className={`px-3 py-2 text-sm rounded-md cursor-pointer flex items-center justify-between ${value === city.id ? 'bg-primary-50 text-primary-700 font-medium' : 'hover:bg-slate-50 text-slate-700'}`}
-                >
-                  {city.name}
-                  {value === city.id && <Check className="w-4 h-4 text-primary-600" />}
-                </div>
-              ))
+              filteredCities.map((city) => {
+                const isSelected = selectedCity?.name === city.name || value === city.id || value === city.name;
+
+                return (
+                  <div
+                    key={city.id}
+                    onClick={() => {
+                      onChange(city.id, city.name);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={`px-3 py-2 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors
+                      ${isSelected ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
+                  >
+                    <span>{city.name}</span>
+                    {isSelected && <Check className="w-4 h-4 text-primary" />}
+                  </div>
+                );
+              })
             ) : (
               <div className="px-3 py-4 text-sm text-center text-slate-500">No cities found.</div>
             )}

@@ -11,7 +11,7 @@ interface TenantContextType {
 }
 
 const TenantContext = React.createContext<TenantContextType>({
-  businessName: 'Fly Courier',
+  businessName: 'Leoparda',
   logoUrl: null,
   themePrimaryColor: null,
   isLoading: true,
@@ -19,41 +19,60 @@ const TenantContext = React.createContext<TenantContextType>({
 
 export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
-  const [businessName, setBusinessName] = React.useState('Fly Courier');
+  const [businessName, setBusinessName] = React.useState('Leoparda');
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
   const [themePrimaryColor, setThemePrimaryColor] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (user?.tenant) {
-      // User has tenant populated
+    // Read strictly tenant info for platform branding
+    if (typeof window !== 'undefined') {
+      try {
+        const storedTenantStr = localStorage.getItem('dbarc-tenant') || localStorage.getItem('tenant');
+        if (storedTenantStr) {
+          const storedTenant = JSON.parse(storedTenantStr);
+          const name = storedTenant.business_name || storedTenant.name || storedTenant.businessName;
+          if (name) setBusinessName(name);
+          if (storedTenant.logo?.url || storedTenant.logoUrl) {
+            const logo = storedTenant.logo?.url || storedTenant.logoUrl;
+            setLogoUrl(logo.startsWith('http') ? logo : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337'}${logo}`);
+          }
+        } else {
+          const storedUserStr = localStorage.getItem('user');
+          if (storedUserStr) {
+            const storedUser = JSON.parse(storedUserStr);
+            const tenantObj = storedUser.tenant;
+            const name = tenantObj?.business_name || tenantObj?.name;
+            if (name) setBusinessName(name);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse tenant from localStorage:', e);
+      }
+    }
+
+    if (user) {
       const tenant = user.tenant;
-      if (tenant.business_name) {
-        setBusinessName(tenant.business_name);
-      } else if (tenant.name) {
-        setBusinessName(tenant.name);
+      const tenantName = tenant?.business_name || tenant?.name;
+
+      if (tenantName) {
+        setBusinessName(tenantName);
       }
 
-      if (tenant.theme_primary_color) {
+      if (tenant?.theme_primary_color) {
         setThemePrimaryColor(tenant.theme_primary_color);
-        // Inject CSS variable to document body
         document.body.style.setProperty('--tenant-primary', tenant.theme_primary_color);
       }
 
-      if (tenant.logo?.url) {
-        // Handle Strapi media URL (prepend backend URL if relative)
+      if (tenant?.logo?.url) {
         const url = tenant.logo.url.startsWith('http') 
           ? tenant.logo.url 
           : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337'}${tenant.logo.url}`;
         setLogoUrl(url);
       }
-      
       setIsLoading(false);
-    } else {
-      // If user is not loaded or has no tenant, just stop loading
-      if (user !== undefined) {
-        setIsLoading(false);
-      }
+    } else if (user !== undefined) {
+      setIsLoading(false);
     }
   }, [user]);
 

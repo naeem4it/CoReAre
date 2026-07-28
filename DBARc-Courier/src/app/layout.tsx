@@ -3,7 +3,7 @@ import "./globals.css";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "Fly Courier - Logistics Dashboard",
+  title: "Leoparda - Logistics Dashboard",
   description: "Enterprise Logistics Management Portal",
 };
 

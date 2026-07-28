@@ -1223,6 +1223,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       ['Parcel', 'Document', 'Flyer']
     > &
       Schema.Attribute.DefaultTo<'Parcel'>;
+    shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
     source_city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
     status: Schema.Attribute.Enumeration<
       [

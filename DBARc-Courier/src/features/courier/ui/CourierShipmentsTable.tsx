@@ -49,27 +49,76 @@ const FALLBACK_ROWS: ShipmentRow[] = [
   },
 ];
 
-export const CourierShipmentsTable = () => {
-  const [data, setData] = React.useState<ShipmentRow[]>(FALLBACK_ROWS);
-  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>(FALLBACK_ROWS);
+import { useAuth } from '@/components/AuthProvider';
+
+interface CourierShipmentsTableProps {
+  fromDate?: string;
+  toDate?: string;
+}
+
+export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTableProps) => {
+  const { user, activeBusinessId } = useAuth();
+  const [data, setData] = React.useState<ShipmentRow[]>([]);
+  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
+
+  const isShipper = React.useMemo(() => {
+    if (!user) return false;
+    const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
+    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
+    return hasShipperRelation || hasShipperRoles;
+  }, [user]);
+
+  const shipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
+    if (user?.shipper) {
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) {
+        return user.shipper[0].id;
+      } else if (typeof user.shipper === 'object' && user.shipper.id) {
+        return user.shipper.id;
+      }
+    }
+    return null;
+  }, [user, activeBusinessId]);
 
   React.useEffect(() => {
     const fetchParcels = async () => {
       try {
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*');
-        const parcels = response.data?.data || [];
+        setIsLoading(true);
+        let parcelsUrl = '/parcels?populate=*';
+        if (isShipper && shipperId) {
+          parcelsUrl += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
+        }
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
+        let parcels = response.data?.data || [];
+        
+        if (fromDate || toDate) {
+          parcels = parcels.filter((item: any) => {
+            if (!item.createdAt) return true;
+            const itemDate = new Date(item.createdAt);
+            if (fromDate) {
+              const from = new Date(fromDate);
+              from.setHours(0, 0, 0, 0);
+              if (itemDate < from) return false;
+            }
+            if (toDate) {
+              const to = new Date(toDate);
+              to.setHours(23, 59, 59, 999);
+              if (itemDate > to) return false;
+            }
+            return true;
+          });
+        }
         
         if (parcels.length > 0) {
           const mapped: ShipmentRow[] = parcels.map((item: Parcel) => {
-            const customerName = item.recipient_name || 'Ahmed Sheikh';
-            const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'AS';
+            const customerName = item.recipient_name || 'Customer';
+            const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'CU';
             
-            // Deduce origin and destination from recipient address or mock it cleanly
-            const destination = item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
+            const origin = (item as any).source_city?.name || 'Karachi';
+            const destination = (item as any).destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
             
-            // Map Strapi status to UI status
             let uiStatus: ShipmentRow['status'] = 'booked';
             if (item.status) {
               if (item.status === 'Total Booking') {
@@ -84,24 +133,29 @@ export const CourierShipmentsTable = () => {
               trackingNumber: `#${item.tracking_number}`,
               customerName,
               avatar: initials,
-              origin: 'Karachi', // default origin
+              origin,
               destination,
               status: uiStatus,
-              eta: new Date(item.createdAt).toLocaleDateString() + ', ' + new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              eta: item.createdAt ? new Date(item.createdAt).toLocaleDateString() + ', ' + new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A',
             };
           });
           setData(mapped);
           setFilteredData(mapped);
+        } else {
+          setData([]);
+          setFilteredData([]);
         }
       } catch (error) {
-        console.warn('Could not fetch dynamic shipments, using fallback design rows:', error);
+        console.warn('Could not fetch dynamic shipments:', error);
+        setData([]);
+        setFilteredData([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchParcels();
-  }, []);
+  }, [isShipper, shipperId, fromDate, toDate]);
 
   React.useEffect(() => {
     if (!searchQuery) {
