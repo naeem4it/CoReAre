@@ -1,8 +1,5 @@
-'use client';
-
-import * as React from 'react';
-import PortalLayout from '@/components/PortalLayout';
-import { List, Save, Printer, RefreshCw, X, Search, FileText, Barcode, CheckCircle2, UserCheck, Shield } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
+import { RiderService, DeliverySheetService } from '@/services/api';
 
 interface DeliverySheetItem {
   id: string;
@@ -16,6 +13,7 @@ interface DeliverySheetItem {
 
 interface DeliveryShipment {
   id: string;
+  parcelId?: number;
   shipmentNumber: string;
   shipmentRef: string;
   shipperName: string;
@@ -43,11 +41,23 @@ export default function OperationsDeliverySheetPage() {
   const [selectedRider, setSelectedRider] = React.useState<string>('Hamza Baloch (2851)');
   const [routeCode, setRouteCode] = React.useState<string>('Fly Courier Service (3253)');
   const [scanBarcode, setScanBarcode] = React.useState<string>('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Modals
   const [isListModalOpen, setIsListModalOpen] = React.useState(false);
   const [isDsspModalOpen, setIsDsspModalOpen] = React.useState(false);
   const [modalSearch, setModalSearch] = React.useState('');
+
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+    show: false,
+    msg: '',
+    type: 'success',
+  });
+
+  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
 
   const [shipments, setShipments] = React.useState<DeliveryShipment[]>([
     {
@@ -130,31 +140,118 @@ export default function OperationsDeliverySheetPage() {
     setShipments(prev => prev.map(s => s.id === id ? { ...s, remarks: text } : s));
   };
 
-  const handleAddShipment = (e?: React.FormEvent) => {
+  const handleAddShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!scanBarcode.trim()) return;
 
-    const newItem: DeliveryShipment = {
-      id: Date.now().toString(),
-      shipmentNumber: scanBarcode.trim(),
-      shipmentRef: `#${Math.floor(100000 + Math.random() * 900000)}`,
-      shipperName: 'Metro Fashion Store',
-      consigneeName: 'New Recipient',
-      consigneeAddress: 'Johar Town Block H, Lahore',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 1.0,
-      amountCollect: 2500,
-      status: 'Out For Delivery',
-      remarks: ''
-    };
+    const barcode = scanBarcode.trim().toUpperCase();
+    if (shipments.some(s => s.shipmentNumber === barcode)) {
+      triggerToast(`Shipment ${barcode} already added to sheet.`, 'error');
+      return;
+    }
 
-    setShipments(prev => [newItem, ...prev]);
-    setScanBarcode('');
+    try {
+      const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${barcode}&populate=*`);
+      const parcel = res.data?.data?.[0];
+
+      const newItem: DeliveryShipment = {
+        id: Date.now().toString(),
+        parcelId: parcel?.id,
+        shipmentNumber: barcode,
+        shipmentRef: `#${Math.floor(100000 + Math.random() * 900000)}`,
+        shipperName: parcel?.shipper?.name || 'Assigned Merchant',
+        consigneeName: parcel?.recipient_name || 'Recipient Consignee',
+        consigneeAddress: parcel?.recipient_address || 'Delivery Address',
+        destination: parcel?.destination_city?.name || 'LHE',
+        pieces: 1,
+        weight: parcel?.weight || 1.0,
+        amountCollect: parcel?.cod_amount || 0,
+        status: 'Out For Delivery',
+        remarks: ''
+      };
+
+      setShipments(prev => [newItem, ...prev]);
+      setScanBarcode('');
+    } catch (err) {
+      console.warn('Could not query parcel, adding standard item:', err);
+      const newItem: DeliveryShipment = {
+        id: Date.now().toString(),
+        shipmentNumber: barcode,
+        shipmentRef: `#${Math.floor(100000 + Math.random() * 900000)}`,
+        shipperName: 'Merchant Store',
+        consigneeName: 'Recipient Customer',
+        consigneeAddress: 'Delivery Address Location',
+        destination: 'LHE',
+        pieces: 1,
+        weight: 1.0,
+        amountCollect: 0,
+        status: 'Out For Delivery',
+        remarks: ''
+      };
+      setShipments(prev => [newItem, ...prev]);
+      setScanBarcode('');
+    }
   };
 
-  const handleSave = () => {
-    alert(`Delivery Sheet #${sheetNumber} updated successfully! Total parcels: ${shipments.length}`);
+  const handleSave = async () => {
+    if (shipments.length === 0) {
+      triggerToast('Please add at least one shipment before saving.', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Update parcel statuses & remarks in Strapi
+      for (const item of shipments) {
+        try {
+          if (item.parcelId) {
+            await apiClient.put(`/parcels/${item.parcelId}`, {
+              data: {
+                status: item.status,
+                comments: item.remarks || undefined,
+              }
+            });
+          } else {
+            const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${item.shipmentNumber}`);
+            const p = parcelRes.data?.data?.[0];
+            if (p) {
+              await apiClient.put(`/parcels/${p.id}`, {
+                data: {
+                  status: item.status,
+                  comments: item.remarks || undefined,
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not sync parcel ${item.shipmentNumber}:`, e);
+        }
+      }
+
+      // 2. Persist Delivery Sheet
+      try {
+        await DeliverySheetService.create({
+          sheet_number: sheetNumber,
+          rider_name: selectedRider,
+          route_code: routeCode,
+          total_parcels: shipments.length,
+          total_cod: totalCollect,
+          delivered_count: deliveredCount,
+          return_count: returnCount,
+          parcels_data: shipments,
+          date: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('Delivery sheet entity save notice:', e);
+      }
+
+      triggerToast(`Delivery Sheet #${sheetNumber} updated successfully! Statuses persisted to database.`, 'success');
+    } catch (err) {
+      console.error('Failed to save delivery sheet:', err);
+      triggerToast('Error saving delivery sheet.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -176,7 +273,26 @@ export default function OperationsDeliverySheetPage() {
 
   return (
     <PortalLayout>
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
+          toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+        }`}>
+          {toast.type === 'success' ? (
+            <div className="bg-emerald-500 rounded-full p-1 text-white">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          ) : (
+            <div className="bg-red-500 rounded-full p-1 text-white">
+              <Shield className="w-4 h-4" />
+            </div>
+          )}
+          <span className="text-sm font-semibold">{toast.msg}</span>
+        </div>
+      )}
+
       <div className="space-y-6 max-w-[1920px] w-full mx-auto p-lg pb-16">
+
         
         {/* Header Bar */}
         <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

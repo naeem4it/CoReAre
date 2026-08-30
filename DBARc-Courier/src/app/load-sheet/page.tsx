@@ -244,6 +244,24 @@ export default function LoadSheetPage() {
     }
   };
 
+  // Delete Load Sheet
+  const handleDeleteLoadSheet = async (sheetId: number, sheetCode: string) => {
+    if (!confirm(`Are you sure you want to delete Load Sheet ${sheetCode}? Associated parcels will be released back to unassigned pool.`)) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/load-sheets/${sheetId}`);
+      triggerToast(`Load Sheet ${sheetCode} deleted successfully.`);
+      if (selectedSheet?.id === sheetId) setSelectedSheet(null);
+      fetchLoadSheets();
+    } catch (err: any) {
+      console.error('Failed to delete load sheet:', err);
+      triggerToast(err.response?.data?.error?.message || 'Failed to delete load sheet.', 'error');
+    }
+  };
+
+
   const getStatusBadgeColors = (status?: string) => {
     switch (status) {
       case 'Delivered':
@@ -449,7 +467,15 @@ export default function LoadSheetPage() {
                           >
                             <Printer className="w-4 h-4" />
                           </button>
+                          <button 
+                            onClick={() => handleDeleteLoadSheet(sheet.id, sheet.sheet_id)}
+                            title="Delete Load Sheet"
+                            className="p-1.5 rounded-lg hover:bg-rose-50 text-secondary hover:text-rose-600 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
+
                       </td>
                     </tr>
                   ))}

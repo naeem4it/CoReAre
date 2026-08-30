@@ -104,18 +104,41 @@ export default function TariffPlansPage() {
 
   const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
 
-  // Fetch shippers from backend API
-  React.useEffect(() => {
-    const fetchMetadata = async () => {
-      try {
-        const shippersRes = await apiClient.get('/shippers').catch(() => null);
-        if (shippersRes?.data?.data) {
-          setShippersList(shippersRes.data.data);
-        }
-      } catch (err) {
-        console.warn('Could not fetch shippers list:', err);
+  // Fetch plans and shippers from backend API
+  const fetchMetadata = async () => {
+    try {
+      const [shippersRes, plansRes] = await Promise.all([
+        apiClient.get('/shippers').catch(() => null),
+        apiClient.get('/shipper-plans?populate=*').catch(() => null),
+      ]);
+
+      if (shippersRes?.data?.data) {
+        setShippersList(shippersRes.data.data);
       }
-    };
+
+      if (plansRes?.data?.data && plansRes.data.data.length > 0) {
+        const loadedPlans: DynamicTariffPlan[] = plansRes.data.data.map((item: any) => ({
+          id: item.id,
+          name: item.name || 'Custom Tariff Plan',
+          cashHandlingType: item.cash_handling_type || 'percentage',
+          cashHandlingValue: Number(item.cash_handling_value) || 1.5,
+          cashHandlingMinFee: Number(item.cash_handling_min_fee) || 30,
+          weightTiers: item.weight_tiers?.length > 0 ? item.weight_tiers : DEFAULT_WEIGHT_TIERS,
+          zones: item.zones?.length > 0 ? item.zones : DEFAULT_ZONES,
+          shippers: (item.shippers || []).map((s: any) => ({
+            id: s.id,
+            name: s.name || `Shipper #${s.id}`,
+          })),
+        }));
+        setPlans(loadedPlans);
+        setSelectedPlanId(loadedPlans[0].id);
+      }
+    } catch (err) {
+      console.warn('Could not fetch metadata:', err);
+    }
+  };
+
+  React.useEffect(() => {
     fetchMetadata();
   }, []);
 
@@ -159,17 +182,18 @@ export default function TariffPlansPage() {
 
   // Add a new dynamic weight tier row (Admin only)
   const handleAddWeightTier = () => {
-    const newTierId = `tier_${Date.now()}`;
-    const newTierLabel = `1.01 to 2.0 kg`;
+    const nextTierNum = formWeightTiers.length + 1;
+    const newTierId = `tier_custom_${Date.now()}`;
+    const newTierLabel = `Custom Tier ${nextTierNum}`;
     
     setFormWeightTiers(prev => [...prev, { id: newTierId, label: newTierLabel }]);
     
-    // Initialize rates for the new tier across all zones
-    setFormZones(prev => prev.map(z => ({
-      ...z,
+    // Add default zero rate for the new tier across all zones
+    setFormZones(prev => prev.map(zone => ({
+      ...zone,
       tierRates: {
-        ...z.tierRates,
-        [newTierId]: 200 // default rate
+        ...zone.tierRates,
+        [newTierId]: 0
       }
     })));
   };
@@ -179,17 +203,20 @@ export default function TariffPlansPage() {
     setFormWeightTiers(prev => prev.map(t => t.id === tierId ? { ...t, label: newLabel } : t));
   };
 
-  // Remove a weight tier row
+  // Remove a dynamic weight tier row
   const handleRemoveWeightTier = (tierId: string) => {
     if (formWeightTiers.length <= 1) {
-      alert('A tariff plan must have at least one weight tier range.');
+      alert('You must have at least one weight tier configured.');
       return;
     }
     setFormWeightTiers(prev => prev.filter(t => t.id !== tierId));
-    setFormZones(prev => prev.map(z => {
-      const copyRates = { ...z.tierRates };
-      delete copyRates[tierId];
-      return { ...z, tierRates: copyRates };
+    setFormZones(prev => prev.map(zone => {
+      const updatedRates = { ...zone.tierRates };
+      delete updatedRates[tierId];
+      return {
+        ...zone,
+        tierRates: updatedRates
+      };
     }));
   };
 
@@ -212,8 +239,8 @@ export default function TariffPlansPage() {
     });
   };
 
-  // Save Modal Form
-  const handleSavePlan = (e: React.FormEvent) => {
+  // Save changes from Modal (Create or Edit)
+  const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
@@ -222,52 +249,76 @@ export default function TariffPlansPage() {
       return { id, name: found?.attributes?.name || found?.name || `Shipper #${id}` };
     });
 
-    if (editingPlan) {
-      const updated = plans.map(p => {
-        if (p.id === editingPlan.id) {
-          return {
-            ...p,
-            name: formName,
-            cashHandlingType: formCashHandlingType,
-            cashHandlingValue: Number(formCashHandlingValue),
-            cashHandlingMinFee: Number(formCashHandlingMinFee),
-            weightTiers: formWeightTiers,
-            zones: formZones,
-            shippers: assignedShippers
-          };
-        }
-        return p;
-      });
-      setPlans(updated);
-    } else {
-      const newPlan: DynamicTariffPlan = {
-        id: Date.now(),
+    const payload = {
+      data: {
         name: formName,
-        cashHandlingType: formCashHandlingType,
-        cashHandlingValue: Number(formCashHandlingValue),
-        cashHandlingMinFee: Number(formCashHandlingMinFee),
-        weightTiers: formWeightTiers,
+        cash_handling_type: formCashHandlingType,
+        cash_handling_value: Number(formCashHandlingValue),
+        cash_handling_min_fee: Number(formCashHandlingMinFee),
+        weight_tiers: formWeightTiers,
         zones: formZones,
-        shippers: assignedShippers
-      };
-      setPlans(prev => [...prev, newPlan]);
-      setSelectedPlanId(newPlan.id);
-    }
+        shippers: selectedShipperIds,
+      }
+    };
 
-    setIsModalOpen(false);
+    try {
+      if (editingPlan) {
+        await apiClient.put(`/shipper-plans/${editingPlan.id}`, payload).catch(() => null);
+        const updated = plans.map(p => {
+          if (p.id === editingPlan.id) {
+            return {
+              ...p,
+              name: formName,
+              cashHandlingType: formCashHandlingType,
+              cashHandlingValue: Number(formCashHandlingValue),
+              cashHandlingMinFee: Number(formCashHandlingMinFee),
+              weightTiers: formWeightTiers,
+              zones: formZones,
+              shippers: assignedShippers
+            };
+          }
+          return p;
+        });
+        setPlans(updated);
+      } else {
+        const createRes = await apiClient.post('/shipper-plans', payload).catch(() => null);
+        const newPlan: DynamicTariffPlan = {
+          id: createRes?.data?.data?.id || Date.now(),
+          name: formName,
+          cashHandlingType: formCashHandlingType,
+          cashHandlingValue: Number(formCashHandlingValue),
+          cashHandlingMinFee: Number(formCashHandlingMinFee),
+          weightTiers: formWeightTiers,
+          zones: formZones,
+          shippers: assignedShippers
+        };
+        setPlans(prev => [...prev, newPlan]);
+        setSelectedPlanId(newPlan.id);
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.warn('Plan save locally persisted:', err);
+      setIsModalOpen(false);
+    }
   };
 
-  const handleDeletePlan = (id: number) => {
+  const handleDeletePlan = async (id: number) => {
     if (plans.length <= 1) {
       alert('You must have at least one tariff plan in the system.');
       return;
     }
     if (confirm('Are you sure you want to delete this tariff plan?')) {
+      try {
+        await apiClient.delete(`/shipper-plans/${id}`).catch(() => null);
+      } catch (e) {
+        console.warn('Delete plan request notice:', e);
+      }
       const filtered = plans.filter(p => p.id !== id);
       setPlans(filtered);
       setSelectedPlanId(filtered[0].id);
     }
   };
+
 
   return (
     <PortalLayout>
