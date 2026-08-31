@@ -6,9 +6,10 @@ export default factories.createCoreController('api::shipper-plan.shipper-plan', 
       const plans = await strapi.entityService.findMany('api::shipper-plan.shipper-plan', {
         populate: ['shippers'],
       });
-      return { data: plans };
+      return ctx.send({ data: plans });
     } catch (err) {
-      ctx.throw(500, err);
+      console.error('Failed to fetch shipper plans:', err);
+      return ctx.internalServerError('Failed to fetch shipper plans');
     }
   },
 
@@ -48,9 +49,10 @@ export default factories.createCoreController('api::shipper-plan.shipper-plan', 
         },
         populate: ['shippers'],
       });
-      return { data: newPlan };
+      return ctx.send({ data: newPlan });
     } catch (err) {
-      ctx.throw(500, err);
+      console.error('Failed to create shipper plan:', err);
+      return ctx.internalServerError('Failed to create shipper plan');
     }
   },
 
@@ -91,9 +93,10 @@ export default factories.createCoreController('api::shipper-plan.shipper-plan', 
         },
         populate: ['shippers'],
       });
-      return { data: updatedPlan };
+      return ctx.send({ data: updatedPlan });
     } catch (err) {
-      ctx.throw(500, err);
+      console.error('Failed to update shipper plan:', err);
+      return ctx.internalServerError('Failed to update shipper plan');
     }
   },
 
@@ -101,9 +104,10 @@ export default factories.createCoreController('api::shipper-plan.shipper-plan', 
     try {
       const { id } = ctx.params;
       const deletedPlan = await strapi.entityService.delete('api::shipper-plan.shipper-plan', id);
-      return { data: deletedPlan };
+      return ctx.send({ data: deletedPlan });
     } catch (err) {
-      ctx.throw(500, err);
+      console.error('Failed to delete shipper plan:', err);
+      return ctx.internalServerError('Failed to delete shipper plan');
     }
   }
 }));
