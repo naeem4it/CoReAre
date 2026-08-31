@@ -287,7 +287,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   React.useEffect(() => {
     if (pathname.startsWith('/reports') || pathname.startsWith('/invoices')) {
       setExpandedMenu('reports');
-    } else if (pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
+    } else if (pathname.startsWith('/order-api') || pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
       setExpandedMenu('interfaces');
     } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment') || pathname.startsWith('/cargo-distribution')) {
       setExpandedMenu('shipment');
@@ -462,7 +462,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             </button>
             {expandedMenu === 'interfaces' && (
               <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
-                <NavLink href="/stitch-unified" icon="integration_instructions" label="Stitch Unified" />
+                <NavLink href="/order-api" icon="api" label="Order API" />
               </div>
             )}
           </div>

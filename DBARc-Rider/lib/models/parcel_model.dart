@@ -107,6 +107,7 @@ class ParcelModel {
 
   ParcelModel copyWith({
     String? status,
+    String? comments,
     List<DeliveryAttemptModel>? deliveryAttempts,
     String? latestShipperAdvice,
     String? latestAdviceStatus,
@@ -124,7 +125,7 @@ class ParcelModel {
       consigneeEmail: consigneeEmail,
       consigneeAltPhone: consigneeAltPhone,
       allowToOpen: allowToOpen,
-      comments: comments,
+      comments: comments ?? this.comments,
       pieces: pieces,
       serviceType: serviceType,
       shipmentType: shipmentType,

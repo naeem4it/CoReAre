@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/network/api_client.dart';
 import '../core/network/api_endpoints.dart';
 import '../core/constants/shipper_advise_reasons.dart';
@@ -62,11 +65,85 @@ class RunsheetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Upload e-POD Photo / Media to Strapi Media Library
+  Future<int?> uploadMediaFile(String filePath) async {
+    try {
+      final fileName = filePath.split(RegExp(r'[/\\]')).last;
+      final formData = FormData.fromMap({
+        'files': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+
+      final res = await _api.dio.post('/upload', data: formData);
+      if (res.data is List && (res.data as List).isNotEmpty) {
+        return res.data[0]['id'];
+      }
+    } catch (e) {
+      debugPrint('[POD] Media upload warning: $e');
+    }
+    return null;
+  }
+
+  // Save offline sync queue in SharedPreferences
+  Future<void> _queueOfflineAction(Map<String, dynamic> action) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final currentQueue = prefs.getStringList('rider_offline_queue') ?? [];
+      currentQueue.add(jsonEncode(action));
+      await prefs.setStringList('rider_offline_queue', currentQueue);
+      debugPrint('[Offline Queue] Action queued: ${action['type']}');
+    } catch (e) {
+      debugPrint('[Offline Queue] Failed to queue action: $e');
+    }
+  }
+
+  // Sync pending offline actions when connectivity resumes
+  Future<void> syncOfflineActions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final queue = prefs.getStringList('rider_offline_queue') ?? [];
+      if (queue.isEmpty) return;
+
+      debugPrint('[Offline Sync] Processing ${queue.length} pending actions...');
+      final remainingQueue = <String>[];
+
+      for (final actionStr in queue) {
+        try {
+          final action = jsonDecode(actionStr);
+          if (action['type'] == 'DELIVER') {
+            await _api.dio.put(
+              ApiEndpoints.parcelById(action['parcelId']),
+              data: action['payload'],
+            );
+          } else if (action['type'] == 'ATTEMPT') {
+            await _api.dio.post(
+              ApiEndpoints.deliveryAttempts,
+              data: action['payload'],
+            );
+            await _api.dio.put(
+              ApiEndpoints.parcelById(action['parcelId']),
+              data: {'data': {'status': action['status']}},
+            );
+          }
+        } catch (e) {
+          remainingQueue.add(actionStr);
+        }
+      }
+
+      await prefs.setStringList('rider_offline_queue', remainingQueue);
+      debugPrint('[Offline Sync] Remaining queue: ${remainingQueue.length}');
+    } catch (e) {
+      debugPrint('[Offline Sync] Sync error: $e');
+    }
+  }
+
   // Fetch today's delivery sheet for the rider
   Future<void> fetchActiveRunsheet({int? riderId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+
+    // Trigger offline sync first
+    syncOfflineActions();
 
     try {
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -90,13 +167,11 @@ class RunsheetProvider extends ChangeNotifier {
       if (list is List && list.isNotEmpty) {
         _activeSheet = DeliverySheetModel.fromJson(list.first);
       } else {
-        // If backend has no sheet for today yet, create or provide fallback demonstration data
         _activeSheet = _generateDemoSheet(todayStr);
       }
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      // Fallback demo data in case backend is offline
       _activeSheet = _generateDemoSheet(DateFormat('yyyy-MM-dd').format(DateTime.now()));
       _isLoading = false;
       notifyListeners();
@@ -111,26 +186,43 @@ class RunsheetProvider extends ChangeNotifier {
     String? receiverName,
     String? receiverRelation,
   }) async {
-    try {
-      // 1. Update on backend
-      await _api.dio.put(
-        ApiEndpoints.parcelById(parcelId),
-        data: {
-          'data': {
-            'status': 'Delivered',
-            'delivered_date': DateTime.now().toIso8601String(),
-          }
-        },
-      );
-    } catch (e) {
-      // Log / offline queue
+    // 1. Upload photo if present
+    int? photoId;
+    if (photoPath != null && photoPath.isNotEmpty) {
+      photoId = await uploadMediaFile(photoPath);
     }
 
-    // 2. Update local state
+    final commentMsg = 'Delivered to ${receiverName ?? "Recipient"} (${receiverRelation ?? "Self"})${photoId != null ? " [POD Photo #$photoId attached]" : ""}';
+
+    final payload = {
+      'data': {
+        'status': 'Delivered',
+        'delivered_date': DateTime.now().toIso8601String(),
+        'comments': commentMsg,
+      }
+    };
+
+    try {
+      // 2. Update on backend
+      await _api.dio.put(
+        ApiEndpoints.parcelById(parcelId),
+        data: payload,
+      );
+    } catch (e) {
+      // Queue offline
+      await _queueOfflineAction({
+        'type': 'DELIVER',
+        'parcelId': parcelId,
+        'payload': payload,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    }
+
+    // 3. Update local state
     if (_activeSheet != null) {
-      final updatedList = _activeSheet!.parcels.map((p) {
+      final updatedList = _activeSheet!.parcels.map<ParcelModel>((p) {
         if (p.id == parcelId) {
-          return p.copyWith(status: 'Delivered');
+          return p.copyWith(status: 'Delivered', comments: commentMsg);
         }
         return p;
       }).toList();
@@ -166,21 +258,23 @@ class RunsheetProvider extends ChangeNotifier {
     final newStatus = isMaxReached ? 'Ready To Return' : 'Failed Attempt';
     final attemptLabel = ShipperAdviseConstants.getAttemptLabel(parcel.deliveryAttempts.length);
 
+    final attemptPayload = {
+      'data': {
+        'attempt_time': DateTime.now().toIso8601String(),
+        'status': attemptLabel,
+        'failure_reason': failureReason,
+        'rider_notes': riderNotes,
+        'advice_status': ShipperAdviseConstants.statusAwaitingAdvice,
+        'parcel': parcelId,
+        if (riderId != null) 'rider': riderId,
+      }
+    };
+
     try {
       // 1. Create delivery_attempt record in Strapi backend for Shipper Advise
       await _api.dio.post(
         ApiEndpoints.deliveryAttempts,
-        data: {
-          'data': {
-            'attempt_time': DateTime.now().toIso8601String(),
-            'status': attemptLabel,
-            'failure_reason': failureReason,
-            'rider_notes': riderNotes,
-            'advice_status': ShipperAdviseConstants.statusAwaitingAdvice,
-            'parcel': parcelId,
-            if (riderId != null) 'rider': riderId,
-          }
-        },
+        data: attemptPayload,
       );
 
       // 2. Update parcel status
@@ -193,7 +287,14 @@ class RunsheetProvider extends ChangeNotifier {
         },
       );
     } catch (e) {
-      // Local state update still occurs
+      // Queue offline
+      await _queueOfflineAction({
+        'type': 'ATTEMPT',
+        'parcelId': parcelId,
+        'payload': attemptPayload,
+        'status': newStatus,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
     }
 
     // 3. Update local state
@@ -206,7 +307,7 @@ class RunsheetProvider extends ChangeNotifier {
       riderNotes: riderNotes,
     );
 
-    final updatedList = _activeSheet!.parcels.map((p) {
+    final updatedList = _activeSheet!.parcels.map<ParcelModel>((p) {
       if (p.id == parcelId) {
         final attempts = List<DeliveryAttemptModel>.from(p.deliveryAttempts)..add(newAttempt);
         return p.copyWith(

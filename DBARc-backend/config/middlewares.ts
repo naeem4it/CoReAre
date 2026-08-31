@@ -11,6 +11,11 @@ const config: Core.Config.Middlewares = [
   'strapi::session',
   'strapi::favicon',
   'strapi::public',
+  {
+    name: 'global::tenant-isolation',
+    config: {},
+  },
 ];
 
 export default config;
+
