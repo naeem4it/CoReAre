@@ -102,7 +102,11 @@ export default function OrderApiPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
               {/* WordPress / WooCommerce Plugin Card */}
-              <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm hover:border-primary transition-all cursor-pointer group flex items-start gap-md">
+              <a
+                href="/downloads/dbarc-courier-sync.zip"
+                download="dbarc-courier-sync.zip"
+                className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm hover:border-primary transition-all cursor-pointer group flex items-start gap-md no-underline text-inherit block"
+              >
                 <div className="w-16 h-16 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-blue-600 text-3xl">shopping_cart</span>
                 </div>
@@ -112,18 +116,18 @@ export default function OrderApiPage() {
                       WordPress / WooCommerce Plugin
                     </h4>
                     <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                      Recommended
+                      RECOMMENDED
                     </span>
                   </div>
                   <p className="font-body-md text-sm text-on-surface-variant mt-xs leading-relaxed">
                     Auto-push new WooCommerce orders directly to DBARc courier upon checkout or status change. Prints thermal shipping labels and attaches tracking links to customer emails automatically.
                   </p>
-                  <div className="mt-md flex items-center gap-xs text-primary font-bold text-sm">
-                    <span>Download Plugin (v2.1.0 .zip)</span>
+                  <div className="mt-md flex items-center gap-xs text-primary font-bold text-sm group-hover:underline">
+                    <span>Download Plugin (v1.0.0 .zip)</span>
                     <span className="material-symbols-outlined text-sm">download</span>
                   </div>
                 </div>
-              </div>
+              </a>
 
               {/* Shopify App Card */}
               <div className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm hover:border-primary transition-all cursor-pointer group flex items-start gap-md">
