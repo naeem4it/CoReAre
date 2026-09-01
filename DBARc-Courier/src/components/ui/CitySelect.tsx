@@ -12,16 +12,16 @@ interface City {
 interface CitySelectProps {
   value: number | string | '';
   onChange: (cityId: number | string | '', cityName?: string) => void;
-  placeholder?: string;
-  error?: string;
+  placeholder?: string | undefined;
+  error?: string | undefined;
 }
 
 const DEFAULT_CITIES: City[] = [
   { id: 1, name: 'Karachi' },
   { id: 2, name: 'Lahore' },
   { id: 3, name: 'Islamabad' },
-  { id: 4, name: 'Faisalabad' },
-  { id: 5, name: 'Rawalpindi' },
+  { id: 4, name: 'Rawalpindi' },
+  { id: 5, name: 'Faisalabad' },
   { id: 6, name: 'Multan' },
   { id: 7, name: 'Peshawar' },
   { id: 8, name: 'Quetta' },
@@ -42,9 +42,64 @@ const DEFAULT_CITIES: City[] = [
   { id: 23, name: 'Rahim Yar Khan' },
   { id: 24, name: 'Muzaffargarh' },
   { id: 25, name: 'Dera Ghazi Khan' },
+  { id: 26, name: 'Nawabshah (Shaheed Benazirabad)' },
+  { id: 27, name: 'Mingora (Swat)' },
+  { id: 28, name: 'Chiniot' },
+  { id: 29, name: 'Kamoke' },
+  { id: 30, name: 'Hafizabad' },
+  { id: 31, name: 'Sadiqabad' },
+  { id: 32, name: 'Mirpur Khas' },
+  { id: 33, name: 'Burewala' },
+  { id: 34, name: 'Kohat' },
+  { id: 35, name: 'Khanewal' },
+  { id: 36, name: 'Dera Ismail Khan' },
+  { id: 37, name: 'Turbat' },
+  { id: 38, name: 'Muzaffarabad' },
+  { id: 39, name: 'Mirpur (AJK)' },
+  { id: 40, name: 'Kotli' },
+  { id: 41, name: 'Rawalakot' },
+  { id: 42, name: 'Gilgit' },
+  { id: 43, name: 'Skardu' },
+  { id: 44, name: 'Gwadar' },
+  { id: 45, name: 'Khuzdar' },
+  { id: 46, name: 'Jacobabad' },
+  { id: 47, name: 'Shikarpur' },
+  { id: 48, name: 'Attock' },
+  { id: 49, name: 'Chakwal' },
+  { id: 50, name: 'Kasur' },
+  { id: 51, name: 'Jhang' },
+  { id: 52, name: 'Vehari' },
+  { id: 53, name: 'Bahawalnagar' },
+  { id: 54, name: 'Mandi Bahauddin' },
+  { id: 55, name: 'Pakpattan' },
+  { id: 56, name: 'Toba Tek Singh' },
+  { id: 57, name: 'Haripur' },
+  { id: 58, name: 'Swabi' },
+  { id: 59, name: 'Nowshera' },
+  { id: 60, name: 'Mansehra' },
+  { id: 61, name: 'Charsadda' },
+  { id: 62, name: 'Bannu' },
+  { id: 63, name: 'Chaman' },
+  { id: 64, name: 'Hub' },
+  { id: 65, name: 'Ghotki' },
+  { id: 66, name: 'Khairpur' },
+  { id: 67, name: 'Dadu' },
+  { id: 68, name: 'Badin' },
+  { id: 69, name: 'Thatta' },
+  { id: 70, name: 'Tando Adam' },
+  { id: 71, name: 'Tando Allahyar' },
+  { id: 72, name: 'Wazirabad' },
+  { id: 73, name: 'Muridke' },
+  { id: 74, name: 'Gojra' },
+  { id: 75, name: 'Layyah' },
+  { id: 76, name: 'Kot Addu' },
+  { id: 77, name: 'Lodhran' },
+  { id: 78, name: 'Mianwali' },
+  { id: 79, name: 'Bhakkar' },
+  { id: 80, name: 'Khushab' }
 ];
 
-export const CitySelect = ({ value, onChange, placeholder = 'Search city...', error }: CitySelectProps) => {
+export const CitySelect = ({ value, onChange, placeholder = 'Search or select Pakistan city...', error }: CitySelectProps) => {
   const [cities, setCities] = React.useState<City[]>(DEFAULT_CITIES);
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -53,7 +108,7 @@ export const CitySelect = ({ value, onChange, placeholder = 'Search city...', er
   React.useEffect(() => {
     const fetchCities = async () => {
       try {
-        const res = await apiClient.get('/cities?pagination[limit]=200');
+        const res = await apiClient.get('/cities?pagination[limit]=1000');
         const rawList = res.data?.data || res.data || [];
         if (Array.isArray(rawList) && rawList.length > 0) {
           const apiMapped: City[] = rawList

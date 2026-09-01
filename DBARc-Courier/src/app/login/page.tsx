@@ -46,6 +46,28 @@ export default function LoginPage() {
   const loginMutation = useMutation<LoginResponse, AxiosError<StrapiErrorResponse>, LoginRequest>({
     mutationFn: AuthService.login,
     onSuccess: (data) => {
+      const user: any = data.user;
+      const roleType = (
+        user?.role?.type || 
+        user?.role_type || 
+        user?.role?.name || 
+        (typeof user?.role === 'string' ? user?.role : '')
+      ).toString().toLowerCase();
+
+      const isSuperAdmin = 
+        roleType.includes('super_admin') || 
+        roleType.includes('super admin') ||
+        user?.role_type === 'SUPER_ADMIN' ||
+        user?.isAdminUser;
+
+      if (isSuperAdmin) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('dbarc-token');
+        localStorage.removeItem('user');
+        setError('Access Denied: Super Admin accounts cannot log into the Courier Portal. Please use the Super Admin Portal.');
+        return;
+      }
+
       localStorage.setItem('token', data.jwt);
       localStorage.setItem('dbarc-token', data.jwt);
       localStorage.setItem('user', JSON.stringify(data.user));
@@ -54,28 +76,21 @@ export default function LoginPage() {
       router.push('/');
     },
     onError: (err) => {
-      // Prevent Next.js dev overlay popup by using console.warn instead of console.error
       console.warn('Backend login API notice:', err.message);
-      
-      // Fallback dev login when backend Strapi returns 400 or is unseeded
-      const identifier = methods.getValues('identifier') || 'admin@flycourier.com';
-      const isShipperLogin = identifier.includes('shipper');
-      
-      const mockUser = {
-        id: 1,
-        username: identifier,
-        email: identifier,
-        role: { type: isShipperLogin ? 'shipper' : 'courier' },
-        shipper: isShipperLogin ? [{ id: 1, name: 'Wears Clothing - Main' }] : undefined,
-        shipper_roles: isShipperLogin ? ['shipper admin'] : []
-      };
-      
-      const mockJwt = 'mock-jwt-token-dev-mode';
-      localStorage.setItem('token', mockJwt);
-      localStorage.setItem('dbarc-token', mockJwt);
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      
-      router.push('/');
+      const apiErrorMessage = err.response?.data?.error?.message;
+      if (apiErrorMessage) {
+        setError(apiErrorMessage);
+        return;
+      }
+
+      // Check identifier in fallback
+      const identifier = methods.getValues('identifier') || '';
+      if (identifier.toLowerCase().includes('super') || identifier.toLowerCase().includes('superadmin')) {
+        setError('Access Denied: Super Admin accounts cannot log into the Courier Portal.');
+        return;
+      }
+
+      setError('Invalid login credentials. Please check your email and password.');
     },
   });
 

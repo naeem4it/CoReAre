@@ -212,7 +212,7 @@ export default function OfficesPage() {
                   <label className="text-sm font-bold text-slate-700">City</label>
                   <CitySelect 
                     value={formData.cityId}
-                    onChange={(id) => setFormData({ ...formData, cityId: id })}
+                    onChange={(id) => setFormData({ ...formData, cityId: typeof id === 'number' ? id : (id ? Number(id) : '') })}
                   />
                 </div>
 

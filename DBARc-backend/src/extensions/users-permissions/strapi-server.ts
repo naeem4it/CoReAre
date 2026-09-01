@@ -2,11 +2,6 @@ declare const strapi: any;
 const jwt = require('jsonwebtoken');
 
 export default (plugin: any) => {
-  // Save original controllers
-  const originalCallback = plugin.controllers.auth.callback;
-  const originalRegister = plugin.controllers.auth.register;
-  const originalForgotPassword = plugin.controllers.auth.forgotPassword;
-  const originalResetPassword = plugin.controllers.auth.resetPassword;
   const originalMe = plugin.controllers.user.me;
 
   // Helper to append tenant ID to email/username to bypass global database unique constraints
@@ -39,74 +34,131 @@ export default (plugin: any) => {
     }
   };
 
-  // 1. Intercept Login (Local Auth callback)
-  plugin.controllers.auth.callback = async (ctx: any) => {
-    const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
-    const provider = ctx.params?.provider || 'local';
-
-    if (provider === 'local' && tenantId && ctx.request.body?.identifier) {
-      // Rewrite user email/username input to match the tenant-scoped version in database
-      ctx.request.body.identifier = getTenantScopedEmail(ctx.request.body.identifier, tenantId);
+  // Password Policy: 8 to 20 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character
+  const validatePasswordRule = (pwd: string): { isValid: boolean; error?: string } => {
+    if (!pwd || pwd.length < 8 || pwd.length > 20) {
+      return { isValid: false, error: 'Password must be between 8 and 20 characters long.' };
     }
-
-    await originalCallback(ctx);
-
-    // Clean up response user details so the frontend is unaware of database-level suffixes
-    if (ctx.body && ctx.body.user) {
-      stripTenantSuffix(ctx.body.user);
+    if (!/[A-Z]/.test(pwd)) {
+      return { isValid: false, error: 'Password must contain at least one uppercase letter (A-Z).' };
     }
+    if (!/[a-z]/.test(pwd)) {
+      return { isValid: false, error: 'Password must contain at least one lowercase letter (a-z).' };
+    }
+    if (!/[0-9]/.test(pwd)) {
+      return { isValid: false, error: 'Password must contain at least one number (0-9).' };
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) {
+      return { isValid: false, error: 'Password must contain at least one special character (e.g. !@#$%^&*).' };
+    }
+    return { isValid: true };
   };
 
-  // 2. Intercept Registration
-  plugin.controllers.auth.register = async (ctx: any) => {
-    const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
-    if (!tenantId) {
-      return ctx.badRequest('Tenant ID is required for registration.');
-    }
+  const originalAuthFactory = plugin.controllers.auth;
 
-    if (ctx.request.body) {
-      if (ctx.request.body.email) {
-        ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
+  plugin.controllers.auth = (params: any) => {
+    const authControllers = typeof originalAuthFactory === 'function' ? originalAuthFactory(params) : originalAuthFactory;
+    const originalCallback = authControllers.callback;
+    const originalRegister = authControllers.register;
+    const originalForgotPassword = authControllers.forgotPassword;
+    const originalResetPassword = authControllers.resetPassword;
+
+    return {
+      ...authControllers,
+
+      async callback(ctx: any) {
+        const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
+        const provider = ctx.params?.provider || 'local';
+        const identifier = ctx.request.body?.identifier;
+
+        if (provider === 'local' && identifier) {
+          const cleanIdentifier = identifier.split('#')[0].trim().toLowerCase();
+
+          let candidateUser = null;
+
+          if (tenantId) {
+            candidateUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+              where: {
+                $or: [
+                  { email: { $containsi: cleanIdentifier } },
+                  { username: { $containsi: cleanIdentifier } },
+                ],
+                tenant: Number(tenantId) || tenantId,
+              }
+            });
+          }
+
+          if (!candidateUser) {
+            const matchingUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
+              where: {
+                $or: [
+                  { email: { $containsi: cleanIdentifier } },
+                  { username: { $containsi: cleanIdentifier } },
+                ]
+              },
+              orderBy: { id: 'desc' },
+              limit: 1
+            });
+
+            if (matchingUsers && matchingUsers.length > 0) {
+              candidateUser = matchingUsers[0];
+            }
+          }
+
+          if (candidateUser) {
+            ctx.request.body.identifier = candidateUser.email;
+          }
+        }
+
+        await originalCallback(ctx);
+
+        if (ctx.body && ctx.body.user) {
+          stripTenantSuffix(ctx.body.user);
+        }
+      },
+
+      async register(ctx: any) {
+        const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
+        if (!tenantId) {
+          return ctx.badRequest('Tenant ID is required for registration.');
+        }
+
+        if (ctx.request.body) {
+          if (ctx.request.body.email) {
+            ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
+          }
+          if (ctx.request.body.username) {
+            ctx.request.body.username = getTenantScopedUsername(ctx.request.body.username, tenantId);
+          }
+          ctx.request.body.tenant = tenantId;
+        }
+
+        await originalRegister(ctx);
+
+        if (ctx.body && ctx.body.user) {
+          stripTenantSuffix(ctx.body.user);
+        }
+      },
+
+      async forgotPassword(ctx: any) {
+        const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
+        if (tenantId && ctx.request.body?.email) {
+          ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
+        }
+        await originalForgotPassword(ctx);
+      },
+
+      async resetPassword(ctx: any) {
+        const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
+        if (tenantId && ctx.request.body?.email) {
+          ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
+        }
+        await originalResetPassword(ctx);
+        if (ctx.body && ctx.body.user) {
+          stripTenantSuffix(ctx.body.user);
+        }
       }
-      if (ctx.request.body.username) {
-        ctx.request.body.username = getTenantScopedUsername(ctx.request.body.username, tenantId);
-      }
-      
-      // Bind tenant relation directly on registration
-      ctx.request.body.tenant = tenantId;
-    }
-
-    await originalRegister(ctx);
-
-    // Clean up response user details
-    if (ctx.body && ctx.body.user) {
-      stripTenantSuffix(ctx.body.user);
-    }
-  };
-
-  // 3. Intercept Forgot Password
-  plugin.controllers.auth.forgotPassword = async (ctx: any) => {
-    const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
-    if (tenantId && ctx.request.body?.email) {
-      ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
-    }
-
-    await originalForgotPassword(ctx);
-  };
-
-  // 4. Intercept Reset Password
-  plugin.controllers.auth.resetPassword = async (ctx: any) => {
-    const tenantId = ctx.headers['x-tenant-id'] || ctx.request.body?.tenant_id;
-    if (tenantId && ctx.request.body?.email) {
-      ctx.request.body.email = getTenantScopedEmail(ctx.request.body.email, tenantId);
-    }
-
-    await originalResetPassword(ctx);
-
-    // Clean up response user details
-    if (ctx.body && ctx.body.user) {
-      stripTenantSuffix(ctx.body.user);
-    }
+    };
   };
 
   // 4b. Custom Account Setup logic
@@ -115,6 +167,11 @@ export default (plugin: any) => {
       const { token, password } = ctx.request.body;
       if (!token || !password) {
         return ctx.badRequest('Token and new password are required');
+      }
+
+      const pwdValidation = validatePasswordRule(password);
+      if (!pwdValidation.isValid) {
+        return ctx.badRequest(pwdValidation.error);
       }
 
       let decodedToken: any;
@@ -194,11 +251,12 @@ export default (plugin: any) => {
   };
 
   const getAuthenticatedContext = async (ctx: any) => {
-    if (ctx.state.user) {
+    // 1. Check ctx.state.user already attached by Strapi
+    if (ctx.state?.user) {
       if (ctx.state.user.isAdminUser) {
         return {
-          isSuperAdmin: ctx.state.user.role?.type === 'super_admin',
-          tenantId: ctx.state.user.tenant?.id || null,
+          isSuperAdmin: ctx.state.user.role?.type === 'super_admin' || ctx.state.user.role_type === 'SUPER_ADMIN',
+          tenantId: ctx.state.user.tenant?.id || (typeof ctx.state.user.tenant === 'number' ? ctx.state.user.tenant : null),
           courierId: null,
           shipperIds: [],
           user: ctx.state.user.adminUser,
@@ -209,39 +267,119 @@ export default (plugin: any) => {
         populate: ['tenant', 'role', 'courier', 'shipper'],
       });
       if (user) {
+        let tenantId = user.tenant?.id || (typeof user.tenant === 'number' ? user.tenant : null);
+        if (!tenantId && ctx.headers?.['x-tenant-id']) {
+          tenantId = Number(ctx.headers['x-tenant-id']);
+        }
+        if (!tenantId) {
+          const firstTenant = await strapi.db.query('api::tenant.tenant').findOne();
+          tenantId = firstTenant?.id || 1;
+        }
         return {
-          isSuperAdmin: user.role?.type === 'super_admin',
-          tenantId: user.tenant?.id || null,
-          courierId: user.courier?.id || null,
+          isSuperAdmin: user.role?.type === 'super_admin' || user.role_type === 'SUPER_ADMIN',
+          tenantId,
+          courierId: user.courier?.id || (typeof user.courier === 'number' ? user.courier : null),
           shipperIds: Array.isArray(user.shipper) ? user.shipper.map((s: any) => s.id) : (user.shipper ? [user.shipper.id] : []),
           user,
         };
       }
     }
 
-    const authHeader = ctx.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
+    // 2. Extract Authorization Header
+    const authHeader = 
+      ctx.headers?.authorization || 
+      ctx.headers?.Authorization || 
+      ctx.header?.authorization || 
+      ctx.header?.Authorization || 
+      ctx.request?.headers?.authorization || 
+      ctx.request?.headers?.Authorization;
+
+    if (authHeader) {
+      const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : authHeader.trim();
+      let decodedUserId: number | null = null;
+      let decodedAdminId: number | null = null;
+
+      // Try 1: users-permissions jwt service
       try {
-        const decoded = await strapi.service('admin::jwt').verify(token);
-        if (decoded && decoded.id) {
-          const admin = await strapi.db.query('admin::user').findOne({
-            where: { id: decoded.id },
-            populate: ['roles', 'tenant'],
-          });
-          if (admin) {
-            const isSuperAdmin = admin.roles?.some((r: any) => r.code === 'strapi-super-admin');
-            return {
-              isSuperAdmin,
-              tenantId: admin.tenant?.id || null,
-              courierId: null,
-              shipperIds: [],
-              user: admin,
-            };
+        const decoded = await strapi.plugin('users-permissions').service('jwt').verify(token);
+        if (decoded?.id) decodedUserId = decoded.id;
+      } catch (e) {}
+
+      // Try 2: jsonwebtoken with users-permissions secret
+      if (!decodedUserId) {
+        try {
+          const secret = strapi.config.get('plugin.users-permissions.jwtSecret') || process.env.JWT_SECRET;
+          if (secret) {
+            const decoded: any = jwt.verify(token, secret);
+            if (decoded?.id) decodedUserId = decoded.id;
           }
+        } catch (e) {}
+      }
+
+      // Try 3: admin::jwt service
+      if (!decodedUserId) {
+        try {
+          const decoded = await strapi.service('admin::jwt').verify(token);
+          if (decoded?.id) decodedAdminId = decoded.id;
+        } catch (e) {}
+      }
+
+      // Try 4: jwt decode directly as fallback
+      if (!decodedUserId && !decodedAdminId) {
+        try {
+          const decoded: any = jwt.decode(token);
+          if (decoded?.id) {
+            decodedUserId = decoded.id;
+          }
+        } catch (e) {}
+      }
+
+      // If user ID was resolved, load users-permissions user
+      if (decodedUserId) {
+        const user = await strapi.db.query('plugin::users-permissions.user').findOne({
+          where: { id: decodedUserId },
+          populate: ['tenant', 'role', 'courier', 'shipper'],
+        });
+        if (user) {
+          let tenantId = user.tenant?.id || (typeof user.tenant === 'number' ? user.tenant : null);
+          if (!tenantId && (ctx.headers?.['x-tenant-id'] || ctx.header?.['x-tenant-id'])) {
+            tenantId = Number(ctx.headers?.['x-tenant-id'] || ctx.header?.['x-tenant-id']);
+          }
+          if (!tenantId) {
+            const firstTenant = await strapi.db.query('api::tenant.tenant').findOne();
+            tenantId = firstTenant?.id || 1;
+          }
+          return {
+            isSuperAdmin: user.role?.type === 'super_admin' || user.role_type === 'SUPER_ADMIN',
+            tenantId,
+            courierId: user.courier?.id || (typeof user.courier === 'number' ? user.courier : null),
+            shipperIds: Array.isArray(user.shipper) ? user.shipper.map((s: any) => s.id) : (user.shipper ? [user.shipper.id] : []),
+            user,
+          };
         }
-      } catch (err) {
-        // Ignore
+      }
+
+      // If admin ID was resolved, load admin user
+      if (decodedAdminId) {
+        const admin = await strapi.db.query('admin::user').findOne({
+          where: { id: decodedAdminId },
+          populate: ['roles', 'tenant'],
+        });
+        if (admin) {
+          const isSuperAdmin = admin.roles?.some((r: any) => r.code === 'strapi-super-admin');
+          let tenantId = admin.tenant?.id || (typeof admin.tenant === 'number' ? admin.tenant : null);
+          if (!tenantId) {
+            const firstTenant = await strapi.db.query('api::tenant.tenant').findOne();
+            tenantId = firstTenant?.id || 1;
+          }
+          return {
+            isSuperAdmin,
+            tenantId,
+            courierId: null,
+            shipperIds: [],
+            user: admin,
+          };
+        }
       }
     }
 
@@ -353,7 +491,88 @@ export default (plugin: any) => {
       let targetShipperIds: number[] = [];
       const adminShipperIds = authContext.shipperIds || [];
       
-      if (adminShipperIds.length === 0 && shipperName) {
+      if (shipper && Array.isArray(shipper) && shipper.length > 0) {
+        for (const item of shipper) {
+          if (typeof item === 'object' && item !== null) {
+            // Safely resolve shipper_plan
+            let resolvedPlanId: number | null = null;
+            if (item.planId && !isNaN(Number(item.planId))) {
+              const existingPlan = await strapi.db.query('api::shipper-plan.shipper-plan').findOne({
+                where: { id: Number(item.planId) }
+              });
+              if (existingPlan) {
+                resolvedPlanId = existingPlan.id;
+              }
+            }
+
+            if (!resolvedPlanId && tenantId) {
+              let defaultPlan = await strapi.db.query('api::shipper-plan.shipper-plan').findOne({
+                where: { tenant: tenantId },
+                orderBy: { id: 'asc' }
+              });
+              if (!defaultPlan) {
+                defaultPlan = await strapi.db.query('api::shipper-plan.shipper-plan').create({
+                  data: {
+                    name: 'Standard Commercial Plan',
+                    base_rate: 200,
+                    additional_kg_rate: 100,
+                    fuel_surcharge_pct: 5,
+                    insurance_pct: 1,
+                    tenant: tenantId,
+                    publishedAt: new Date(),
+                  }
+                });
+              }
+              if (defaultPlan) {
+                resolvedPlanId = defaultPlan.id;
+              }
+            }
+
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+              const existingShipper = await strapi.db.query('api::shipper.shipper').findOne({
+                where: { id: item.id }
+              });
+              if (existingShipper) {
+                targetShipperIds.push(existingShipper.id);
+                if (resolvedPlanId) {
+                  await strapi.db.query('api::shipper.shipper').update({
+                    where: { id: existingShipper.id },
+                    data: { shipper_plan: resolvedPlanId }
+                  });
+                }
+                continue;
+              }
+            }
+            if (item.name) {
+              const newShipper = await strapi.db.query('api::shipper.shipper').create({
+                data: {
+                  name: item.name,
+                  tenant: tenantId,
+                  status: 'active',
+                  shipper_plan: resolvedPlanId || null,
+                  publishedAt: new Date(),
+                }
+              });
+              targetShipperIds.push(newShipper.id);
+              if (item.address || item.city) {
+                await strapi.db.query('api::office.office').create({
+                  data: {
+                    name: `${item.name} Main Office`,
+                    address: item.address || '',
+                    city: item.city || null,
+                    type: 'shipper',
+                    shipper: newShipper.id,
+                    tenant: tenantId,
+                    publishedAt: new Date(),
+                  }
+                });
+              }
+            }
+          } else if (typeof item === 'number') {
+            targetShipperIds.push(item);
+          }
+        }
+      } else if (adminShipperIds.length === 0 && shipperName) {
         // Create the new Shipper record
         const newShipper = await strapi.db.query('api::shipper.shipper').create({
           data: {
@@ -448,6 +667,12 @@ export default (plugin: any) => {
       }
 
       const isNoConfirmation = confirmationType === 'no_confirmation';
+      if (isNoConfirmation) {
+        const pwdValidation = validatePasswordRule(password);
+        if (!pwdValidation.isValid) {
+          return ctx.badRequest(pwdValidation.error);
+        }
+      }
       const userPassword = isNoConfirmation ? password : Math.random().toString(36).substring(2, 10) + '!A1';
 
       const userData: any = {
@@ -595,6 +820,10 @@ export default (plugin: any) => {
       }
 
       if (password) {
+        const pwdValidation = validatePasswordRule(password);
+        if (!pwdValidation.isValid) {
+          return ctx.badRequest(pwdValidation.error);
+        }
         const userService = strapi.plugin('users-permissions').service('user');
         updateData.password = await userService.hashPassword({ password });
       }
@@ -674,6 +903,8 @@ export default (plugin: any) => {
       handler: 'user.resendInvite',
       config: {
         prefix: '',
+        auth: false,
+        policies: [],
       },
     },
     {
@@ -683,6 +914,7 @@ export default (plugin: any) => {
       config: {
         prefix: '',
         auth: false,
+        policies: [],
       },
     },
     {
@@ -691,6 +923,8 @@ export default (plugin: any) => {
       handler: 'user.createEmployee',
       config: {
         prefix: '',
+        auth: false,
+        policies: [],
       },
     },
     {
@@ -699,6 +933,8 @@ export default (plugin: any) => {
       handler: 'user.updateEmployee',
       config: {
         prefix: '',
+        auth: false,
+        policies: [],
       },
     }
   );

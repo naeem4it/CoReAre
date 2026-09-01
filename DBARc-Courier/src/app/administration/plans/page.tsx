@@ -699,7 +699,7 @@ export default function TariffPlansPage() {
                               checked={isChecked}
                               onChange={() => {
                                 setSelectedShipperIds(prev =>
-                                  prev.includes(sId) ? prev.filter(id => id !== sId) : [...prev, id]
+                                  prev.includes(sId) ? prev.filter(id => id !== sId) : [...prev, sId]
                                 );
                               }}
                               className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"

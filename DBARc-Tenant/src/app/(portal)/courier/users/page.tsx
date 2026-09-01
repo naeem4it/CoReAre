@@ -170,7 +170,6 @@ export default function CourierUsersPage() {
         email: formEmail,
         fullName: formFullName,
         phone: formPhone,
-        phone: formPhone,
         role_definition: formRoleId || null,
         isenable: formIsEnabled,
         shipper: formShippers,

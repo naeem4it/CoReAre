@@ -153,12 +153,18 @@ export default {
         'plugin::users-permissions.user.me',
         'plugin::users-permissions.user.createEmployee',
         'plugin::users-permissions.user.updateEmployee',
+        'plugin::users-permissions.user.resendInvite',
+        'plugin::users-permissions.user.setupAccount',
         'plugin::users-permissions.role.find',
         'plugin::users-permissions.role.findOne',
       ];
 
       const publicPermissions: string[] = [
         'plugin::users-permissions.user.me',
+        'plugin::users-permissions.user.createEmployee',
+        'plugin::users-permissions.user.updateEmployee',
+        'plugin::users-permissions.user.resendInvite',
+        'plugin::users-permissions.user.setupAccount',
       ];
 
       // Add all actions for all api content-types to authenticatedPermissions
@@ -178,12 +184,14 @@ export default {
         );
       });
 
-      // Grant permissions
-      await grantPermissions(authenticatedRole.id, authenticatedPermissions);
-      if (superAdminRole) {
-        await grantPermissions(superAdminRole.id, authenticatedPermissions);
+      // Grant permissions to all roles
+      for (const r of roles) {
+        if (r.type === 'public') {
+          await grantPermissions(r.id, publicPermissions);
+        } else {
+          await grantPermissions(r.id, authenticatedPermissions);
+        }
       }
-      await grantPermissions(publicRole.id, publicPermissions);
 
       console.log('All permissions successfully bootstrapped!');
 

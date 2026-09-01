@@ -77,7 +77,7 @@ export default function CustomerInvoicePage() {
               <div className="flex justify-between items-start mb-xs">
                 <span className="font-label-md text-label-md text-outline uppercase">Overdue</span>
                 <div className="bg-error/10 p-2 rounded-lg">
-                  <span class="material-symbols-outlined text-error text-[20px]">warning</span>
+                  <span className="material-symbols-outlined text-error text-[20px]">warning</span>
                 </div>
               </div>
               <p className="font-display-lg text-display-lg text-on-surface">$4.1k</p>

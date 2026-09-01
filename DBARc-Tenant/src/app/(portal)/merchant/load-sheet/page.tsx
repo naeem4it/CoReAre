@@ -504,7 +504,7 @@ export default function MerchantLoadSheetPage() {
             </div>
             <div className="text-right text-xs space-y-0.5">
               <p className="font-semibold text-slate-800">Date: {new Date(printSheet?.createdAt || Date.now()).toLocaleDateString()}</p>
-              <p className="text-slate-500">Merchant: {user?.fullName || user?.username || 'Authorized Merchant'}</p>
+              <p className="text-slate-500">Merchant: {user?.fullName || user?.name || user?.username || 'Authorized Merchant'}</p>
             </div>
           </div>
 

@@ -167,12 +167,13 @@ class RunsheetProvider extends ChangeNotifier {
       if (list is List && list.isNotEmpty) {
         _activeSheet = DeliverySheetModel.fromJson(list.first);
       } else {
-        _activeSheet = _generateDemoSheet(todayStr);
+        _activeSheet = null;
       }
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _activeSheet = _generateDemoSheet(DateFormat('yyyy-MM-dd').format(DateTime.now()));
+      _activeSheet = null;
+      _errorMessage = 'Unable to fetch runsheet: $e';
       _isLoading = false;
       notifyListeners();
     }

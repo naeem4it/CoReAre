@@ -59,22 +59,24 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       let passwordHash = null;
       let confirmed = false;
       
-      if (confirmationType === 'no_confirmation') {
-        if (!adminPassword) {
-          return ctx.badRequest('Admin password is required when no confirmation is selected');
-        }
-        passwordHash = await bcrypt.hash(adminPassword, 10);
+      if (adminPassword && adminPassword.trim()) {
+        passwordHash = await bcrypt.hash(adminPassword.trim(), 10);
         confirmed = true;
+      } else if (confirmationType === 'no_confirmation') {
+        return ctx.badRequest('Admin password is required when direct setup is selected');
       } else {
-        // Generate a random password if confirmation is needed (user will reset it)
+        // Generate a random password if email confirmation is needed
         passwordHash = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
       }
+
+      const scopedEmail = adminEmail.includes('#') ? adminEmail : `${adminEmail}#${tenant.id}`;
+      const scopedUsername = adminUsername.includes('#') ? adminUsername : `${adminUsername}#${tenant.id}`;
 
       // Create Courier Admin User
       const user = await strapi.db.query('plugin::users-permissions.user').create({
         data: {
-          email: adminEmail,
-          username: adminUsername,
+          email: scopedEmail,
+          username: scopedUsername,
           fullName: adminFullName,
           password: passwordHash,
           tenant: tenant.id,
@@ -227,10 +229,43 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
         ...ctx.query,
       }) as any[];
       
-      const transformed = entities.map(entity => {
+      const transformed = await Promise.all(entities.map(async (entity: any) => {
         const { id, ...attributes } = entity;
-        return { id, attributes };
-      });
+        // Lookup admin user associated with this tenant
+        const adminUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+          where: { tenant: id },
+          orderBy: { id: 'asc' }
+        });
+
+        let adminUsername = '';
+        let adminEmail = '';
+        let adminFullName = '';
+        let adminPhone = '';
+
+        if (adminUser) {
+          adminUsername = adminUser.username ? adminUser.username.split('#')[0] : '';
+          adminEmail = adminUser.email ? adminUser.email.split('#')[0] : '';
+          adminFullName = adminUser.fullName || '';
+          adminPhone = adminUser.phone || '';
+        }
+
+        return {
+          id,
+          attributes: {
+            ...attributes,
+            adminUser: adminUser ? {
+              id: adminUser.id,
+              username: adminUsername,
+              email: adminEmail,
+              fullName: adminFullName,
+              phone: adminPhone,
+            } : null,
+            adminUsername,
+            adminEmail,
+            adminFullName,
+          }
+        };
+      }));
       
       return ctx.send({ data: transformed });
     } catch (err) {
@@ -242,30 +277,93 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
   async customUpdate(ctx) {
     try {
       const { id } = ctx.params;
+      const targetTenantId = Number(id) || id;
       const {
         name,
         domain,
         plan,
+        tenant_plan,
         commissionPct,
         status,
-        features
+        features,
+        address,
+        business_name,
+        theme_primary_color,
+        logo,
+        adminUsername,
+        adminFullName,
+        adminEmail,
+        adminPassword,
+        adminPhone
       } = ctx.request.body;
       
-      const updated = await strapi.entityService.update('api::tenant.tenant', id, {
-        data: {
-          name,
-          domain,
-          plan,
-          commissionPct,
-          status,
-          features
+      const updatePayload: any = {};
+      if (name !== undefined) updatePayload.name = name;
+      if (domain !== undefined) updatePayload.domain = domain;
+      if (plan !== undefined) updatePayload.plan = plan;
+      if (commissionPct !== undefined) updatePayload.commissionPct = Number(commissionPct);
+      if (status !== undefined) updatePayload.status = status;
+      if (features !== undefined) updatePayload.features = features;
+      if (address !== undefined) updatePayload.address = address;
+      if (business_name !== undefined) updatePayload.business_name = business_name;
+      if (theme_primary_color !== undefined) updatePayload.theme_primary_color = theme_primary_color;
+      if (logo !== undefined) updatePayload.logo = logo;
+
+      // Safely resolve tenant_plan relation ID
+      if (tenant_plan !== undefined) {
+        if (tenant_plan && !isNaN(Number(tenant_plan))) {
+          updatePayload.tenant_plan = Number(tenant_plan);
+        } else if (tenant_plan && typeof tenant_plan === 'string') {
+          const matchedPlan = await strapi.db.query('api::tenant-plan.tenant-plan').findOne({
+            where: { name: tenant_plan }
+          });
+          if (matchedPlan) {
+            updatePayload.tenant_plan = matchedPlan.id;
+          }
+        } else if (tenant_plan === null || tenant_plan === '') {
+          updatePayload.tenant_plan = null;
         }
+      }
+
+      const updated = await strapi.db.query('api::tenant.tenant').update({
+        where: { id: targetTenantId },
+        data: updatePayload
       });
+
+      // If admin user fields are supplied, update the tenant admin user
+      if (adminUsername || adminEmail || adminFullName || adminPassword || adminPhone) {
+        const adminUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+          where: { tenant: targetTenantId },
+          orderBy: { id: 'asc' }
+        });
+
+        if (adminUser) {
+          const userUpdate: any = {};
+          if (adminUsername) {
+            userUpdate.username = adminUsername.includes('#') ? adminUsername : `${adminUsername}#${targetTenantId}`;
+          }
+          if (adminEmail) {
+            userUpdate.email = adminEmail.includes('#') ? adminEmail : `${adminEmail}#${targetTenantId}`;
+          }
+          if (adminFullName !== undefined) userUpdate.fullName = adminFullName;
+          if (adminPhone !== undefined) userUpdate.phone = adminPhone;
+          if (adminPassword && adminPassword.trim()) {
+            userUpdate.password = await bcrypt.hash(adminPassword.trim(), 10);
+          }
+
+          if (Object.keys(userUpdate).length > 0) {
+            await strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: adminUser.id },
+              data: userUpdate
+            });
+          }
+        }
+      }
       
       return ctx.send({ data: updated });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update tenant:', err);
-      return ctx.internalServerError('Failed to update tenant');
+      return ctx.badRequest(err.message || 'Failed to update tenant');
     }
   }
 }));
