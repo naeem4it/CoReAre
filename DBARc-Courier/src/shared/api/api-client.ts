@@ -9,13 +9,27 @@ export const apiClient = axios.create({
   },
 });
 
-// Attach token interceptor if token exists in localStorage and is a real Strapi JWT
+// Attach token & tenant interceptor if token exists in localStorage
 apiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
       if (token && !token.startsWith('mock-') && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      // Resolve tenant ID from user storage or env
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const userObj = JSON.parse(userStr);
+          const tenantId = userObj.tenant?.id || userObj.tenantId || userObj.tenant;
+          if (tenantId && config.headers) {
+            config.headers['x-tenant-id'] = tenantId;
+          }
+        }
+      } catch (e) {
+        // Ignore JSON parse error
       }
     }
     return config;

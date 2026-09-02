@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
@@ -23,25 +23,47 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     } else {
       apiClient.get('/users/me?populate=shipper,offices,role_definition,tenant.logo')
         .then((res) => {
-          localStorage.setItem('user', JSON.stringify(res.data));
+          const userData = res.data;
+          const roleType = (
+            userData?.role?.type || 
+            userData?.role_type || 
+            userData?.role?.name || 
+            (typeof userData?.role === 'string' ? userData?.role : '')
+          ).toString().toLowerCase();
+
+          const isSuperAdmin = 
+            roleType.includes('super_admin') || 
+            roleType.includes('super admin') ||
+            userData?.role_type === 'SUPER_ADMIN' ||
+            userData?.isAdminUser;
+
+          if (isSuperAdmin) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('dbarc-token');
+            localStorage.removeItem('user');
+            router.push('/login');
+            return;
+          }
+
+          localStorage.setItem('user', JSON.stringify(userData));
           refreshUser();
           setIsAuthenticated(true);
         })
         .catch((err) => {
           console.warn('Failed to fetch user context:', err.message);
+          if (err.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('dbarc-token');
+            localStorage.removeItem('user');
+            router.push('/login');
+            return;
+          }
           const existingUserStr = localStorage.getItem('user');
           if (existingUserStr) {
             refreshUser();
             setIsAuthenticated(true);
           } else {
-            const defaultUser = {
-              id: 1,
-              username: 'admin@flycourier.com',
-              email: 'admin@flycourier.com',
-              role: { type: 'courier' }
-            };
-            localStorage.setItem('user', JSON.stringify(defaultUser));
-            setIsAuthenticated(true);
+            router.push('/login');
           }
         });
     }
@@ -280,14 +302,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
 function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (pathname.startsWith('/reports') || pathname.startsWith('/invoices')) {
       setExpandedMenu('reports');
-    } else if (pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
+    } else if (pathname.startsWith('/order-api') || pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
       setExpandedMenu('interfaces');
     } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment') || pathname.startsWith('/cargo-distribution')) {
       setExpandedMenu('shipment');
@@ -390,25 +411,21 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
               <Link
                 href="/administration/employees?type=shipper"
                 className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                  pathname.startsWith('/administration') && searchParams?.get('type') === 'shipper'
+                  pathname === '/administration/employees'
                     ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
                     : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
                 }`}
               >
                 <span className="material-symbols-outlined text-[20px]">local_shipping</span>
-                <span className="font-label-md text-label-md">Add/Edit Shipper</span>
+                <span className="font-label-md text-label-md">Shippers Directory</span>
               </Link>
 
               <Link
                 href="/administration/employees?type=courier"
-                className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                  pathname.startsWith('/administration') && (searchParams?.get('type') === 'courier' || !searchParams?.get('type'))
-                    ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                    : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-                }`}
+                className="flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest"
               >
                 <span className="material-symbols-outlined text-[20px]">badge</span>
-                <span className="font-label-md text-label-md">Add/Edit Employee</span>
+                <span className="font-label-md text-label-md">Courier Staff</span>
               </Link>
             </>
           )}
@@ -462,7 +479,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             </button>
             {expandedMenu === 'interfaces' && (
               <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
-                <NavLink href="/stitch-unified" icon="integration_instructions" label="Stitch Unified" />
+                <NavLink href="/order-api" icon="api" label="Order API" />
               </div>
             )}
           </div>

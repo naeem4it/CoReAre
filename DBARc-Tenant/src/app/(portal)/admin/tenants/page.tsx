@@ -21,7 +21,10 @@ import {
   XCircle, 
   AlertTriangle,
   Database,
-  Mail
+  Mail,
+  User,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface Tenant {
@@ -42,7 +45,32 @@ interface Tenant {
   businessName?: string;
   themePrimaryColor?: string;
   logo?: any;
+  address?: string;
+  adminUsername?: string;
+  adminEmail?: string;
+  adminFullName?: string;
+  adminPhone?: string;
 }
+
+// Password Policy: 8-20 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character
+const validatePasswordRule = (pwd: string): { isValid: boolean; message?: string } => {
+  if (!pwd || pwd.length < 8 || pwd.length > 20) {
+    return { isValid: false, message: 'Password must be between 8 and 20 characters long.' };
+  }
+  if (!/[A-Z]/.test(pwd)) {
+    return { isValid: false, message: 'Password must contain at least one uppercase letter (A-Z).' };
+  }
+  if (!/[a-z]/.test(pwd)) {
+    return { isValid: false, message: 'Password must contain at least one lowercase letter (a-z).' };
+  }
+  if (!/[0-9]/.test(pwd)) {
+    return { isValid: false, message: 'Password must contain at least one number (0-9).' };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) {
+    return { isValid: false, message: 'Password must contain at least one special character (e.g. !@#$%^&*).' };
+  }
+  return { isValid: true };
+};
 
 interface TenantPlan {
   id: number;
@@ -52,73 +80,6 @@ interface TenantPlan {
     charge_value: number;
   };
 }
-
-const INITIAL_TENANTS: Tenant[] = [
-  {
-    id: 't-1',
-    name: 'Fly International',
-    domain: 'fly.dbarc.com',
-    plan: 'Enterprise',
-    commissionPct: 2.0,
-    status: 'active',
-    features: {
-      tplAggregation: true,
-      liveRiderTracking: true,
-      smsNotifications: true,
-      doorstepDigitalPay: false,
-      pakistanTaxEngine: true
-    },
-    createdAt: '2026-01-15'
-  },
-  {
-    id: 't-2',
-    name: 'Express Logistics Co',
-    domain: 'express.dbarc.com',
-    plan: 'Growth',
-    commissionPct: 2.5,
-    status: 'active',
-    features: {
-      tplAggregation: true,
-      liveRiderTracking: false,
-      smsNotifications: true,
-      doorstepDigitalPay: true,
-      pakistanTaxEngine: true
-    },
-    createdAt: '2026-03-10'
-  },
-  {
-    id: 't-3',
-    name: 'Quick Courier & Cargo',
-    domain: 'quick.dbarc.com',
-    plan: 'Basic',
-    commissionPct: 3.0,
-    status: 'suspended',
-    features: {
-      tplAggregation: false,
-      liveRiderTracking: false,
-      smsNotifications: true,
-      doorstepDigitalPay: false,
-      pakistanTaxEngine: false
-    },
-    createdAt: '2026-04-01'
-  },
-  {
-    id: 't-4',
-    name: 'Apex Speed Deliveries',
-    domain: 'apex.dbarc.com',
-    plan: 'Enterprise',
-    commissionPct: 2.0,
-    status: 'pending',
-    features: {
-      tplAggregation: true,
-      liveRiderTracking: true,
-      smsNotifications: false,
-      doorstepDigitalPay: false,
-      pakistanTaxEngine: true
-    },
-    createdAt: '2026-05-28'
-  }
-];
 
 export default function AdminTenantsPage() {
   const [tenants, setTenants] = React.useState<Tenant[]>([]);
@@ -158,6 +119,7 @@ export default function AdminTenantsPage() {
   const [formAdminEmail, setFormAdminEmail] = React.useState('');
   const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
   const [formAdminPassword, setFormAdminPassword] = React.useState('');
+  const [showAdminPassword, setShowAdminPassword] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -191,27 +153,38 @@ export default function AdminTenantsPage() {
           doorstepDigitalPay: false,
           pakistanTaxEngine: false
         },
-        createdAt: new Date(item.attributes.createdAt).toISOString().split('T')[0],
+        createdAt: item.attributes.createdAt ? new Date(item.attributes.createdAt).toISOString().split('T')[0] : '2026-01-01',
         businessName: item.attributes.business_name || '',
         themePrimaryColor: item.attributes.theme_primary_color || '#003ec7',
         logo: item.attributes.logo?.data || null,
+        address: item.attributes.address || '',
+        adminUsername: item.attributes.adminUser?.username || item.attributes.adminUsername || '',
+        adminEmail: item.attributes.adminUser?.email || item.attributes.adminEmail || '',
+        adminFullName: item.attributes.adminUser?.fullName || item.attributes.adminFullName || '',
+        adminPhone: item.attributes.adminUser?.phone || item.attributes.adminPhone || '',
       }));
       setTenants(fetchedTenants);
     } catch (err) {
       console.error('Failed to fetch tenants', err);
-      // Fallback to initial tenants for UI demo purposes if backend isn't ready
-      setTenants(INITIAL_TENANTS);
+      setTenants([]);
     }
   };
 
-  const handleOpenConfig = (tenant: Tenant) => {
+  const handleOpenEdit = (tenant: Tenant) => {
     setSelectedTenant(tenant);
     setFormName(tenant.name);
     setFormDomain(tenant.domain);
-    setFormPlan(tenant.plan);
+    setFormAddress(tenant.address || '');
+    const matchedPlan = availablePlans.find(p => p.attributes.name === tenant.plan || p.id.toString() === tenant.plan);
+    setFormPlan(matchedPlan ? matchedPlan.id.toString() : (tenant.plan || ''));
     setFormCommission(tenant.commissionPct);
     setFormStatus(tenant.status);
     setFormFeatures({ ...tenant.features });
+    setFormAdminUsername(tenant.adminUsername || '');
+    setFormAdminFullName(tenant.adminFullName || '');
+    setFormAdminEmail(tenant.adminEmail || '');
+    setFormAdminPassword('');
+    setShowAdminPassword(false);
     setIsConfigModalOpen(true);
   };
 
@@ -246,6 +219,7 @@ export default function AdminTenantsPage() {
     setFormAdminEmail('');
     setFormConfirmationType('no_confirmation');
     setFormAdminPassword('');
+    setShowAdminPassword(false);
     setIsCreateModalOpen(true);
   };
 
@@ -261,23 +235,44 @@ export default function AdminTenantsPage() {
     e.preventDefault();
     if (!selectedTenant) return;
 
+    if (formAdminPassword.trim()) {
+      const pwdVal = validatePasswordRule(formAdminPassword.trim());
+      if (!pwdVal.isValid) {
+        alert(pwdVal.message || 'Invalid admin password format.');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
     try {
-      await apiClient.put(`/tenant/update/${selectedTenant.id}`, {
+      const payload: any = {
         name: formName,
         domain: formDomain,
+        address: formAddress,
         plan: availablePlans.find(p => p.id.toString() === formPlan)?.attributes.name || formPlan,
         tenant_plan: formPlan,
         commissionPct: Number(formCommission),
         status: formStatus,
-        features: formFeatures
-      });
+        features: formFeatures,
+        adminUsername: formAdminUsername.trim(),
+        adminFullName: formAdminFullName.trim(),
+        adminEmail: formAdminEmail.trim(),
+      };
+
+      if (formAdminPassword.trim()) {
+        payload.adminPassword = formAdminPassword.trim();
+      }
+
+      await apiClient.put(`/tenant/update/${selectedTenant.id}`, payload);
 
       await fetchTenants();
       setIsConfigModalOpen(false);
       setSelectedTenant(null);
     } catch (err: any) {
       console.error('Failed to update tenant configuration', err);
-      alert(err.response?.data?.error?.message || 'Failed to update configurations');
+      alert(err.response?.data?.error?.message || 'Failed to update tenant details');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -357,8 +352,11 @@ export default function AdminTenantsPage() {
 
   // Filter tenants
   const filteredTenants = tenants.filter((tenant) => {
-    const matchesSearch = (tenant.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (tenant.domain || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = (tenant.name || '').toLowerCase().includes(query) || 
+                          (tenant.domain || '').toLowerCase().includes(query) ||
+                          (tenant.adminUsername || '').toLowerCase().includes(query) ||
+                          (tenant.adminEmail || '').toLowerCase().includes(query);
     const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -491,6 +489,7 @@ export default function AdminTenantsPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/75 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="px-6 py-4">Tenant Name</th>
                   <th className="px-6 py-4">Subdomain</th>
+                  <th className="px-6 py-4">Tenant Admin (Username)</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Plan & Billing</th>
                   <th className="px-6 py-4">Onboarded</th>
@@ -500,7 +499,7 @@ export default function AdminTenantsPage() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
                       No tenant workspaces found matching the filters.
                     </td>
                   </tr>
@@ -517,6 +516,22 @@ export default function AdminTenantsPage() {
                           {tenant.domain}
                         </div>
                       </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">
+                            {(tenant.adminUsername || tenant.name || 'A').charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                              <span className="truncate">{tenant.adminUsername || <span className="italic text-slate-400">admin</span>}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-100">Admin</span>
+                            </div>
+                            <div className="text-xs text-slate-400 truncate mt-0.5">
+                              {tenant.adminEmail || `${(tenant.name || 'tenant').toLowerCase().replace(/\s+/g, '')}@courier.com`}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-6 py-4">{getStatusBadge(tenant.status)}</td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-slate-800">{tenant.plan}</div>
@@ -527,26 +542,26 @@ export default function AdminTenantsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleResendAdminInvite(tenant.id)}
-                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                          onClick={() => handleOpenEdit(tenant)}
+                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-600 hover:text-white transition-all shadow-sm cursor-pointer"
                         >
-                          <Mail className="h-3.5 w-3.5" /> Resend Invite
+                          <Edit3 className="h-3.5 w-3.5" /> Edit
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleOpenConfig(tenant)}
-                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                          onClick={() => handleResendAdminInvite(tenant.id)}
+                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950 cursor-pointer"
                         >
-                          <Settings2 className="h-3.5 w-3.5" /> Configure
+                          <Mail className="h-3.5 w-3.5" /> Invite
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenStylingConfig(tenant)}
-                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                          className="rounded-lg h-9 font-bold inline-flex items-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-950 cursor-pointer"
                         >
-                          <Globe className="h-3.5 w-3.5" /> Configure UI
+                          <Globe className="h-3.5 w-3.5" /> UI
                         </Button>
                       </td>
                     </tr>
@@ -830,81 +845,175 @@ export default function AdminTenantsPage() {
         </form>
       </Modal>
 
-      {/* MODAL 2: CONFIGURE TENANT */}
+      {/* MODAL 2: EDIT TENANT DETAILS */}
       <Modal 
         isOpen={isConfigModalOpen} 
         onClose={() => {
           setIsConfigModalOpen(false);
           setSelectedTenant(null);
         }} 
-        title={`Configure Workspace: ${selectedTenant?.name}`}
+        title={`Edit Tenant Details: ${selectedTenant?.name}`}
         size="lg"
       >
         <form onSubmit={handleSaveConfig} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Tenant Business Name"
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              required
-            />
-            <Input
-              label="Custom Domain / Subdomain"
-              value={formDomain}
-              onChange={(e) => setFormDomain(e.target.value)}
-              required
-            />
+          {/* Workspace Details */}
+          <div>
+            <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Tenant Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Tenant Business Name"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                required
+              />
+              <Input
+                label="Custom Domain / Subdomain"
+                value={formDomain}
+                onChange={(e) => setFormDomain(e.target.value)}
+                required
+              />
+              <div className="col-span-full">
+                <Input
+                  label="Head Office Address"
+                  placeholder="e.g. Plot 45, Main Industrial Area, Karachi"
+                  value={formAddress}
+                  onChange={(e) => setFormAddress(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Platform SaaS Plan</label>
-              <select
-                value={formPlan}
-                onChange={(e) => handlePlanChange(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-              >
-                {availablePlans.length === 0 && <option value="">No plans available</option>}
-                {availablePlans.map((plan) => (
-                  <option key={plan.id} value={plan.id.toString()}>
-                    {plan.attributes.name}
-                  </option>
+          {/* Plan & Billing */}
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">SaaS Plan & Billing</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Platform SaaS Plan</label>
+                <select
+                  value={formPlan}
+                  onChange={(e) => handlePlanChange(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
+                >
+                  {availablePlans.length === 0 && <option value="">No plans available</option>}
+                  {availablePlans.map((plan) => (
+                    <option key={plan.id} value={plan.id.toString()}>
+                      {plan.attributes.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <Input
+                label={
+                  availablePlans.find(p => p.id.toString() === formPlan)?.attributes.charge_type === 'fixed_rupees' 
+                  ? "Platform Fixed Fee (PKR)" 
+                  : "Platform Commission Fee (%)"
+                }
+                type="number"
+                step="0.1"
+                min="0"
+                max="20"
+                value={formCommission}
+                onChange={(e) => setFormCommission(Number(e.target.value))}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5 mt-4">
+              <label className="text-sm font-medium text-slate-700">Workspace Status</label>
+              <div className="flex items-center gap-4">
+                {['active', 'suspended', 'pending'].map((s) => (
+                  <label key={s} className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="edit-status"
+                      checked={formStatus === s}
+                      onChange={() => setFormStatus(s as any)}
+                      className="h-4 w-4 text-primary-600 border-slate-300 focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-slate-700 capitalize">{s}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
-
-            <Input
-              label={
-                availablePlans.find(p => p.id.toString() === formPlan)?.attributes.charge_type === 'fixed_rupees' 
-                ? "Platform Fixed Fee (PKR)" 
-                : "Platform Commission Fee (%)"
-              }
-              type="number"
-              step="0.1"
-              min="0"
-              max="20"
-              value={formCommission}
-              onChange={(e) => setFormCommission(Number(e.target.value))}
-              required
-            />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Workspace Status</label>
-            <div className="flex items-center gap-4">
-              {['active', 'suspended', 'pending'].map((s) => (
-                <label key={s} className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="edit-status"
-                    checked={formStatus === s}
-                    onChange={() => setFormStatus(s as any)}
-                    className="h-4 w-4 text-primary-600 border-slate-300 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-slate-700 capitalize">{s}</span>
-                </label>
-              ))}
+          {/* Tenant Admin Account Details */}
+          <div className="border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="h-4 w-4 text-blue-600" /> Tenant Admin Account
+              </h4>
+              <span className="text-xs text-slate-400">Primary Courier Admin credentials</span>
             </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Admin Username"
+                placeholder="e.g. flyadmin"
+                value={formAdminUsername}
+                onChange={(e) => setFormAdminUsername(e.target.value)}
+                required
+              />
+              <Input
+                label="Admin Full Name"
+                placeholder="e.g. Ahmed Khan"
+                value={formAdminFullName}
+                onChange={(e) => setFormAdminFullName(e.target.value)}
+              />
+              <Input
+                label="Admin Email Address"
+                type="email"
+                placeholder="admin@tenantdomain.com"
+                value={formAdminEmail}
+                onChange={(e) => setFormAdminEmail(e.target.value)}
+                required
+              />
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Change Admin Password (Optional)</label>
+                <div className="relative flex items-center">
+                  <Input
+                    type={showAdminPassword ? "text" : "password"}
+                    placeholder="Leave blank to keep current password"
+                    value={formAdminPassword}
+                    onChange={(e) => setFormAdminPassword(e.target.value)}
+                    maxLength={20}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                    title={showAdminPassword ? "Hide password" : "Show password"}
+                  >
+                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Password rules indicator when typing password */}
+            {formAdminPassword.length > 0 && (
+              <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] space-y-1">
+                <span className="font-bold text-slate-700 block mb-1">New Password Requirements:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  <span className={`flex items-center gap-1.5 ${formAdminPassword.length >= 8 && formAdminPassword.length <= 20 ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 8 to 20 characters
+                  </span>
+                  <span className={`flex items-center gap-1.5 ${/[A-Z]/.test(formAdminPassword) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 1 uppercase (A-Z)
+                  </span>
+                  <span className={`flex items-center gap-1.5 ${/[a-z]/.test(formAdminPassword) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 1 lowercase (a-z)
+                  </span>
+                  <span className={`flex items-center gap-1.5 ${/[0-9]/.test(formAdminPassword) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 1 number (0-9)
+                  </span>
+                  <span className={`flex items-center gap-1.5 col-span-full ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(formAdminPassword) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 1 special character (!@#$%^&*...)
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Module Configurations */}
@@ -989,8 +1098,8 @@ export default function AdminTenantsPage() {
             >
               Cancel
             </Button>
-            <Button type="submit">
-              Save Configurations
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : 'Save Tenant Details'}
             </Button>
           </div>
         </form>

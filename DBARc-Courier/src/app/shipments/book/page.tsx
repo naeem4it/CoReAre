@@ -104,7 +104,7 @@ interface GroupedBulkOrder {
   shipperAddress: string;
   shippingType: 'In-House' | '3PL';
   primaryBarcode: string;
-  secondary3PLBarcode?: string;
+  secondary3PLBarcode?: string | undefined;
   items: BulkOrderItem[];
   totalCod: number;
   createdAt: string;
@@ -236,7 +236,7 @@ function BookShipmentForm() {
   const [selectedReferencedParcel, setSelectedReferencedParcel] = React.useState<any | null>(null);
 
   // Offices state for default pickup location
-  const [offices, setOffices] = React.useState<{label: string, value: number}[]>([]);
+  const [offices, setOffices] = React.useState<{label: string, value: string}[]>([]);
 
   // Grouped Bulk Orders & Printing States
   const [groupedOrders, setGroupedOrders] = React.useState<GroupedBulkOrder[]>(DEMO_BULK_ORDERS);
@@ -306,7 +306,7 @@ function BookShipmentForm() {
     if (user?.id) {
       apiClient.get(`/users/${user.id}?populate=offices`).then(res => {
         const userOffices = res.data?.offices || [];
-        const mappedOffices = userOffices.map((o: any) => ({ label: o.name, value: o.id }));
+        const mappedOffices = userOffices.map((o: any) => ({ label: o.name || `Office #${o.id}`, value: String(o.id) }));
         setOffices(mappedOffices);
         if (mappedOffices.length > 0) {
           setValue('pickupLocation', mappedOffices[0].value);

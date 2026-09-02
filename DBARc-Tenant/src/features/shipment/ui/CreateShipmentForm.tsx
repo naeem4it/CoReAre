@@ -24,12 +24,15 @@ export const CreateShipmentForm = () => {
     formState: { errors, isSubmitting },
     reset,
   } = useForm<ShipmentFormValues>({
-    resolver: zodResolver(shipmentSchema),
+    resolver: zodResolver(shipmentSchema) as any,
     defaultValues: {
-      sourceCity: '',
-      destinationCity: '',
+      sourceCity: '' as any,
+      destinationCity: '' as any,
       weight: 0.5,
       codAmount: 0,
+      customerName: '',
+      customerPhone: '',
+      customerAddress: '',
       pickupLocation: defaultOutletId,
     },
   });
@@ -85,7 +88,7 @@ export const CreateShipmentForm = () => {
                 control={control}
                 render={({ field }) => (
                   <CitySelect
-                    value={field.value}
+                    value={field.value ?? ''}
                     onChange={field.onChange}
                     placeholder="Select Origin City"
                     error={errors.sourceCity?.message}
@@ -101,7 +104,7 @@ export const CreateShipmentForm = () => {
                 control={control}
                 render={({ field }) => (
                   <CitySelect
-                    value={field.value}
+                    value={field.value ?? ''}
                     onChange={field.onChange}
                     placeholder="Select Destination City"
                     error={errors.destinationCity?.message}
