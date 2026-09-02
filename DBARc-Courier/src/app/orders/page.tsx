@@ -43,27 +43,33 @@ export default function OrderList() {
   }, [user]);
 
   const shipperId = React.useMemo(() => {
-    if (activeBusinessId) return activeBusinessId;
     if (user?.shipper) {
       if (Array.isArray(user.shipper) && user.shipper.length > 0) {
-        return user.shipper[0].id;
+        const matching = user.shipper.find((s: any) => s.id === activeBusinessId);
+        return matching ? matching.id : user.shipper[0].id;
       } else if (typeof user.shipper === 'object' && user.shipper.id) {
         return user.shipper.id;
       }
     }
-    return null;
+    return activeBusinessId || null;
   }, [user, activeBusinessId]);
 
   React.useEffect(() => {
     const fetchParcels = async () => {
       try {
         setIsLoading(true);
-        let parcelsUrl = '/parcels?populate=*';
-        if (isShipper && shipperId) {
-          parcelsUrl += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
-        }
+        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
         const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
-        const parcels = response.data?.data || [];
+        let parcels = response.data?.data || [];
+        
+        // Filter by shipper if user is restricted to a specific shipper
+        if (isShipper && shipperId && parcels.length > 0) {
+          parcels = parcels.filter((item: any) => {
+            if (!item.shipper && !item.pickup_location?.shipper) return true; // Show unassigned to avoid missing newly booked
+            const itemShipperId = item.shipper?.id || item.pickup_location?.shipper?.id;
+            return itemShipperId === shipperId;
+          });
+        }
         
         if (parcels.length > 0) {
           const mapped: OrderRow[] = parcels.map((item: any) => {

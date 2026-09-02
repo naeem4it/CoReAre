@@ -46,9 +46,27 @@ const bookingSchema = z.object({
   destinationCity: z.string().min(1, 'Please select a destination city'),
   area: z.string().optional(),
   
-  weight: z.number().min(0.1, 'Weight must be at least 0.1 kg'),
-  pieces: z.number().min(1, 'Must be at least 1 piece'),
-  codAmount: z.number().min(0, 'COD amount cannot be negative'),
+  weight: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? undefined : isNaN(Number(val)) ? val : Number(val)),
+    z.number({
+      required_error: 'Weight should not be empty',
+      invalid_type_error: 'Weight must be a valid number',
+    }).min(0.1, 'Weight must be at least 0.1 kg')
+  ),
+  pieces: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? undefined : isNaN(Number(val)) ? val : Number(val)),
+    z.number({
+      required_error: 'Pieces should not be empty',
+      invalid_type_error: 'Pieces must be a valid number',
+    }).min(1, 'Must be at least 1 piece')
+  ),
+  codAmount: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? undefined : isNaN(Number(val)) ? val : Number(val)),
+    z.number({
+      required_error: 'COD amount should not be empty',
+      invalid_type_error: 'COD amount should not be empty',
+    }).min(0, 'COD amount cannot be negative')
+  ),
   productDescription: z.string().min(2, 'Product description is required'),
   serviceType: z.string().default('Overnight'),
   allowToOpen: z.string().default('No'),
@@ -62,7 +80,10 @@ const bookingSchema = z.object({
   referenceNo: z.string().optional(),
   collectReplacement: z.string().default('No'),
   parcelDetail: z.string().optional(),
-  collectRs: z.number().min(0, 'Collect Rs must be positive').or(z.literal(0)).optional(),
+  collectRs: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? 0 : isNaN(Number(val)) ? val : Number(val)),
+    z.number().min(0, 'Collect Rs must be positive').optional()
+  ),
 });
 
 type BookingFormValues = z.infer<typeof bookingSchema>;

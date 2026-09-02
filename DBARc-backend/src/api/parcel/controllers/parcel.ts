@@ -17,6 +17,43 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       }
     }
 
+    // Safely validate and resolve shipper relation if provided
+    if (data.shipper) {
+      const shipperIdNum = Number(data.shipper);
+      if (isNaN(shipperIdNum)) {
+        data.shipper = null;
+      } else {
+        const existingShipper = await strapi.db.query('api::shipper.shipper').findOne({
+          where: { id: shipperIdNum }
+        });
+        if (!existingShipper) {
+          // Fallback to tenant's first valid shipper if provided ID does not exist in DB
+          let fallback = null;
+          if (data.tenant) {
+            fallback = await strapi.db.query('api::shipper.shipper').findOne({
+              where: { tenant: data.tenant }
+            });
+          }
+          data.shipper = fallback ? fallback.id : null;
+        } else {
+          data.shipper = existingShipper.id;
+        }
+      }
+    }
+
+    // Safely validate origin_office relation if provided
+    if (data.origin_office) {
+      const officeIdNum = Number(data.origin_office);
+      if (isNaN(officeIdNum)) {
+        data.origin_office = null;
+      } else {
+        const existingOffice = await strapi.db.query('api::office.office').findOne({
+          where: { id: officeIdNum }
+        });
+        data.origin_office = existingOffice ? existingOffice.id : null;
+      }
+    }
+
     if (data.destination_city && data.courier) {
       // Find if the courier has an active region covering this city
       const courierRegions = await strapi.db.query('api::region.region').findMany({

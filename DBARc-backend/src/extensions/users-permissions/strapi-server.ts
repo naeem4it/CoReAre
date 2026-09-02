@@ -1,5 +1,6 @@
 declare const strapi: any;
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 export default (plugin: any) => {
   const originalMe = plugin.controllers.user.me;
@@ -674,6 +675,7 @@ export default (plugin: any) => {
         }
       }
       const userPassword = isNoConfirmation ? password : Math.random().toString(36).substring(2, 10) + '!A1';
+      const passwordHash = await bcrypt.hash(userPassword, 10);
 
       const userData: any = {
         username: scopedUsername,
@@ -689,12 +691,14 @@ export default (plugin: any) => {
         pickup_locations: Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []),
         blocked: isenable === false,
         confirmed: isNoConfirmation,
-        password: userPassword,
+        password: passwordHash,
         provider: 'local',
       };
 
-      const userService = strapi.plugin('users-permissions').service('user');
-      const newUser = await userService.add(userData);
+      const newUser = await strapi.db.query('plugin::users-permissions.user').create({
+        data: userData,
+        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition'],
+      });
 
       if (!isNoConfirmation) {
         try {
@@ -824,11 +828,14 @@ export default (plugin: any) => {
         if (!pwdValidation.isValid) {
           return ctx.badRequest(pwdValidation.error);
         }
-        const userService = strapi.plugin('users-permissions').service('user');
-        updateData.password = await userService.hashPassword({ password });
+        updateData.password = await bcrypt.hash(password, 10);
       }
 
-      const updatedUser = await strapi.plugin('users-permissions').service('user').edit(id, updateData);
+      const updatedUser = await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id },
+        data: updateData,
+        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition'],
+      });
 
       stripTenantSuffix(updatedUser);
       ctx.body = updatedUser;

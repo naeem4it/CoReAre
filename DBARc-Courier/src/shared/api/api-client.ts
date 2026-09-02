@@ -9,14 +9,13 @@ export const apiClient = axios.create({
   },
 });
 
-// Attach token & tenant interceptor if token exists in localStorage
+// Attach token & tenant interceptor if token exists in localStorage or environment
 apiClient.interceptors.request.use(
   (config) => {
+    let token: string | null = null;
+
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
-      if (token && !token.startsWith('mock-') && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
 
       // Resolve tenant ID from user storage or env
       try {
@@ -32,6 +31,19 @@ apiClient.interceptors.request.use(
         // Ignore JSON parse error
       }
     }
+
+    // Fallback to token from environment variable if not present in storage
+    if (!token || token.startsWith('mock-')) {
+      const envToken = process.env.NEXT_PUBLIC_JWT_TOKEN || process.env.JWT_TOKEN;
+      if (envToken) {
+        token = envToken;
+      }
+    }
+
+    if (token && !token.startsWith('mock-') && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

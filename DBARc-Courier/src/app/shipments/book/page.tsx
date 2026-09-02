@@ -47,6 +47,14 @@ import { SearchableDropdown } from '@/components/ui/form/searchable-dropdown';
 import { CitySelect } from '@/components/ui/CitySelect';
 
 // Form validation schema using Zod for manual entry
+const preprocessNumber = (val: unknown) => {
+  if (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
+    return undefined;
+  }
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+};
+
 const bookingSchema = z.object({
   consigneeName: z.string().min(2, 'Full name must be at least 2 characters'),
   consigneePhone: z.string().regex(/^\+?[0-9]{10,15}$/, 'Invalid phone number (e.g. +923001234567)'),
@@ -58,9 +66,27 @@ const bookingSchema = z.object({
   destinationCityName: z.string().optional(),
   area: z.string().optional(),
   
-  weight: z.number().min(0.1, 'Weight must be at least 0.1 kg'),
-  pieces: z.number().min(1, 'Must be at least 1 piece'),
-  codAmount: z.number().min(0, 'COD amount cannot be negative'),
+  weight: z.preprocess(
+    preprocessNumber,
+    z.number({
+      required_error: 'Weight should not be empty',
+      invalid_type_error: 'Weight must be a valid number',
+    }).min(0.1, 'Weight must be at least 0.1 kg')
+  ),
+  pieces: z.preprocess(
+    preprocessNumber,
+    z.number({
+      required_error: 'Pieces should not be empty',
+      invalid_type_error: 'Pieces must be a valid number',
+    }).min(1, 'Must be at least 1 piece')
+  ),
+  codAmount: z.preprocess(
+    preprocessNumber,
+    z.number({
+      required_error: 'COD amount should not be empty',
+      invalid_type_error: 'COD amount should not be empty',
+    }).min(0, 'COD amount cannot be negative')
+  ),
   productDescription: z.string().min(2, 'Product description is required'),
   serviceType: z.string().default('Overnight'),
   allowToOpen: z.string().default('No'),
@@ -75,7 +101,16 @@ const bookingSchema = z.object({
   referenceNo: z.string().optional(),
   collectReplacement: z.string().default('No'),
   parcelDetail: z.string().optional(),
-  collectRs: z.number().min(0, 'Collect Rs must be positive').or(z.literal(0)).optional(),
+  collectRs: z.preprocess(
+    (val) => {
+      if (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
+        return 0;
+      }
+      const n = Number(val);
+      return isNaN(n) ? val : n;
+    },
+    z.number().min(0, 'Collect Rs must be positive').optional()
+  ),
 });
 
 type BookingFormValues = z.infer<typeof bookingSchema>;
@@ -449,7 +484,18 @@ function BookShipmentForm() {
       const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
       const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
       const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
-      const shipperId = activeBusinessId || (Array.isArray(user?.shipper) ? user.shipper[0]?.id : user?.shipper?.id);
+      
+      let shipperId: number | null = null;
+      if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
+        const matchingShipper = user.shipper.find((s: any) => s.id === activeBusinessId);
+        shipperId = matchingShipper ? matchingShipper.id : user.shipper[0].id;
+      } else if (user?.shipper?.id) {
+        shipperId = user.shipper.id;
+      } else if (activeBusinessId && !isNaN(activeBusinessId)) {
+        shipperId = activeBusinessId;
+      }
+
+      const originOfficeId = data.pickupLocation && !isNaN(Number(data.pickupLocation)) ? Number(data.pickupLocation) : null;
 
       const parcelRes = await apiClient.post('/parcels', {
         data: {
@@ -467,7 +513,7 @@ function BookShipmentForm() {
           comments: data.comments,
           tenant: tenantId,
           shipper: shipperId || null,
-          origin_office: data.pickupLocation || null,
+          origin_office: originOfficeId,
         }
       });
 
