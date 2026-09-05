@@ -17,11 +17,10 @@ echo [1/6] Checking Node.js installation...
 where node >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Node.js is NOT installed or not found in system PATH!
-    echo Please install Node.js (v20+ recommended) from https://nodejs.org/
-    echo If you recently installed Node.js, please restart this terminal.
+    echo Please install Node.js [v20 or higher recommended] from https://nodejs.org/
+    echo If you recently installed Node.js, please restart this command prompt.
     echo.
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 for /f "tokens=*" %%v in ('node -v') do set NODE_VERSION=%%v
 echo  - Node.js is available: %NODE_VERSION%
@@ -29,8 +28,8 @@ echo  - Node.js is available: %NODE_VERSION%
 where npm >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] npm is NOT found in system PATH!
-    pause
-    exit /b 1
+    echo.
+    goto ERROR_EXIT
 )
 echo  - npm is ready.
 echo.
@@ -105,8 +104,7 @@ cd /d "%~dp0DBARc-backend"
 call npm.cmd install
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] npm install failed for DBARc-backend!
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 
 echo   -- Installing DBARc-Tenant dependencies...
@@ -114,8 +112,7 @@ cd /d "%~dp0DBARc-Tenant"
 call npm.cmd install
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] npm install failed for DBARc-Tenant!
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 
 echo   -- Installing DBARc-Courier dependencies...
@@ -123,8 +120,7 @@ cd /d "%~dp0DBARc-Courier"
 call npm.cmd install
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] npm install failed for DBARc-Courier!
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 echo All dependencies installed successfully.
 echo.
@@ -142,8 +138,7 @@ if %ERRORLEVEL% neq 0 (
     echo   1. The PostgreSQL service is running on 127.0.0.1:5432.
     echo   2. Password in DBARc-backend\.env matches PostgreSQL password (default: root).
     echo.
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 echo Database configured and ready.
 echo.
@@ -156,8 +151,7 @@ cd /d "%~dp0DBARc-backend"
 call npm.cmd run build
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Strapi build failed! Please check error output above.
-    pause
-    exit /b 1
+    goto ERROR_EXIT
 )
 echo Strapi build completed successfully.
 echo.
@@ -168,6 +162,9 @@ echo.
 echo [6/6] Seeding default QA roles and users...
 cd /d "%~dp0DBARc-backend"
 call npm.cmd run db:seed
+if %ERRORLEVEL% neq 0 (
+    echo [WARNING] Seeding encountered an issue, but continuing setup.
+)
 echo.
 
 echo =======================================================
@@ -181,6 +178,7 @@ echo   [2] DBARc Tenant Portal:  http://localhost:3000
 echo   [3] DBARc Courier Portal: http://localhost:3001
 echo.
 echo Default QA Credentials:
+echo   - Super Admin:   naeem4it@gmail.com    / Password123!
 echo   - Courier Admin: naeemcourier@test.com / Password123!
 echo   - Shipper Admin: naeemshiper@test.com  / Password123!
 echo.
@@ -194,3 +192,13 @@ if /i "%START_NOW%"=="Y" (
     cd /d "%~dp0"
     call RUN_SYSTEM.bat
 )
+pause
+exit /b 0
+
+:ERROR_EXIT
+echo.
+echo =======================================================
+echo [SETUP FAILED] Please resolve the error above.
+echo =======================================================
+pause
+exit /b 1
