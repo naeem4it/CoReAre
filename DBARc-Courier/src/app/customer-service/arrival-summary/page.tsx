@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Download, FileSpreadsheet, Search, Filter, BarChart3 } from 'lucide-react';
+import { Download, RefreshCw, Search, BarChart3 } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
 
 interface ArrivalSummaryRow {
   sNo: number;
@@ -22,127 +23,95 @@ interface ArrivalSummaryRow {
   otherCities: number;
 }
 
-const INITIAL_SUMMARY_DATA: ArrivalSummaryRow[] = [
-  {
-    sNo: 1,
-    brandName: 'Dari Mooch Cash',
-    city: 'LHE',
-    shipments: 489,
-    salesPerson: 'Younus Nasir',
-    karachi: 397,
-    lahore: 0,
-    rawalpindi: 0,
-    islamabad: 0,
-    multan: 0,
-    faisalabad: 85,
-    sialkot: 0,
-    quetta: 0,
-    hyderabad: 0,
-    otherCities: 7
-  },
-  {
-    sNo: 2,
-    brandName: 'Dr. Arooba Organics Lahore',
-    city: 'LHE',
-    shipments: 1792,
-    salesPerson: 'Younus Nasir',
-    karachi: 801,
-    lahore: 859,
-    rawalpindi: 0,
-    islamabad: 4,
-    multan: 1,
-    faisalabad: 132,
-    sialkot: 0,
-    quetta: 0,
-    hyderabad: 4,
-    otherCities: 0
-  },
-  {
-    sNo: 3,
-    brandName: "Fatima's Clothing",
-    city: 'LHE',
-    shipments: 26,
-    salesPerson: 'Naveed Hamdani',
-    karachi: 4,
-    lahore: 2,
-    rawalpindi: 2,
-    islamabad: 0,
-    multan: 0,
-    faisalabad: 0,
-    sialkot: 0,
-    quetta: 2,
-    hyderabad: 0,
-    otherCities: 6
-  },
-  {
-    sNo: 4,
-    brandName: 'FSN Textile',
-    city: 'LHE',
-    shipments: 3,
-    salesPerson: 'Tahir Mehmood',
-    karachi: 0,
-    lahore: 3,
-    rawalpindi: 0,
-    islamabad: 0,
-    multan: 0,
-    faisalabad: 0,
-    sialkot: 0,
-    quetta: 0,
-    hyderabad: 0,
-    otherCities: 0
-  },
-  {
-    sNo: 5,
-    brandName: 'Mediwell',
-    city: 'LHE',
-    shipments: 52,
-    salesPerson: 'Younus Nasir',
-    karachi: 0,
-    lahore: 40,
-    rawalpindi: 1,
-    islamabad: 1,
-    multan: 1,
-    faisalabad: 7,
-    sialkot: 0,
-    quetta: 1,
-    hyderabad: 0,
-    otherCities: 1
-  },
-  {
-    sNo: 6,
-    brandName: 'Wears Clothing',
-    city: 'LHE',
-    shipments: 95,
-    salesPerson: 'Naveed Hamdani',
-    karachi: 14,
-    lahore: 15,
-    rawalpindi: 0,
-    islamabad: 3,
-    multan: 3,
-    faisalabad: 7,
-    sialkot: 0,
-    quetta: 1,
-    hyderabad: 2,
-    otherCities: 50
-  }
-];
 
 export default function CustomerServiceArrivalSummaryPage() {
-  const [fromDate, setFromDate] = React.useState('2026-06-01');
-  const [toDate, setToDate] = React.useState('2026-06-06');
-  const [selectedCity, setSelectedCity] = React.useState('Lahore');
+  const [fromDate, setFromDate] = React.useState('');
+  const [toDate, setToDate] = React.useState('');
+  const [selectedCity, setSelectedCity] = React.useState('All');
   const [selectedCustomer, setSelectedCustomer] = React.useState('All');
   const [selectedSalesPerson, setSelectedSalesPerson] = React.useState('All');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [summaryData, setSummaryData] = React.useState<ArrivalSummaryRow[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const fetchArrivalSummary = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      let url = '/parcels?populate[shipper]=*&populate[destination_city]=*&filters[status][$in][0]=Arrived&filters[status][$in][1]=Arrived At Destination&filters[status][$in][2]=Out For delivery&filters[status][$in][3]=Delivered&pagination[pageSize]=500';
+      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
+      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+
+      const res = await apiClient.get(url);
+      const parcels: any[] = res.data?.data || [];
+
+      // Group by shipper/brand name
+      const groups: Record<string, { brandName: string; city: string; cityCounts: Record<string, number>; salesPerson: string }> = {};
+      for (const p of parcels) {
+        const brand = p.shipper?.name || p.pickup_location?.shipper?.name || 'Unassigned';
+        const originCity = p.pickup_location?.city?.name || p.origin_city?.name || 'LHE';
+        const destCity = p.destination_city?.name || p.destination_city || 'Other';
+
+        if (!groups[brand]) {
+          groups[brand] = { brandName: brand, city: originCity, cityCounts: {}, salesPerson: '' };
+        }
+        groups[brand].cityCounts[destCity] = (groups[brand].cityCounts[destCity] || 0) + 1;
+      }
+
+      const majorCities = ['Karachi', 'Lahore', 'Rawalpindi', 'Islamabad', 'Multan', 'Faisalabad', 'Sialkot', 'Quetta', 'Hyderabad'];
+      const rows: ArrivalSummaryRow[] = Object.values(groups).map((g, i) => {
+        const total = Object.values(g.cityCounts).reduce((a, b) => a + b, 0);
+        const otherCities = total - majorCities.reduce((a, c) => a + (g.cityCounts[c] || 0), 0);
+        return {
+          sNo: i + 1,
+          brandName: g.brandName,
+          city: g.city,
+          shipments: total,
+          salesPerson: g.salesPerson,
+          karachi: g.cityCounts['Karachi'] || 0,
+          lahore: g.cityCounts['Lahore'] || 0,
+          rawalpindi: g.cityCounts['Rawalpindi'] || 0,
+          islamabad: g.cityCounts['Islamabad'] || 0,
+          multan: g.cityCounts['Multan'] || 0,
+          faisalabad: g.cityCounts['Faisalabad'] || 0,
+          sialkot: g.cityCounts['Sialkot'] || 0,
+          quetta: g.cityCounts['Quetta'] || 0,
+          hyderabad: g.cityCounts['Hyderabad'] || 0,
+          otherCities: Math.max(0, otherCities),
+        };
+      });
+
+      rows.sort((a, b) => b.shipments - a.shipments);
+      setSummaryData(rows);
+    } catch (err) {
+      console.error('Failed to load arrival summary:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fromDate, toDate]);
+
+  React.useEffect(() => { fetchArrivalSummary(); }, [fetchArrivalSummary]);
+
+  const customerOptions = React.useMemo(() => {
+    return Array.from(new Set(summaryData.map(s => s.brandName).filter(Boolean)));
+  }, [summaryData]);
+
+  const salesPersonOptions = React.useMemo(() => {
+    return Array.from(new Set(summaryData.map(s => s.salesPerson).filter(Boolean)));
+  }, [summaryData]);
 
   const filteredData = React.useMemo(() => {
-    return INITIAL_SUMMARY_DATA.filter(row => {
-      const matchCustomer = selectedCustomer === 'All' || row.brandName.toLowerCase().includes(selectedCustomer.toLowerCase());
-      const matchSales = selectedSalesPerson === 'All' || row.salesPerson.toLowerCase().includes(selectedSalesPerson.toLowerCase());
-      const matchSearch = row.brandName.toLowerCase().includes(searchQuery.toLowerCase()) || row.salesPerson.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCustomer && matchSales && matchSearch;
+    return summaryData.filter(row => {
+      const matchCity = selectedCity === 'All' || row.city.toLowerCase() === selectedCity.toLowerCase();
+      const matchCustomer = selectedCustomer === 'All' || row.brandName.toLowerCase() === selectedCustomer.toLowerCase();
+      const matchSales = selectedSalesPerson === 'All' || row.salesPerson.toLowerCase() === selectedSalesPerson.toLowerCase();
+      const matchSearch = !searchQuery || (
+        row.brandName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.salesPerson.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      return matchCity && matchCustomer && matchSales && matchSearch;
     });
-  }, [selectedCustomer, selectedSalesPerson, searchQuery]);
+  }, [summaryData, selectedCity, selectedCustomer, selectedSalesPerson, searchQuery]);
 
   const totals = React.useMemo(() => {
     return filteredData.reduce((acc, row) => ({
@@ -161,13 +130,13 @@ export default function CustomerServiceArrivalSummaryPage() {
   }, [filteredData]);
 
   const handleExportExcel = () => {
-    const header = "Brand Name,City,Shipments,Sales Person,Karachi,Lahore,Rawalpindi,Islamabad,Multan,Faisalabad,Sialkot,Quetta,Hyderabad,Other Cities\n";
-    const rows = filteredData.map(r => `"${r.brandName}","${r.city}",${r.shipments},"${r.salesPerson}",${r.karachi},${r.lahore},${r.rawalpindi},${r.islamabad},${r.multan},${r.faisalabad},${r.sialkot},${r.quetta},${r.hyderabad},${r.otherCities}`).join("\n");
+    const header = "Brand Name,City,Shipments,Karachi,Lahore,Rawalpindi,Islamabad,Multan,Faisalabad,Sialkot,Quetta,Hyderabad,Other Cities\n";
+    const rows = filteredData.map(r => `"${r.brandName}","${r.city}",${r.shipments},${r.karachi},${r.lahore},${r.rawalpindi},${r.islamabad},${r.multan},${r.faisalabad},${r.sialkot},${r.quetta},${r.hyderabad},${r.otherCities}`).join("\n");
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Arrival_Summary_Report_${fromDate}_to_${toDate}.csv`;
+    a.download = `Arrival_Summary_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -236,9 +205,9 @@ export default function CustomerServiceArrivalSummaryPage() {
                 className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
               >
                 <option value="All">All Customers</option>
-                <option value="Wears Clothing">Wears Clothing</option>
-                <option value="Dari Mooch Cash">Dari Mooch Cash</option>
-                <option value="Dr. Arooba Organics Lahore">Dr. Arooba Organics Lahore</option>
+                {customerOptions.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 
@@ -250,9 +219,9 @@ export default function CustomerServiceArrivalSummaryPage() {
                 className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
               >
                 <option value="All">All Sales Persons</option>
-                <option value="Younus Nasir">Younus Nasir</option>
-                <option value="Naveed Hamdani">Naveed Hamdani</option>
-                <option value="Tahir Mehmood">Tahir Mehmood</option>
+                {salesPersonOptions.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
             </div>
           </div>

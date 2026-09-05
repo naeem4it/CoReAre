@@ -3,16 +3,72 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { useAuth } from '@/components/AuthProvider';
-import { Plus, Save, Printer, RefreshCw, List, Trash2, Barcode, Scale, Package, CheckCircle2, AlertCircle, X, Clock } from 'lucide-react';
+import { 
+  Plus, 
+  Save, 
+  Printer, 
+  RefreshCw, 
+  List, 
+  Trash2, 
+  Barcode, 
+  Scale, 
+  Package, 
+  CheckCircle2, 
+  AlertCircle, 
+  X, 
+  Clock,
+  Volume2,
+  Check,
+  Building2,
+  Truck
+} from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, ArrivalService, ParcelService } from '@/services/api';
 
 interface ArrivalItem {
   id: string;
   shipmentNumber: string;
+  recipientName: string;
+  consigneeName?: string;
+  destinationCity: string;
+  destination?: string;
   pieces: number;
   weight: number;
+  codAmount: number;
+  status: string;
+  arrivedAt: string;
 }
+
+// Web Audio API beep feedback for barcode scanner
+const playScannerBeep = (type: 'success' | 'error' = 'success') => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'success') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // High pitch A5
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } else {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime); // Low buzz
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    }
+  } catch (e) {
+    // AudioContext blocked or not supported
+  }
+};
 
 export default function OperationsArrivalsPage() {
   const { user } = useAuth();
@@ -24,7 +80,14 @@ export default function OperationsArrivalsPage() {
   const [scanBarcode, setScanBarcode] = React.useState('');
   const [scanPieces, setScanPieces] = React.useState<number>(1);
   const [scanWeight, setScanWeight] = React.useState<number>(0.8);
+  const [isScanning, setIsScanning] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [scanFlash, setScanFlash] = React.useState<'success' | 'error' | null>(null);
+
+  const triggerScanFlash = (type: 'success' | 'error') => {
+    setScanFlash(type);
+    setTimeout(() => setScanFlash(null), 800);
+  };
 
   // Scanned shipments list
   const [shipments, setShipments] = React.useState<ArrivalItem[]>([]);
@@ -67,28 +130,77 @@ export default function OperationsArrivalsPage() {
     barcodeInputRef.current?.focus();
   }, []);
 
-  const handleAddShipment = (e?: React.FormEvent) => {
+  // Continuous auto-focus on scanner input
+  const keepFocus = () => {
+    barcodeInputRef.current?.focus();
+  };
+
+  const handleAddShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!scanBarcode.trim()) return;
 
     const tracking = scanBarcode.trim().toUpperCase();
     if (shipments.some(s => s.shipmentNumber === tracking)) {
-      triggerToast(`Tracking #${tracking} is already scanned in this batch.`, 'error');
+      playScannerBeep('error');
+      triggerScanFlash('error');
+      triggerToast(`Tracking #${tracking} is already scanned in this session.`, 'error');
+      setScanBarcode('');
       return;
     }
 
-    const newItem: ArrivalItem = {
-      id: Date.now().toString(),
-      shipmentNumber: tracking,
-      pieces: Number(scanPieces) || 1,
-      weight: Number(scanWeight) || 0.5,
-    };
+    setIsScanning(true);
+    try {
+      // 1. Look up parcel by tracking number in Strapi
+      const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(tracking)}&populate=*`);
+      const foundParcel = parcelRes.data?.data?.[0];
 
-    setShipments(prev => [newItem, ...prev]);
-    setScanBarcode('');
-    setScanPieces(1);
-    setScanWeight(0.8);
-    barcodeInputRef.current?.focus();
+      if (!foundParcel) {
+        playScannerBeep('error');
+        triggerScanFlash('error');
+        triggerToast(`Parcel #${tracking} not found in database!`, 'error');
+        setScanBarcode('');
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      // 2. Mark as Arrived directly in Strapi
+      await apiClient.put(`/parcels/${foundParcel.id}`, {
+        data: {
+          status: 'Arrived',
+          arrival_date: new Date().toISOString()
+        }
+      });
+
+      // 3. Audio & Visual success feedback
+      playScannerBeep('success');
+      triggerScanFlash('success');
+      triggerToast(`Parcel #${tracking} ARRIVED at Courier Facility!`, 'success');
+
+      // 4. Add to scanned list with real parcel details
+      const newItem: ArrivalItem = {
+        id: foundParcel.id.toString(),
+        shipmentNumber: tracking,
+        recipientName: foundParcel.recipient_name || 'Customer',
+        destinationCity: foundParcel.destination_city?.name || foundParcel.recipient_address?.split(',').pop()?.trim() || 'Pakistan',
+        pieces: foundParcel.pieces || Number(scanPieces) || 1,
+        weight: foundParcel.weight || Number(scanWeight) || 0.5,
+        codAmount: foundParcel.cod_amount || 0,
+        status: 'Arrived',
+        arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      };
+
+      setShipments(prev => [newItem, ...prev]);
+      setScanBarcode('');
+      setScanPieces(1);
+      setScanWeight(0.8);
+      barcodeInputRef.current?.focus();
+    } catch (err: any) {
+      playScannerBeep('error');
+      console.error('Scan arrival error:', err);
+      triggerToast(`Error processing arrival for ${tracking}: ${err.message}`, 'error');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const handleRemoveItem = (id: string) => {
@@ -100,36 +212,19 @@ export default function OperationsArrivalsPage() {
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
       setShipments([]);
       setScanBarcode('');
+      barcodeInputRef.current?.focus();
     }
   };
 
   const handleSave = async () => {
     if (shipments.length === 0) {
-      triggerToast('Please scan at least one shipment arrival before saving.', 'error');
+      triggerToast('Please scan at least one shipment arrival before finalizing batch.', 'error');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Update parcel statuses to Arrived in Strapi
-      const trackingNumbers = shipments.map(s => s.shipmentNumber);
-      for (const tracking of trackingNumbers) {
-        try {
-          const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${tracking}`);
-          const foundParcel = parcelRes.data?.data?.[0];
-          if (foundParcel) {
-            await apiClient.put(`/parcels/${foundParcel.id}`, {
-              data: {
-                status: 'Arrived',
-              }
-            });
-          }
-        } catch (updateErr) {
-          console.warn(`Could not update parcel ${tracking}:`, updateErr);
-        }
-      }
-
-      // 2. Persist Arrival Batch
+      // Persist Arrival Batch Record
       try {
         await ArrivalService.createBatch({
           batch_id: arrivalId,
@@ -144,12 +239,13 @@ export default function OperationsArrivalsPage() {
         console.warn('Arrival entity record save notice:', arrivalErr);
       }
 
-      triggerToast(`Arrival batch ${arrivalId} saved successfully! ${shipments.length} parcels marked as Arrived.`, 'success');
+      triggerToast(`Arrival batch ${arrivalId} finalized! ${shipments.length} parcels recorded.`, 'success');
       
       // Reset form
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
       setShipments([]);
       setScanBarcode('');
+      barcodeInputRef.current?.focus();
     } catch (err: any) {
       console.error('Failed to save arrival batch:', err);
       triggerToast('Failed to save arrival batch. Please check network connection.', 'error');
@@ -178,81 +274,81 @@ export default function OperationsArrivalsPage() {
     <PortalLayout>
       {/* Toast Notification */}
       {toast.show && (
-        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
-          toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-3 transition-all duration-300 animate-in slide-in-from-top-4 ${
+          toast.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
         }`}>
           {toast.type === 'success' ? (
-            <div className="bg-emerald-500 rounded-full p-1 text-white">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           ) : (
-            <div className="bg-red-500 rounded-full p-1 text-white">
-              <AlertCircle className="w-4 h-4" />
-            </div>
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
           )}
-          <span className="text-sm font-semibold">{toast.msg}</span>
+          <span className="text-xs font-bold">{toast.msg}</span>
         </div>
       )}
 
-      <div className="space-y-6 max-w-[1920px] w-full mx-auto p-lg pb-16">
-        {/* Header Bar */}
-        <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="space-y-6 max-w-[1600px] mx-auto pb-16" onClick={keepFocus}>
+        {/* Header Action Strip */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Operations Dispatch</div>
-            <h1 className="text-xl font-black tracking-tight">Inbound Hub / Arrivals Management</h1>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5 mb-1">
+              <Barcode className="w-4 h-4" /> Inbound Logistics & Scanners
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Arrivals by Scanner
+            </h1>
+            <p className="text-xs text-slate-500">
+              Scan tracking barcodes directly with handheld or 2D scanner to automatically mark parcels as Arrived.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleOpenListModal}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+              className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             >
-              <List className="w-4 h-4" /> History
-            </button>
-            <button
-              disabled={isSubmitting}
-              onClick={handleSave}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" /> {isSubmitting ? 'Saving...' : 'Save & Mark Arrived'}
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" /> Print Sheet
+              <List className="w-4 h-4" /> Batch History
             </button>
             <button
               onClick={handleReset}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+              className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             >
-              <RefreshCw className="w-4 h-4" /> Reset
+              <RefreshCw className="w-4 h-4" /> Clear Form
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSubmitting || shipments.length === 0}
+              className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+            >
+              <Save className="w-4 h-4" /> Finalize Batch ({shipments.length})
             </button>
           </div>
         </div>
 
-        {/* Scanning & Rider Form Section */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Scanner Work Area Card */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
+          {/* Top Controls Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-slate-100">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Batch Identifier</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Arrival Batch Code</label>
               <input
                 type="text"
                 value={arrivalId}
                 onChange={(e) => setArrivalId(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs font-bold font-mono text-slate-900 outline-none focus:ring-2 focus:ring-primary"
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold font-mono text-slate-900 outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Delivering Rider / Van</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Origin / Delivering Van or Rider</label>
               <select
                 value={selectedRiderId}
                 onChange={(e) => setSelectedRiderId(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
               >
                 {riders.length === 0 ? (
-                  <option value="">No active riders found</option>
+                  <option value="">In-House Intake / Hub Facility</option>
                 ) : (
                   riders.map((r: any) => (
                     <option key={r.id} value={r.id}>
@@ -264,21 +360,54 @@ export default function OperationsArrivalsPage() {
             </div>
           </div>
 
-          {/* Barcode Scanner Bar */}
-          <form onSubmit={handleAddShipment} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-end gap-3">
+          {/* Barcode Scanner Bar with Visual Glow */}
+          <form 
+            onSubmit={handleAddShipment} 
+            className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col md:flex-row items-end gap-3 ${
+              scanFlash === 'success'
+                ? 'bg-emerald-50/70 border-emerald-500 ring-4 ring-emerald-500/20 shadow-lg'
+                : scanFlash === 'error'
+                ? 'bg-rose-50/70 border-rose-500 ring-4 ring-rose-500/20 shadow-lg'
+                : 'bg-slate-50 border-slate-200'
+            }`}
+          >
             <div className="flex-1 flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode
+                </span>
+                <span className="text-[10px] font-mono font-normal text-slate-400">
+                  Ready for physical scanner • Auto-submits on Enter
+                </span>
               </label>
-              <input
-                ref={barcodeInputRef}
-                type="text"
-                required
-                placeholder="Scan or type tracking # (e.g. DBA-XXXXXXX)"
-                value={scanBarcode}
-                onChange={(e) => setScanBarcode(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2.5 px-3.5 text-sm font-bold font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div className="relative">
+                <input
+                  ref={barcodeInputRef}
+                  type="text"
+                  required
+                  autoFocus
+                  disabled={isScanning}
+                  placeholder="Scan barcode or type tracking # and hit Enter..."
+                  value={scanBarcode}
+                  onChange={(e) => setScanBarcode(e.target.value)}
+                  className={`w-full bg-white border rounded-xl py-2.5 pl-3.5 pr-24 text-sm font-bold font-mono text-slate-900 focus:outline-none transition-all ${
+                    scanFlash === 'success'
+                      ? 'border-emerald-500 ring-2 ring-emerald-400'
+                      : scanFlash === 'error'
+                      ? 'border-rose-500 ring-2 ring-rose-400'
+                      : 'border-slate-200 focus:ring-2 focus:ring-primary'
+                  }`}
+                />
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                  {isScanning ? (
+                    <span className="text-[10px] font-bold text-primary animate-pulse">Checking...</span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">
+                      SCANNER ACTIVE
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="w-full md:w-32 flex flex-col gap-1.5">
@@ -310,9 +439,10 @@ export default function OperationsArrivalsPage() {
 
             <button
               type="submit"
-              className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer h-10"
+              disabled={isScanning}
+              className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer h-10 disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" /> Add Item
+              <Plus className="w-4 h-4" /> {isScanning ? 'Verifying...' : 'Scan / Add'}
             </button>
           </form>
 
@@ -338,30 +468,53 @@ export default function OperationsArrivalsPage() {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipment Number</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pieces</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Weight (kg)</th>
+                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipment Tracking #</th>
+                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Consignee & Destination</th>
+                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">COD (PKR)</th>
+                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pieces & Weight</th>
+                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {shipments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">
-                      No shipments scanned yet. Use the barcode scanner above to begin.
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                      No shipments scanned yet. Connect your USB/Bluetooth barcode scanner or type tracking # above.
                     </td>
                   </tr>
                 ) : (
                   shipments.map((item, idx) => (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5 text-xs font-bold text-slate-400">{idx + 1}</td>
-                      <td className="px-5 py-3.5 text-sm font-bold font-mono text-primary">{item.shipmentNumber}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-slate-700">{item.pieces}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-slate-700">{item.weight} kg</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold font-mono text-primary">{item.shipmentNumber}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">Scanned at {item.arrivedAt || 'Just now'}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800">{item.consigneeName || 'Customer'}</span>
+                          <span className="text-[11px] text-slate-500">{item.destination || 'Hub Destination'}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
+                        PKR {item.codAmount?.toLocaleString() || 0}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs font-semibold text-slate-700">
+                        {item.pieces} pc{item.pieces > 1 ? 's' : ''} • {item.weight} kg
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3" /> Arrived
+                        </span>
+                      </td>
                       <td className="px-5 py-3.5 text-right">
                         <button
                           onClick={() => handleRemoveItem(item.id)}
                           className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Remove from current batch"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -418,21 +571,12 @@ export default function OperationsArrivalsPage() {
                         <td className="px-4 py-3 font-mono font-bold text-primary">{item.batch_id || `ARR-${item.id}`}</td>
                         <td className="px-4 py-3 font-semibold text-slate-800">{item.rider?.name || 'Assigned Rider'}</td>
                         <td className="px-4 py-3 font-bold text-slate-900">{item.total_shipments || item.scanned_items?.length || '-'} units</td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{new Date(item.createdAt || item.arrival_date).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{new Date(item.createdAt || item.arrival_date).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setIsListModalOpen(false)}
-                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

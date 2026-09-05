@@ -42,51 +42,21 @@ const DEFAULT_ZONES: ZoneRates[] = [
   { zoneName: 'Zone C', tierRates: { tier_half_kg: 185, tier_one_kg: 205, tier_add_kg: 205 }, returnCharges: 100, insurance: '-' },
   { zoneName: 'Zone D', tierRates: { tier_half_kg: 195, tier_one_kg: 220, tier_add_kg: 220 }, returnCharges: 100, insurance: '-' },
 ];
-
-const INITIAL_PLANS: DynamicTariffPlan[] = [
-  {
-    id: 1,
-    name: 'Standard Tariff & Price Plan',
-    cashHandlingType: 'percentage',
-    cashHandlingValue: 1.5,
-    cashHandlingMinFee: 30,
-    weightTiers: DEFAULT_WEIGHT_TIERS,
-    zones: DEFAULT_ZONES,
-    shippers: [
-      { id: 101, name: 'Metro Fashion Store' },
-      { id: 102, name: 'Silk Threads Pakistan' }
-    ]
-  },
-  {
-    id: 2,
-    name: 'Corporate Heavy Freight Plan',
-    cashHandlingType: 'fixed',
-    cashHandlingValue: 40,
-    cashHandlingMinFee: 40,
-    weightTiers: [
-      { id: 'tier_half_kg', label: '0.01 to 0.5 kg' },
-      { id: 'tier_one_kg', label: '0.51 to 1.0 kg' },
-      { id: 'tier_two_kg', label: '1.01 to 2.0 kg' },
-      { id: 'tier_five_kg', label: '2.01 to 5.0 kg' },
-      { id: 'tier_add_kg', label: 'Additional KG' },
-    ],
-    zones: [
-      { zoneName: 'Within City', tierRates: { tier_half_kg: 120, tier_one_kg: 140, tier_two_kg: 180, tier_five_kg: 280, tier_add_kg: 130 }, returnCharges: 40, insurance: '-' },
-      { zoneName: 'Zone A', tierRates: { tier_half_kg: 150, tier_one_kg: 165, tier_two_kg: 210, tier_five_kg: 330, tier_add_kg: 160 }, returnCharges: 40, insurance: '-' },
-      { zoneName: 'Zone B', tierRates: { tier_half_kg: 160, tier_one_kg: 180, tier_two_kg: 230, tier_five_kg: 360, tier_add_kg: 175 }, returnCharges: 80, insurance: '-' },
-      { zoneName: 'Zone C', tierRates: { tier_half_kg: 170, tier_one_kg: 190, tier_two_kg: 250, tier_five_kg: 390, tier_add_kg: 185 }, returnCharges: 80, insurance: '-' },
-      { zoneName: 'Zone D', tierRates: { tier_half_kg: 180, tier_one_kg: 200, tier_two_kg: 270, tier_five_kg: 420, tier_add_kg: 195 }, returnCharges: 80, insurance: '-' },
-    ],
-    shippers: [
-      { id: 103, name: 'MedTech Supplies Ltd' }
-    ]
-  }
-];
+const DEFAULT_STANDARD_PLAN: DynamicTariffPlan = {
+  id: 1,
+  name: 'Standard Tariff Plan',
+  cashHandlingType: 'percentage',
+  cashHandlingValue: 1.5,
+  cashHandlingMinFee: 30,
+  weightTiers: DEFAULT_WEIGHT_TIERS,
+  zones: DEFAULT_ZONES,
+  shippers: []
+};
 
 export default function TariffPlansPage() {
   const { user, activeBusinessId } = useAuth();
-  const [plans, setPlans] = React.useState<DynamicTariffPlan[]>(INITIAL_PLANS);
-  const [selectedPlanId, setSelectedPlanId] = React.useState<number>(INITIAL_PLANS[0].id);
+  const [plans, setPlans] = React.useState<DynamicTariffPlan[]>([DEFAULT_STANDARD_PLAN]);
+  const [selectedPlanId, setSelectedPlanId] = React.useState<number>(1);
   const [shippersList, setShippersList] = React.useState<any[]>([]);
 
   // Modal states

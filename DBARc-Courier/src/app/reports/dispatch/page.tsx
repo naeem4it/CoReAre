@@ -2,10 +2,36 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import { apiClient } from '@/shared/api/api-client';
 
 export default function DispatchReportPage() {
-  const [fromDate, setFromDate] = React.useState('2023-10-01');
-  const [toDate, setToDate] = React.useState('2023-10-31');
+  const [fromDate, setFromDate] = React.useState('');
+  const [toDate, setToDate] = React.useState('');
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
+
+  const totalPending = rows.filter(r => !['Delivered', 'Returned', 'Ready To Return'].includes(r.status)).length;
+  const estimatedRevenue = rows.reduce((a, r) => a + (Number(r.delivery_charges) || 0), 0);
+
+  const fetchReport = async () => {
+    setIsLoading(true);
+    try {
+      let url = '/parcels?populate[destination_city]=*&populate[shipper]=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
+      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
+      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+      if (searchQuery) url += `&filters[$or][0][tracking_number][$containsi]=${encodeURIComponent(searchQuery)}&filters[$or][1][recipient_name][$containsi]=${encodeURIComponent(searchQuery)}`;
+
+      const res = await apiClient.get(url);
+      setRows(res.data?.data || []);
+      setTotalCount(res.data?.meta?.pagination?.total || 0);
+    } catch (err) {
+      console.error('Dispatch report error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <PortalLayout>
@@ -16,7 +42,7 @@ export default function DispatchReportPage() {
             <h2 className="font-headline-lg text-headline-lg text-on-background mb-base">Dispatch Report</h2>
             <div className="flex items-center gap-xs text-secondary font-body-md text-body-md">
               <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-              <span>Generated on Tuesday, October 24, 2023</span>
+              <span>Generated on {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
           </div>
           <div className="flex gap-sm">
@@ -71,8 +97,12 @@ export default function DispatchReportPage() {
                     <span className="material-symbols-outlined absolute right-sm top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
                   </div>
                 </div>
-                <button className="w-full bg-primary text-white py-sm rounded-lg font-label-md text-label-md font-bold mt-sm hover:opacity-90 active:scale-95 transition-all">
-                  Apply Filter
+                <button
+                  onClick={fetchReport}
+                  disabled={isLoading}
+                  className="w-full bg-primary text-white py-sm rounded-lg font-label-md text-label-md font-bold mt-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
+                >
+                  {isLoading ? 'Loading...' : 'Apply Filter'}
                 </button>
                 <button className="w-full text-primary font-label-md text-label-md font-semibold py-xs hover:underline transition-all">
                   Reset All
@@ -88,20 +118,16 @@ export default function DispatchReportPage() {
               <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
                 <p className="font-label-md text-label-md text-secondary mb-base">Total Shipments</p>
                 <div className="flex items-center gap-sm">
-                  <span className="font-headline-lg text-headline-lg text-on-background">0</span>
-                  <span className="text-error font-tabular-nums text-tabular-nums flex items-center">
-                    <span className="material-symbols-outlined text-[14px]">trending_down</span>
-                    100%
-                  </span>
+                  <span className="font-headline-lg text-headline-lg text-on-background">{totalCount}</span>
                 </div>
               </div>
               <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
                 <p className="font-label-md text-label-md text-secondary mb-base">Pending Delivery</p>
-                <h4 className="font-headline-lg text-headline-lg text-on-background">0</h4>
+                <h4 className="font-headline-lg text-headline-lg text-on-background">{totalPending}</h4>
               </div>
               <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
                 <p className="font-label-md text-label-md text-secondary mb-base">Estimated Revenue</p>
-                <h4 className="font-headline-lg text-headline-lg text-on-background">$0.00</h4>
+                <h4 className="font-headline-lg text-headline-lg text-on-background">Rs.{estimatedRevenue.toLocaleString()}</h4>
               </div>
             </div>
             
@@ -122,12 +148,23 @@ export default function DispatchReportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Table is empty to trigger empty state pattern */}
+                    {rows.map((p, i) => (
+                      <tr key={p.id} className="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+                        <td className="px-md py-sm font-label-md text-primary font-semibold">{p.tracking_number || String(p.id)}</td>
+                        <td className="px-md py-sm font-body-md">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '-'}</td>
+                        <td className="px-md py-sm font-body-md">{p.arrival_date ? new Date(p.arrival_date).toLocaleDateString() : '-'}</td>
+                        <td className="px-md py-sm font-body-md">{p.recipient_name || '-'}</td>
+                        <td className="px-md py-sm font-body-md">{p.shipper_reference || '-'}</td>
+                        <td className="px-md py-sm font-body-md">{p.destination_city?.name || p.destination_city || '-'}</td>
+                        <td className="px-md py-sm text-right font-tabular-nums">{p.weight ? `${p.weight} KG` : '-'}</td>
+                        <td className="px-md py-sm text-right font-tabular-nums font-semibold">Rs.{Number(p.cod_amount || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
               
-              {/* Empty State Pattern */}
+              {rows.length === 0 && !isLoading && (
               <div className="flex-1 flex flex-col items-center justify-center p-xl text-center">
                 <div className="relative mb-lg group">
                   <div className="absolute inset-0 bg-primary opacity-10 rounded-full blur-3xl scale-150 group-hover:scale-[2] transition-transform duration-700"></div>
@@ -144,10 +181,11 @@ export default function DispatchReportPage() {
                   </div>
                 </div>
               </div>
+              )}
               
               {/* Footer / Pagination (Placeholder) */}
               <div className="p-md bg-surface-container-low flex items-center justify-between border-t border-outline-variant">
-                <p className="font-label-md text-label-md text-secondary">Showing 0 of 0 entries</p>
+                <p className="font-label-md text-label-md text-secondary">Showing {rows.length} of {totalCount} entries</p>
                 <div className="flex gap-sm">
                   <button className="p-xs rounded-lg border border-outline-variant text-outline opacity-50 cursor-not-allowed" disabled>
                     <span className="material-symbols-outlined">chevron_left</span>

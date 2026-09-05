@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
@@ -19,6 +20,7 @@ interface CourierStatsProps {
 }
 
 export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
+  const router = useRouter();
   const { user, activeBusinessId } = useAuth();
   const [stats, setStats] = React.useState<StatsData>({
     totalShipments: 0,
@@ -26,6 +28,7 @@ export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
     arrived: 0,
     delivered: 0,
   });
+  const [totalShippers, setTotalShippers] = React.useState<number>(0);
   const [isLoading, setIsLoading] = React.useState(true);
 
   const isShipper = React.useMemo(() => {
@@ -88,6 +91,20 @@ export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
           arrived: parcels.filter((p: Parcel) => ['Arrived', 'Arrived At Destination', 'Out For delivery', 'Ready To Return', 'Return Dispatched'].includes(p.status || '')).length,
           delivered: parcels.filter((p: Parcel) => p.status === 'Delivered').length,
         });
+
+        // Fetch Total Shippers count for Courier
+        try {
+          const shippersRes = await apiClient.get('/shippers?pagination[pageSize]=1');
+          const count = shippersRes.data?.meta?.pagination?.total ?? (shippersRes.data?.data?.length || 0);
+          setTotalShippers(count);
+        } catch {
+          try {
+            const usersRes = await apiClient.get('/users?filters[role][name][$containsi]=shipper');
+            setTotalShippers(usersRes.data?.length || 0);
+          } catch {
+            setTotalShippers(0);
+          }
+        }
       } catch (error) {
         console.warn('Could not fetch dynamic stats:', error);
         setStats({ totalShipments: 0, notArrived: 0, arrived: 0, delivered: 0 });
@@ -110,7 +127,31 @@ export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
   }, [stats.totalShipments, stats.arrived, stats.delivered]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mb-xl">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-gutter mb-xl">
+      {/* Total Shippers (Clickable -> Shipper Listing) */}
+      <div 
+        onClick={() => router.push('/administration/employees?type=shipper')}
+        className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-primary transition-all group cursor-pointer"
+        title="Click to view Shippers Directory"
+      >
+        <div className="flex items-start justify-between mb-sm">
+          <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+            <span className="material-symbols-outlined">groups</span>
+          </div>
+          <span className="text-primary font-medium text-[11px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
+            View All <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+          </span>
+        </div>
+        <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Total Shippers</h3>
+        <p className="font-display-lg text-display-lg mt-1 tabular-nums text-slate-900">
+          {isLoading ? (
+            <span className="inline-block w-16 h-8 bg-slate-100 animate-pulse rounded"></span>
+          ) : (
+            totalShippers.toLocaleString()
+          )}
+        </p>
+      </div>
+
       {/* Total Shipments */}
       <div className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">
         <div className="flex items-start justify-between mb-sm">

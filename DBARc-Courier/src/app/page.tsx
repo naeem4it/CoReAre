@@ -3,7 +3,6 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { CourierStats } from '@/features/courier/ui/CourierStats';
-import { FleetDistributionMap } from '@/features/courier/ui/FleetDistributionMap';
 import { LiveOperationsFeed } from '@/features/courier/ui/LiveOperationsFeed';
 import { CourierShipmentsTable } from '@/features/courier/ui/CourierShipmentsTable';
 import { useTenant } from '@/components/TenantProvider';
@@ -121,9 +120,8 @@ export default function DashboardPage() {
       {/* Shipments Table with Date Filtering */}
       <CourierShipmentsTable fromDate={fromDate} toDate={toDate} />
 
-      {/* Bento Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg mb-xl">
-        <FleetDistributionMap />
+      {/* Operations Feed Grid */}
+      <div className="mb-xl">
         <LiveOperationsFeed />
       </div>
     </PortalLayout>

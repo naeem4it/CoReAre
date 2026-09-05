@@ -104,3 +104,25 @@ export const DeliverySheetService = {
   },
 };
 
+export const InvoiceService = {
+  getAll: async (params?: string): Promise<any> => {
+    const response = await apiClient.get(`/invoices${params || ''}`);
+    return response.data;
+  },
+  getById: async (id: number | string): Promise<any> => {
+    const response = await apiClient.get(`/invoices/${id}?populate=*`);
+    return response.data;
+  },
+  create: async (data: any): Promise<any> => {
+    const response = await apiClient.post('/invoices', { data });
+    return response.data;
+  },
+  update: async (id: number | string, data: any): Promise<any> => {
+    const response = await apiClient.put(`/invoices/${id}`, { data });
+    return response.data;
+  },
+  delete: async (id: number | string): Promise<any> => {
+    const response = await apiClient.delete(`/invoices/${id}`);
+    return response.data;
+  },
+};

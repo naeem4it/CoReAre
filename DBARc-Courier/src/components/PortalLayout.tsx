@@ -291,9 +291,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       {showShipmentBooking && (
         <Link
           href="/shipments/book"
-          className="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40 cursor-pointer"
+          title="Book New Shipment (Quick Action)"
+          aria-label="Book New Shipment"
+          className="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40 cursor-pointer group"
         >
           <span className="material-symbols-outlined text-[32px]">add</span>
+          <span className="absolute right-16 bg-slate-900 text-white text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-md hidden sm:block">
+            Book New Shipment
+          </span>
         </Link>
       )}
     </div>

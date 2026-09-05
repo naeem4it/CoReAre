@@ -16,39 +16,7 @@ type ShipmentRow = {
   eta: string;
 };
 
-const FALLBACK_ROWS: ShipmentRow[] = [
-  {
-    id: 1,
-    trackingNumber: '#FLY-92841',
-    customerName: 'Ahmed Sheikh',
-    avatar: 'AS',
-    origin: 'Karachi',
-    destination: 'Islamabad',
-    status: 'Out For delivery',
-    eta: 'Today, 18:45',
-  },
-  {
-    id: 2,
-    trackingNumber: '#FLY-92842',
-    customerName: 'Maryam Khan',
-    avatar: 'MK',
-    origin: 'Lahore',
-    destination: 'Multan',
-    status: 'Delivered',
-    eta: 'May 14, 09:20',
-  },
-  {
-    id: 3,
-    trackingNumber: '#FLY-92843',
-    customerName: 'Javeria Dawood',
-    avatar: 'JD',
-    origin: 'Quetta',
-    destination: 'Karachi',
-    status: 'booked',
-    eta: 'Tomorrow, 14:00',
-  },
-];
-
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 
 interface CourierShipmentsTableProps {
@@ -57,6 +25,7 @@ interface CourierShipmentsTableProps {
 }
 
 export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTableProps) => {
+  const router = useRouter();
   const { user, activeBusinessId } = useAuth();
   const [data, setData] = React.useState<ShipmentRow[]>([]);
   const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
@@ -261,7 +230,11 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
               </tr>
             ) : filteredData.length > 0 ? (
               filteredData.map((row) => (
-                <tr className="hover:bg-slate-50 transition-colors cursor-pointer group" key={row.id}>
+                <tr 
+                  className="hover:bg-slate-50 transition-colors cursor-pointer group" 
+                  key={row.id}
+                  onClick={() => router.push(`/tracking?search=${row.trackingNumber.replace('#', '')}`)}
+                >
                   <td className="px-md py-4 font-tabular-nums text-primary font-semibold">{row.trackingNumber}</td>
                   <td className="px-md py-4">
                     <div className="flex items-center gap-2">
@@ -283,7 +256,14 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
                     {row.eta}
                   </td>
                   <td className="px-md py-4">
-                    <button className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors cursor-pointer">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/tracking?search=${row.trackingNumber.replace('#', '')}`);
+                      }}
+                      title="View tracking & shipment details"
+                      className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors cursor-pointer"
+                    >
                       <span className="material-symbols-outlined">visibility</span>
                     </button>
                   </td>

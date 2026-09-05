@@ -41,60 +41,9 @@ type ShipmentRow = {
   rawParcel?: Parcel;
 };
 
-const FALLBACK_ROWS: ShipmentRow[] = [
-  {
-    id: 1,
-    trackingNumber: 'FL-9283-XK',
-    customerName: 'Jameson Distilleries',
-    avatar: 'JD',
-    origin: 'Karachi',
-    destination: 'Lahore',
-    address: '482 Industrial Way, Port of Karachi, Pakistan',
-    phone: '+92 300 1234567',
-    codAmount: 4500,
-    weight: 1.5,
-    deliveryCharges: 280,
-    status: 'Out For delivery',
-    eta: 'Today, 18:45',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    trackingNumber: 'FL-1104-ZA',
-    customerName: 'TechCorp Logistics',
-    avatar: 'TC',
-    origin: 'Lahore',
-    destination: 'Islamabad',
-    address: '92 Innovation Blvd, Sector F-7, Islamabad',
-    phone: '+92 321 9876543',
-    codAmount: 12000,
-    weight: 3.0,
-    deliveryCharges: 450,
-    status: 'Delivered',
-    eta: 'May 14, 09:20',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 3,
-    trackingNumber: 'FL-8742-MM',
-    customerName: 'Global Solar Inc.',
-    avatar: 'GS',
-    origin: 'Faisalabad',
-    destination: 'Multan',
-    address: '11 Energy Park, Multan Cantt',
-    phone: '+92 333 4567890',
-    codAmount: 8500,
-    weight: 2.2,
-    deliveryCharges: 320,
-    status: 'Total Booking',
-    eta: 'Tomorrow, 14:00',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-  },
-];
-
 export default function ShipmentsPage() {
-  const [data, setData] = React.useState<ShipmentRow[]>(FALLBACK_ROWS);
-  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>(FALLBACK_ROWS);
+  const [data, setData] = React.useState<ShipmentRow[]>([]);
+  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('All');
   const [isLoading, setIsLoading] = React.useState(true);
@@ -103,7 +52,7 @@ export default function ShipmentsPage() {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize] = React.useState(10);
   const [totalPages, setTotalPages] = React.useState(1);
-  const [totalCount, setTotalCount] = React.useState(FALLBACK_ROWS.length);
+  const [totalCount, setTotalCount] = React.useState(0);
 
   // Modal / Drawer states
   const [viewingShipment, setViewingShipment] = React.useState<ShipmentRow | null>(null);
@@ -194,9 +143,9 @@ export default function ShipmentsPage() {
         setTotalCount(0);
       }
     } catch (error) {
-      console.warn('Could not fetch shipments from backend API, using fallback data:', error);
-      setData(FALLBACK_ROWS);
-      setFilteredData(FALLBACK_ROWS);
+      console.warn('Could not fetch shipments from backend API:', error);
+      setData([]);
+      setFilteredData([]);
     } finally {
       setIsLoading(false);
     }

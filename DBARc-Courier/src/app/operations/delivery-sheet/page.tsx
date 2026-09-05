@@ -33,19 +33,11 @@ interface DeliveryShipment {
   remarks: string;
 }
 
-const PAST_DELIVERY_SHEETS: DeliverySheetItem[] = [
-  { id: '1', sheetNumber: 1245379, date: '2026-06-06 10:46:41', riderName: 'Rahat Yousuf', customName: 'Morning Express', routeCode: '3253', cityCode: 'LHE' },
-  { id: '2', sheetNumber: 1245377, date: '2026-06-06 10:36:43', riderName: 'Saleem Usman', customName: 'Zone 2 Deliveries', routeCode: '3253', cityCode: 'LHE' },
-  { id: '3', sheetNumber: 1245376, date: '2026-06-06 10:19:28', riderName: 'Honey Sawan', customName: 'Samanabad Route', routeCode: '3253', cityCode: 'LHE' },
-  { id: '4', sheetNumber: 1245375, date: '2026-06-06 10:15:55', riderName: 'Muhammad Sheraz', customName: 'Gulberg Route', routeCode: '3253', cityCode: 'LHE' },
-  { id: '5', sheetNumber: 1245371, date: '2026-06-06 09:50:39', riderName: 'Zulqadar', customName: 'Model Town Route', routeCode: '3253', cityCode: 'LHE' },
-  { id: '6', sheetNumber: 1245172, date: '2026-06-05 10:48:48', riderName: 'Hamza Baloch', customName: 'Johar Town Route', routeCode: '3253', cityCode: 'LHE' }
-];
 
 export default function OperationsDeliverySheetPage() {
-  const [sheetNumber, setSheetNumber] = React.useState<number>(1245172);
-  const [selectedRider, setSelectedRider] = React.useState<string>('Hamza Baloch (2851)');
-  const [routeCode, setRouteCode] = React.useState<string>('Fly Courier Service (3253)');
+  const [sheetNumber, setSheetNumber] = React.useState<number>(() => Math.floor(1000000 + Math.random() * 9000000));
+  const [selectedRider, setSelectedRider] = React.useState<string>('');
+  const [routeCode, setRouteCode] = React.useState<string>('');
   const [scanBarcode, setScanBarcode] = React.useState<string>('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -53,6 +45,31 @@ export default function OperationsDeliverySheetPage() {
   const [isListModalOpen, setIsListModalOpen] = React.useState(false);
   const [isDsspModalOpen, setIsDsspModalOpen] = React.useState(false);
   const [modalSearch, setModalSearch] = React.useState('');
+
+  // Past delivery sheets from backend
+  const [pastSheets, setPastSheets] = React.useState<DeliverySheetItem[]>([]);
+  const [loadingSheets, setLoadingSheets] = React.useState(false);
+
+  const fetchPastSheets = async () => {
+    setLoadingSheets(true);
+    try {
+      const res = await DeliverySheetService.getAll('?sort[0]=createdAt:desc&pagination[limit]=20');
+      const items = (res.data || []).map((s: any) => ({
+        id: String(s.id),
+        sheetNumber: s.sheet_number || s.id,
+        date: s.date ? new Date(s.date).toLocaleString() : new Date(s.createdAt).toLocaleString(),
+        riderName: s.rider_name || 'N/A',
+        customName: s.route_code || '',
+        routeCode: s.route_code || '',
+        cityCode: s.city_code || '',
+      }));
+      setPastSheets(items);
+    } catch (e) {
+      console.warn('Could not load past delivery sheets:', e);
+    } finally {
+      setLoadingSheets(false);
+    }
+  };
 
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
     show: false,
@@ -65,78 +82,7 @@ export default function OperationsDeliverySheetPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
-  const [shipments, setShipments] = React.useState<DeliveryShipment[]>([
-    {
-      id: '1',
-      shipmentNumber: '400798861',
-      shipmentRef: '297343',
-      shipperName: 'Nasir Enterprises',
-      consigneeName: 'Bilal Khan',
-      consigneeAddress: 'House 378 Kamran block allama iqbal town - Contact # 03174361621',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 1.0,
-      amountCollect: 995,
-      status: 'Ready To Return',
-      remarks: 'refused'
-    },
-    {
-      id: '2',
-      shipmentNumber: '400796655',
-      shipmentRef: '296886',
-      shipperName: 'Nasir Enterprises',
-      consigneeName: 'Hassaan Malik',
-      consigneeAddress: 'Umer Block Street 6, 576 House Number - Contact # 03196568634',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 1.0,
-      amountCollect: 1598,
-      status: 'Delivered',
-      remarks: 'delivered to customer'
-    },
-    {
-      id: '3',
-      shipmentNumber: '400797931',
-      shipmentRef: '297284',
-      shipperName: 'Nasir Enterprises',
-      consigneeName: 'Laiba Ijaz',
-      consigneeAddress: 'House no 4 inside govt chishtia high school for boys islampura, Lahore',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 1.0,
-      amountCollect: 2499,
-      status: 'Delivered',
-      remarks: 'paid cash'
-    },
-    {
-      id: '4',
-      shipmentNumber: '400798661',
-      shipmentRef: '#361400',
-      shipperName: 'Dr. Arooba Organics Lahore',
-      consigneeName: 'Qasim Ali bhatti',
-      consigneeAddress: 'House no 2 Irfan street Last bus stop Sanda Kalan, Lahore',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 0.8,
-      amountCollect: 1352,
-      status: 'Delivered',
-      remarks: 'received'
-    },
-    {
-      id: '5',
-      shipmentNumber: '400797285',
-      shipmentRef: '#361281',
-      shipperName: 'Dr. Arooba Organics Lahore',
-      consigneeName: 'Jannat Farhan',
-      consigneeAddress: 'House 22/A Samanzar Colony Mor Samanabad, Lahore',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 0.8,
-      amountCollect: 6248,
-      status: 'Delivered',
-      remarks: 'received'
-    }
-  ]);
+  const [shipments, setShipments] = React.useState<DeliveryShipment[]>([]);
 
   const handleUpdateStatus = (id: string, newStatus: any) => {
     setShipments(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
@@ -267,10 +213,10 @@ export default function OperationsDeliverySheetPage() {
     }
   };
 
-  const filteredPastSheets = PAST_DELIVERY_SHEETS.filter(s =>
+  const filteredPastSheets = pastSheets.filter(s =>
     s.sheetNumber.toString().includes(modalSearch) ||
     s.riderName.toLowerCase().includes(modalSearch.toLowerCase()) ||
-    s.customName.toLowerCase().includes(modalSearch.toLowerCase())
+    (s.customName || '').toLowerCase().includes(modalSearch.toLowerCase())
   );
 
   const totalCollect = React.useMemo(() => shipments.reduce((acc, curr) => acc + curr.amountCollect, 0), [shipments]);
@@ -309,7 +255,7 @@ export default function OperationsDeliverySheetPage() {
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setIsListModalOpen(true)}
+              onClick={() => { setIsListModalOpen(true); fetchPastSheets(); }}
               className="bg-primary hover:bg-primary-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <List className="w-4 h-4" /> List

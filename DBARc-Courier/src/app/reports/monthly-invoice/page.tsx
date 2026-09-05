@@ -2,8 +2,88 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import { apiClient } from '@/shared/api/api-client';
+import { Download, RefreshCw } from 'lucide-react';
+
+interface InvoiceLedgerRow {
+  id: string;
+  cnNo: string;
+  bookDate: string;
+  arrivalDate: string;
+  consignee: string;
+  origin: string;
+  destination: string;
+  weight: number;
+  cashCollect: number;
+  serviceCharges: number;
+}
 
 export default function MonthlyInvoiceReportPage() {
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const defaultTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${lastDay}`;
+
+  const [fromDate, setFromDate] = React.useState(defaultFrom);
+  const [toDate, setToDate] = React.useState(defaultTo);
+  const [rows, setRows] = React.useState<InvoiceLedgerRow[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [page, setPage] = React.useState(1);
+  const PAGE_SIZE = 25;
+
+  // KPI computed from loaded data
+  const totalRevenue = rows.reduce((a, r) => a + r.cashCollect, 0);
+  const totalCharges = rows.reduce((a, r) => a + r.serviceCharges, 0);
+
+  const fetchReport = React.useCallback(async (pg = 1) => {
+    setIsLoading(true);
+    try {
+      let url = `/parcels?populate[origin_city]=*&populate[destination_city]=*&populate[shipper]=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
+      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
+      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+
+      const res = await apiClient.get(url);
+      const parcels: any[] = res.data?.data || [];
+      setTotalCount(res.data?.meta?.pagination?.total || 0);
+
+      const mapped: InvoiceLedgerRow[] = parcels.map(p => ({
+        id: String(p.id),
+        cnNo: p.tracking_number || String(p.id),
+        bookDate: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-',
+        arrivalDate: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending',
+        consignee: p.recipient_name || p.shipper?.name || '-',
+        origin: p.origin_city?.name || p.pickup_location?.city?.name || 'N/A',
+        destination: p.destination_city?.name || p.destination_city || 'N/A',
+        weight: Number(p.weight) || 0,
+        cashCollect: Number(p.cod_amount) || 0,
+        serviceCharges: Number(p.delivery_charges) || 0,
+      }));
+
+      setRows(mapped);
+      setPage(pg);
+    } catch (err) {
+      console.error('Monthly invoice error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fromDate, toDate]);
+
+  React.useEffect(() => { fetchReport(1); }, [fetchReport]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // Revenue breakdown by destination
+  const cityBreakdown = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const r of rows) {
+      map[r.destination] = (map[r.destination] || 0) + r.cashCollect;
+    }
+    const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = sorted[0]?.[1] || 1;
+    return sorted.map(([city, amt]) => ({ city, amt, pct: Math.round((amt / max) * 100) }));
+  }, [rows]);
+
   return (
     <PortalLayout>
       <div className="flex-1 overflow-y-auto p-lg space-y-lg">
@@ -13,25 +93,35 @@ export default function MonthlyInvoiceReportPage() {
             <h2 className="font-display-lg text-display-lg text-on-background">Monthly Invoice Report</h2>
             <p className="font-body-md text-body-md text-on-surface-variant">Review and manage logistical revenue for the current billing cycle.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-sm">
+          <div className="flex flex-wrap items-end gap-sm">
             <div className="flex flex-col gap-base">
-              <label className="font-label-md text-label-md text-outline">Date Range</label>
-              <div className="flex items-center gap-xs bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-xs">
-                <span className="material-symbols-outlined text-[18px] text-outline">calendar_today</span>
-                <span className="font-body-md text-body-md">Oct 01 - Oct 31, 2024</span>
-                <span className="material-symbols-outlined text-[18px] text-outline">expand_more</span>
-              </div>
+              <label className="font-label-md text-label-md text-outline">Date From</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                className="h-[40px] px-sm border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary outline-none"
+              />
             </div>
             <div className="flex flex-col gap-base">
-              <label className="font-label-md text-label-md text-outline">Status Type</label>
-              <div className="flex items-center gap-xs bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-xs">
-                <span className="material-symbols-outlined text-[18px] text-outline">filter_list</span>
-                <span className="font-body-md text-body-md">All Invoices</span>
-                <span className="material-symbols-outlined text-[18px] text-outline">expand_more</span>
-              </div>
+              <label className="font-label-md text-label-md text-outline">Date To</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                className="h-[40px] px-sm border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary outline-none"
+              />
             </div>
-            <button className="h-[40px] px-md mt-auto bg-surface-container-high hover:bg-surface-container-highest rounded-lg font-label-md text-label-md flex items-center gap-xs transition-all">
-              <span className="material-symbols-outlined text-[18px]">download</span>
+            <button
+              onClick={() => fetchReport(1)}
+              disabled={isLoading}
+              className="h-[40px] px-md bg-primary text-on-primary rounded-lg font-label-md text-label-md flex items-center gap-xs transition-all hover:opacity-90 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Loading...' : 'Generate'}
+            </button>
+            <button className="h-[40px] px-md bg-surface-container-high hover:bg-surface-container-highest rounded-lg font-label-md text-label-md flex items-center gap-xs transition-all">
+              <Download className="w-4 h-4" />
               Export PDF
             </button>
           </div>
@@ -45,51 +135,42 @@ export default function MonthlyInvoiceReportPage() {
               <span className="material-symbols-outlined text-[120px]" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
             </div>
             <div className="relative z-10">
-              <p className="font-label-md text-label-md uppercase tracking-widest opacity-80">Total Revenue</p>
-              <h3 className="font-display-lg text-[48px] leading-tight font-black">$42,850.00</h3>
+              <p className="font-label-md text-label-md uppercase tracking-widest opacity-80">Total COD Collection</p>
+              <h3 className="font-display-lg text-[48px] leading-tight font-black">
+                {isLoading ? '...' : `Rs.${totalRevenue.toLocaleString()}`}
+              </h3>
             </div>
             <div className="relative z-10 flex items-center gap-xs mt-md">
-              <span className="bg-primary-container text-on-primary-container px-xs py-0.5 rounded text-[10px] font-bold">+12.5%</span>
-              <span className="text-[12px] opacity-70">vs last month</span>
+              <span className="bg-primary-container text-on-primary-container px-xs py-0.5 rounded text-[10px] font-bold">
+                {totalCount} Parcels
+              </span>
+              <span className="text-[12px] opacity-70">in selected period</span>
             </div>
           </div>
-          {/* Active Shipments KPI */}
+          {/* Total Parcels KPI */}
           <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm flex flex-col justify-between min-h-[160px]">
             <div className="flex justify-between items-start">
               <div className="w-10 h-10 bg-secondary-container text-on-secondary-container rounded-lg flex items-center justify-center">
                 <span className="material-symbols-outlined">local_shipping</span>
               </div>
-              <span className="text-error font-bold text-[12px]">87% Delivered</span>
+              <span className="text-secondary font-bold text-[12px]">{rows.length} loaded</span>
             </div>
             <div>
-              <p className="font-label-md text-label-md text-outline">Active Shipments</p>
-              <h3 className="font-headline-lg text-headline-lg">1,240</h3>
+              <p className="font-label-md text-label-md text-outline">Total Parcels</p>
+              <h3 className="font-headline-lg text-headline-lg">{isLoading ? '...' : totalCount.toLocaleString()}</h3>
             </div>
           </div>
-          {/* Outstanding Dues KPI */}
+          {/* Service Charges KPI */}
           <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm flex flex-col justify-between min-h-[160px]">
             <div className="flex justify-between items-start">
               <div className="w-10 h-10 bg-tertiary-fixed text-on-tertiary-fixed rounded-lg flex items-center justify-center">
                 <span className="material-symbols-outlined">pending_actions</span>
               </div>
-              <span className="text-tertiary font-bold text-[12px]">12 Overdue</span>
             </div>
             <div>
-              <p className="font-label-md text-label-md text-outline">Outstanding Dues</p>
-              <h3 className="font-headline-lg text-headline-lg">$3,120.50</h3>
+              <p className="font-label-md text-label-md text-outline">Service Charges</p>
+              <h3 className="font-headline-lg text-headline-lg">{isLoading ? '...' : `Rs.${totalCharges.toLocaleString()}`}</h3>
             </div>
-          </div>
-        </div>
-
-        {/* Legacy Context Image Reference */}
-        <div className="rounded-xl overflow-hidden border border-outline-variant shadow-sm bg-surface-container-low">
-          <div className="px-md py-sm bg-surface-container border-b border-outline-variant flex items-center justify-between">
-            <span className="font-label-md text-label-md text-outline uppercase tracking-wider">Reference Archive (Legacy System)</span>
-            <span className="bg-surface-variant px-xs py-0.5 rounded text-[10px]">Legacy View</span>
-          </div>
-          <div className="relative h-[200px] w-full overflow-hidden grayscale opacity-40 hover:grayscale-0 hover:opacity-100 transition-all duration-500">
-            <img alt="Legacy system preview" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPxYhh6pk0P2HlolUS0rPJ6XTU4qCntuTD3yhiBLyudJlQNPk5b226c7grR3tbxaz4vvjcXFINcQ2DhASWjbUe_oeeUs5oJF6PFpBKXkwZETpA_FoairSe1U6KRN01Yl4oEQmReTxFdBKz1DtH4eXKk7Hh7BU8aWIEh1__Bp2pRsLoUX9bkZVE_CZ1L9Ha3K_2huVIvyqIQ9GAl7YEdxvPVLMC8MYUfyFKKgh1B-bgtxEI78_deCqXQPxtU05bHc0XvBZcsWmA3-g" />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent"></div>
           </div>
         </div>
 
@@ -98,8 +179,9 @@ export default function MonthlyInvoiceReportPage() {
           <div className="px-md py-sm border-b border-outline-variant flex items-center justify-between">
             <h4 className="font-headline-md text-headline-md">Invoice Ledger</h4>
             <div className="flex items-center gap-xs">
-              <button className="p-xs hover:bg-surface-container-low rounded-full transition-colors"><span className="material-symbols-outlined text-[20px]">refresh</span></button>
-              <button className="p-xs hover:bg-surface-container-low rounded-full transition-colors"><span className="material-symbols-outlined text-[20px]">more_vert</span></button>
+              <button onClick={() => fetchReport(page)} className="p-xs hover:bg-surface-container-low rounded-full transition-colors">
+                <span className="material-symbols-outlined text-[20px]">refresh</span>
+              </button>
             </div>
           </div>
           <div className="invoice-ledger-container overflow-x-auto">
@@ -118,82 +200,54 @@ export default function MonthlyInvoiceReportPage() {
                 </tr>
               </thead>
               <tbody className="font-body-md text-body-md">
-                <tr className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
-                  <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">CN-940212</td>
-                  <td className="px-md py-md">12 Oct 2024</td>
-                  <td className="px-md py-md">14 Oct 2024</td>
-                  <td className="px-md py-md">TechNova Solutions</td>
-                  <td className="px-md py-md">Karachi</td>
-                  <td className="px-md py-md">Lahore</td>
-                  <td className="px-md py-md text-right font-tabular-nums">12.5 kg</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$450.00</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$42.50</td>
-                </tr>
-                <tr className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
-                  <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">CN-940215</td>
-                  <td className="px-md py-md">13 Oct 2024</td>
-                  <td className="px-md py-md">15 Oct 2024</td>
-                  <td className="px-md py-md">Apex Retail Group</td>
-                  <td className="px-md py-md">Islamabad</td>
-                  <td className="px-md py-md">Faisalabad</td>
-                  <td className="px-md py-md text-right font-tabular-nums">4.2 kg</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$120.00</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$18.00</td>
-                </tr>
-                <tr className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
-                  <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">CN-940218</td>
-                  <td className="px-md py-md">15 Oct 2024</td>
-                  <td className="px-md py-md">17 Oct 2024</td>
-                  <td className="px-md py-md">Global Logistics Inc.</td>
-                  <td className="px-md py-md">Quetta</td>
-                  <td className="px-md py-md">Karachi</td>
-                  <td className="px-md py-md text-right font-tabular-nums">45.0 kg</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$1,850.00</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$125.00</td>
-                </tr>
-                <tr className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
-                  <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">CN-940222</td>
-                  <td className="px-md py-md">16 Oct 2024</td>
-                  <td className="px-md py-md">Pending</td>
-                  <td className="px-md py-md">Zenith Imports</td>
-                  <td className="px-md py-md">Peshawar</td>
-                  <td className="px-md py-md">Multan</td>
-                  <td className="px-md py-md text-right font-tabular-nums">2.8 kg</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$85.00</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$12.00</td>
-                </tr>
-                <tr className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
-                  <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">CN-940225</td>
-                  <td className="px-md py-md">17 Oct 2024</td>
-                  <td className="px-md py-md">19 Oct 2024</td>
-                  <td className="px-md py-md">Rapid Parcel Services</td>
-                  <td className="px-md py-md">Sialkot</td>
-                  <td className="px-md py-md">Karachi</td>
-                  <td className="px-md py-md text-right font-tabular-nums">18.2 kg</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$640.00</td>
-                  <td className="px-md py-md text-right font-tabular-nums">$55.00</td>
-                </tr>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-md py-12 text-center text-on-surface-variant">
+                      {isLoading ? 'Loading invoice data...' : 'No invoice records found for this period. Select a date range and click Generate.'}
+                    </td>
+                  </tr>
+                ) : rows.map(r => (
+                  <tr key={r.id} className="border-b border-outline-variant hover:bg-surface-container-low transition-colors group">
+                    <td className="px-md py-md font-tabular-nums text-tabular-nums text-primary font-semibold">{r.cnNo}</td>
+                    <td className="px-md py-md">{r.bookDate}</td>
+                    <td className="px-md py-md">{r.arrivalDate}</td>
+                    <td className="px-md py-md">{r.consignee}</td>
+                    <td className="px-md py-md">{r.origin}</td>
+                    <td className="px-md py-md">{r.destination}</td>
+                    <td className="px-md py-md text-right font-tabular-nums">{r.weight ? `${r.weight} kg` : '-'}</td>
+                    <td className="px-md py-md text-right font-tabular-nums">Rs.{r.cashCollect.toLocaleString()}</td>
+                    <td className="px-md py-md text-right font-tabular-nums">Rs.{r.serviceCharges.toLocaleString()}</td>
+                  </tr>
+                ))}
               </tbody>
-              <tfoot>
-                <tr className="bg-surface-container-low font-bold">
-                  <td className="px-md py-sm text-right font-label-md text-label-md uppercase tracking-wider" colSpan={7}>Page Total</td>
-                  <td className="px-md py-sm text-right font-tabular-nums text-primary">$3,245.00</td>
-                  <td className="px-md py-sm text-right font-tabular-nums text-primary">$252.50</td>
-                </tr>
-              </tfoot>
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr className="bg-surface-container-low font-bold">
+                    <td className="px-md py-sm text-right font-label-md text-label-md uppercase tracking-wider" colSpan={7}>Page Total</td>
+                    <td className="px-md py-sm text-right font-tabular-nums text-primary">Rs.{rows.reduce((a, r) => a + r.cashCollect, 0).toLocaleString()}</td>
+                    <td className="px-md py-sm text-right font-tabular-nums text-primary">Rs.{rows.reduce((a, r) => a + r.serviceCharges, 0).toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
           {/* Pagination */}
           <div className="px-md py-sm border-t border-outline-variant flex items-center justify-between">
-            <p className="font-label-md text-label-md text-outline">Showing 1 to 5 of 1,240 results</p>
+            <p className="font-label-md text-label-md text-outline">Showing {rows.length} of {totalCount.toLocaleString()} results</p>
             <div className="flex items-center gap-xs">
-              <button className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low disabled:opacity-30" disabled>
+              <button
+                onClick={() => fetchReport(Math.max(1, page - 1))}
+                disabled={page <= 1 || isLoading}
+                className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low disabled:opacity-30"
+              >
                 <span className="material-symbols-outlined text-[18px]">chevron_left</span>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded bg-primary text-on-primary font-tabular-nums text-tabular-nums">1</button>
-              <button className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low font-tabular-nums text-tabular-nums">2</button>
-              <button className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low font-tabular-nums text-tabular-nums">3</button>
-              <button className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low">
+              <span className="font-bold text-sm px-2">{page} / {totalPages}</span>
+              <button
+                onClick={() => fetchReport(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages || isLoading}
+                className="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container-low disabled:opacity-30"
+              >
                 <span className="material-symbols-outlined text-[18px]">chevron_right</span>
               </button>
             </div>
@@ -205,42 +259,32 @@ export default function MonthlyInvoiceReportPage() {
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
             <h5 className="font-headline-md text-headline-md mb-md">Revenue Breakdown by Destination</h5>
             <div className="space-y-sm">
-              <div className="flex flex-col gap-base">
-                <div className="flex justify-between font-label-md text-label-md">
-                  <span>Karachi</span>
-                  <span className="font-tabular-nums">$18,400.00</span>
+              {cityBreakdown.length === 0 ? (
+                <p className="text-on-surface-variant text-sm">No data available. Generate report to see breakdown.</p>
+              ) : cityBreakdown.map(({ city, amt, pct }) => (
+                <div key={city} className="flex flex-col gap-base">
+                  <div className="flex justify-between font-label-md text-label-md">
+                    <span>{city}</span>
+                    <span className="font-tabular-nums">Rs.{amt.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: '45%' }}></div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-base">
-                <div className="flex justify-between font-label-md text-label-md">
-                  <span>Lahore</span>
-                  <span className="font-tabular-nums">$12,150.00</span>
-                </div>
-                <div className="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
-                  <div className="h-full bg-primary opacity-70" style={{ width: '32%' }}></div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-base">
-                <div className="flex justify-between font-label-md text-label-md">
-                  <span>Islamabad</span>
-                  <span className="font-tabular-nums">$7,300.00</span>
-                </div>
-                <div className="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
-                  <div className="h-full bg-primary opacity-50" style={{ width: '18%' }}></div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col justify-center items-center text-center space-y-sm">
             <div className="w-16 h-16 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
               <span className="material-symbols-outlined text-[32px]">verified</span>
             </div>
-            <h5 className="font-headline-md text-headline-md">Monthly Report Verified</h5>
-            <p className="font-body-md text-body-md text-on-surface-variant max-w-[300px]">All invoices for the October cycle have been reconciled with bank deposits.</p>
-            <button className="text-primary font-bold hover:underline">View Reconciliation Details</button>
+            <h5 className="font-headline-md text-headline-md">Monthly Report</h5>
+            <p className="font-body-md text-body-md text-on-surface-variant max-w-[300px]">
+              Select a date range and click Generate to load invoice records for reconciliation.
+            </p>
+            <button onClick={() => fetchReport(1)} className="text-primary font-bold hover:underline">
+              Refresh Data
+            </button>
           </div>
         </div>
       </div>

@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Download, Search, FileSpreadsheet, DollarSign } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
 
 interface OperationsOrderRow {
   sNo: number;
@@ -25,88 +26,73 @@ interface OperationsOrderRow {
   invoice: string;
 }
 
-const ORDER_REPORT_DATA: OperationsOrderRow[] = [
-  {
-    sNo: 1,
-    shipper: 'Wears Clothing',
-    flyCn: '400796333',
-    tplCn: '22320663494071',
-    tplName: 'Trax',
-    origin: 'LHE',
-    dest: 'NPR',
-    bookingDate: '2026-06-02',
-    arrivalDate: '2026-06-02',
-    statusDate: '2026-06-04',
-    status: 'Delivered',
-    weight: 1.0,
-    chargedWt: 1.0,
-    cod: 2049,
-    charges: 201,
-    tplCharges: 0,
-    profitLoss: 201,
-    invoice: 'Invoice Generated'
-  },
-  {
-    sNo: 2,
-    shipper: 'Wears Clothing',
-    flyCn: '400796328',
-    tplCn: '22328963494023',
-    tplName: 'Trax',
-    origin: 'LHE',
-    dest: 'RLK',
-    bookingDate: '2026-06-02',
-    arrivalDate: '2026-06-02',
-    statusDate: '2026-06-04',
-    status: 'Delivered',
-    weight: 1.0,
-    chargedWt: 1.0,
-    cod: 620,
-    charges: 201,
-    tplCharges: 0,
-    profitLoss: 201,
-    invoice: 'Invoice Pending'
-  },
-  {
-    sNo: 3,
-    shipper: 'Dr. Arooba Organics Lahore',
-    flyCn: '400798861',
-    tplCn: '3PL-994812',
-    tplName: 'Leopard',
-    origin: 'LHE',
-    dest: 'KHI',
-    bookingDate: '2026-06-03',
-    arrivalDate: '2026-06-03',
-    statusDate: '2026-06-05',
-    status: 'Delivered',
-    weight: 0.8,
-    chargedWt: 0.8,
-    cod: 1850,
-    charges: 180,
-    tplCharges: 110,
-    profitLoss: 70,
-    invoice: 'Invoice Generated'
-  }
-];
 
 export default function CustomerServiceOrderReportPage() {
-  const [fromDate, setFromDate] = React.useState('2026-06-01');
-  const [toDate, setToDate] = React.useState('2026-06-06');
-  const [selectedCustomer, setSelectedCustomer] = React.useState('Wears Clothing');
+  const [fromDate, setFromDate] = React.useState('');
+  const [toDate, setToDate] = React.useState('');
+  const [selectedCustomer, setSelectedCustomer] = React.useState('ALL');
   const [selectedStatus, setSelectedStatus] = React.useState('All');
   const [originCity, setOriginCity] = React.useState('ALL');
   const [destinationCity, setDestinationCity] = React.useState('ALL');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [reportData, setReportData] = React.useState<OperationsOrderRow[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const fetchReport = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      let url = '/parcels?populate[shipper]=*&populate[destination_city]=*&populate[origin_city]=*&pagination[pageSize]=500';
+      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
+      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+      if (selectedStatus !== 'All') url += `&filters[status][$eq]=${encodeURIComponent(selectedStatus)}`;
+
+      const res = await apiClient.get(url);
+      const parcels: any[] = res.data?.data || [];
+
+      const rows: OperationsOrderRow[] = parcels.map((p, i) => ({
+        sNo: i + 1,
+        shipper: p.shipper?.name || p.pickup_location?.shipper?.name || 'Unknown',
+        flyCn: p.tracking_number || String(p.id),
+        tplCn: p.poly_tracking || p.tpl_tracking || '-',
+        tplName: p.tpl_name || p.carrier || '-',
+        origin: p.origin_city?.name || p.pickup_location?.city?.name || 'N/A',
+        dest: p.destination_city?.name || p.destination_city || 'N/A',
+        bookingDate: p.createdAt ? p.createdAt.split('T')[0] : '',
+        arrivalDate: p.arrival_date ? p.arrival_date.split('T')[0] : '',
+        statusDate: p.updatedAt ? p.updatedAt.split('T')[0] : '',
+        status: p.status || '',
+        weight: Number(p.weight) || 0,
+        chargedWt: Number(p.charged_weight) || Number(p.weight) || 0,
+        cod: Number(p.cod_amount) || 0,
+        charges: Number(p.delivery_charges) || 0,
+        tplCharges: Number(p.tpl_charges) || 0,
+        profitLoss: (Number(p.delivery_charges) || 0) - (Number(p.tpl_charges) || 0),
+        invoice: p.invoice ? 'Invoice Generated' : 'Invoice Pending',
+      }));
+
+      setReportData(rows);
+    } catch (err) {
+      console.error('Failed to load order report:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fromDate, toDate, selectedStatus]);
+
+  React.useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  const customerOptions = React.useMemo(() => {
+    return Array.from(new Set(reportData.map(r => r.shipper).filter(Boolean)));
+  }, [reportData]);
 
   const filteredData = React.useMemo(() => {
-    return ORDER_REPORT_DATA.filter(r => {
+    return reportData.filter(r => {
       const matchCustomer = selectedCustomer === 'ALL' || r.shipper.toLowerCase().includes(selectedCustomer.toLowerCase());
-      const matchStatus = selectedStatus === 'All' || r.status === selectedStatus;
       const matchOrigin = originCity === 'ALL' || r.origin === originCity;
       const matchDest = destinationCity === 'ALL' || r.dest === destinationCity;
-      const matchSearch = r.flyCn.includes(searchQuery) || r.tplCn.includes(searchQuery) || r.shipper.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCustomer && matchStatus && matchOrigin && matchDest && matchSearch;
+      const matchSearch = !searchQuery || r.flyCn.includes(searchQuery) || r.tplCn.includes(searchQuery) || r.shipper.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchCustomer && matchOrigin && matchDest && matchSearch;
     });
-  }, [selectedCustomer, selectedStatus, originCity, destinationCity, searchQuery]);
+  }, [reportData, selectedCustomer, originCity, destinationCity, searchQuery]);
 
   const handleExportExcel = () => {
     const header = "Shipper,Fly CN#,TPL CN#,TPL Name,Origin,Dest,Booking Date,Arrival Date,Status Date,Status,Weight,Charged Wt,COD,Charges,TPL Charges,Profit/Loss,Invoice\n";
@@ -171,9 +157,9 @@ export default function CustomerServiceOrderReportPage() {
                 className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
               >
                 <option value="ALL">ALL Customers</option>
-                <option value="Wears Clothing">Wears Clothing</option>
-                <option value="Dr. Arooba Organics Lahore">Dr. Arooba Organics Lahore</option>
-                <option value="Dari Mooch Cash">Dari Mooch Cash</option>
+                {customerOptions.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 

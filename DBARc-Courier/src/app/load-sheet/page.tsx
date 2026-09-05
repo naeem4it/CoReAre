@@ -110,14 +110,20 @@ export default function LoadSheetPage() {
 
   const fetchUnassignedParcels = async () => {
     try {
-      // Only booked orders will show
+      // Display unassigned parcels that have not arrived yet (Total Booking, Not Arrived, booked)
       const response = await apiClient.get('/parcels', {
         params: {
           filters: {
             load_sheet: { id: { $null: true } },
-            status: { $eq: 'booked' }
+            $or: [
+              { status: { $eq: 'booked' } },
+              { status: { $eq: 'Total Booking' } },
+              { status: { $eq: 'Not Arrived' } }
+            ]
           },
-          populate: '*'
+          populate: '*',
+          sort: ['createdAt:desc'],
+          pagination: { pageSize: 100 }
         }
       });
       setUnassignedParcels(response.data?.data || []);

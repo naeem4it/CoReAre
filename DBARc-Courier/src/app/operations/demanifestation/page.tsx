@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { List, Save, Printer, RefreshCw, Barcode, Shield, CheckCircle2, PackageCheck } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
 
 interface DeManifestItem {
   id: string;
@@ -16,44 +17,98 @@ interface DeManifestItem {
 }
 
 export default function OperationsDeManifestationPage() {
-  const [manifestNumber, setManifestNumber] = React.useState<string>('3741');
-  const [sealNo, setSealNo] = React.useState<string>('SL-99481');
+  const [manifestNumber, setManifestNumber] = React.useState<string>('');
+  const [sealNo, setSealNo] = React.useState<string>('');
   const [scanBarcode, setScanBarcode] = React.useState<string>('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
 
-  const [shipments, setShipments] = React.useState<DeManifestItem[]>([
-    { id: '1', shipmentNumber: '400798861', shipper: 'Nasir Enterprises', consignee: 'Bilal Khan', destination: 'LHE', pieces: 1, weight: 1.0, status: 'Verified' },
-    { id: '2', shipmentNumber: '400796655', shipper: 'Nasir Enterprises', consignee: 'Hassaan Malik', destination: 'LHE', pieces: 1, weight: 1.0, status: 'Verified' },
-    { id: '3', shipmentNumber: '400797931', shipper: 'Nasir Enterprises', consignee: 'Laiba Ijaz', destination: 'LHE', pieces: 1, weight: 1.0, status: 'Verified' },
-  ]);
+  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
+
+  const [shipments, setShipments] = React.useState<DeManifestItem[]>([]);
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleScanShipment = (e?: React.FormEvent) => {
+  const handleScanShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!scanBarcode.trim()) return;
+    const code = scanBarcode.trim().toUpperCase();
+    if (!code) return;
 
-    const newItem: DeManifestItem = {
-      id: Date.now().toString(),
-      shipmentNumber: scanBarcode.trim(),
-      shipper: 'Dr. Arooba Organics Lahore',
-      consignee: 'Qasim Ali Bhatti',
-      destination: 'LHE',
-      pieces: 1,
-      weight: 0.8,
-      status: 'Verified'
-    };
+    if (shipments.some(s => s.shipmentNumber === code)) {
+      triggerToast(`Shipment ${code} already added.`, 'error');
+      return;
+    }
 
-    setShipments(prev => [newItem, ...prev]);
+    try {
+      const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(code)}&populate=*`);
+      const parcel = res.data?.data?.[0];
+      const newItem: DeManifestItem = {
+        id: Date.now().toString(),
+        shipmentNumber: code,
+        shipper: parcel?.shipper?.name || parcel?.pickup_location?.shipper?.name || 'Unknown Shipper',
+        consignee: parcel?.recipient_name || 'Unknown Consignee',
+        destination: parcel?.destination_city?.name || parcel?.destination_city || 'N/A',
+        pieces: parcel?.pieces || 1,
+        weight: Number(parcel?.weight) || 1.0,
+        status: 'Verified',
+      };
+      setShipments(prev => [newItem, ...prev]);
+    } catch {
+      // Add the CN anyway with minimal info
+      const newItem: DeManifestItem = {
+        id: Date.now().toString(),
+        shipmentNumber: code,
+        shipper: 'Unknown',
+        consignee: 'Unknown',
+        destination: 'N/A',
+        pieces: 1,
+        weight: 1.0,
+        status: 'Pending Verification',
+      };
+      setShipments(prev => [newItem, ...prev]);
+    }
+
     setScanBarcode('');
     barcodeInputRef.current?.focus();
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (shipments.length === 0) {
-      alert('No shipments de-manifested yet.');
+      triggerToast('No shipments de-manifested yet.', 'error');
       return;
     }
-    alert(`De-manifestation for Manifest #${manifestNumber} (Seal No: ${sealNo}) completed successfully! Total verified: ${shipments.length} parcels.`);
+    if (!manifestNumber.trim()) {
+      triggerToast('Please enter the incoming manifest number.', 'error');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      // Mark all parcels as Arrived in Strapi
+      for (const item of shipments) {
+        try {
+          const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+          const parcel = res.data?.data?.[0];
+          if (parcel) {
+            await apiClient.put(`/parcels/${parcel.id}`, {
+              data: { status: 'Arrived', arrival_date: new Date().toISOString() }
+            });
+          }
+        } catch (e) {
+          console.warn(`Could not update ${item.shipmentNumber}:`, e);
+        }
+      }
+      triggerToast(`De-manifestation for Manifest #${manifestNumber} completed! ${shipments.length} parcels verified & marked Arrived.`, 'success');
+      setManifestNumber('');
+      setSealNo('');
+      setShipments([]);
+    } catch (err) {
+      triggerToast('Failed to complete de-manifestation.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -67,6 +122,17 @@ export default function OperationsDeManifestationPage() {
 
   return (
     <PortalLayout>
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
+          toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+        }`}>
+          {toast.type === 'success'
+            ? <div className="bg-emerald-500 rounded-full p-1 text-white"><CheckCircle2 className="w-4 h-4" /></div>
+            : <div className="bg-red-500 rounded-full p-1 text-white"><Shield className="w-4 h-4" /></div>
+          }
+          <span className="text-sm font-semibold">{toast.msg}</span>
+        </div>
+      )}
       <div className="space-y-6 max-w-[1920px] w-full mx-auto p-lg pb-16">
         
         {/* Header Bar */}
@@ -85,9 +151,10 @@ export default function OperationsDeManifestationPage() {
             </button>
             <button
               onClick={handleSave}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              disabled={isSubmitting}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <Save className="w-4 h-4" /> Save
+              <Save className="w-4 h-4" /> {isSubmitting ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={() => window.print()}

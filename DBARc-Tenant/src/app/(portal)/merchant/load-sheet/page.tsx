@@ -80,10 +80,17 @@ export default function MerchantLoadSheetPage() {
       // 1. Fetch unassigned booked parcels
       const parcelRes = await apiClient.get('/parcels', {
         params: {
-          'filters[load_sheet][$null]': 'true',
-          'filters[status][$in]': ['Total Booking', 'Not Arrived'],
+          filters: {
+            load_sheet: { id: { $null: true } },
+            $or: [
+              { status: { $eq: 'booked' } },
+              { status: { $eq: 'Total Booking' } },
+              { status: { $eq: 'Not Arrived' } }
+            ]
+          },
           populate: ['destination_city'],
           sort: ['createdAt:desc'],
+          pagination: { pageSize: 100 }
         },
       });
       setUnassignedParcels(parcelRes.data?.data || []);

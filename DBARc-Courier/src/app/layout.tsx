@@ -3,8 +3,11 @@ import "./globals.css";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "Leoparda - Logistics Dashboard",
-  description: "Enterprise Logistics Management Portal",
+  title: {
+    default: "DBARc - Courier Logistics Portal",
+    template: "%s | DBARc Logistics",
+  },
+  description: "Enterprise Logistics & Courier Operations Portal",
 };
 
 export default function RootLayout({

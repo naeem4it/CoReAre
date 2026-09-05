@@ -25,87 +25,8 @@ import {
 
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000; // 48 Hours in Milliseconds
 
-const FALLBACK_ATTEMPTS = [
-  {
-    id: 1,
-    documentId: 'doc-1',
-    attempt_time: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-    status: 'Attempt 1',
-    failure_reason: 'Consignee Not Available',
-    shipper_advice: null,
-    advice_status: 'Awaiting advice',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    parcel: {
-      id: 101,
-      tracking_number: 'DBA-98231',
-      recipient_name: 'Zeeshan Ahmed',
-      recipient_address: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
-      destination_city: { name: 'Karachi, PK' },
-      status: 'Failed Attempt'
-    },
-    rider: { name: 'Muhammad Asif' }
-  },
-  {
-    id: 2,
-    documentId: 'doc-2',
-    attempt_time: new Date(Date.now() - 50 * 3600000).toISOString(), // 50 hours ago (> 48h!)
-    status: 'Attempt 2',
-    failure_reason: 'Incorrect Address / Phone Unreachable',
-    shipper_advice: null,
-    advice_status: 'Awaiting advice',
-    createdAt: new Date(Date.now() - 50 * 3600000).toISOString(),
-    parcel: {
-      id: 102,
-      tracking_number: 'DBA-98105',
-      recipient_name: 'Mariam Khan',
-      recipient_address: 'House 42, Street 5, DHA Phase 6, Karachi',
-      destination_city: { name: 'Karachi, PK' },
-      status: 'Failed Attempt'
-    },
-    rider: { name: 'Sajid Ali' }
-  },
-  {
-    id: 3,
-    documentId: 'doc-3',
-    attempt_time: new Date(Date.now() - 14400000).toISOString(), // 4 hours ago
-    status: 'Attempt 3', // 3rd attempt -> Auto return required
-    failure_reason: 'Consignee Refused Delivery (COD too high)',
-    shipper_advice: null,
-    advice_status: 'Awaiting advice',
-    createdAt: new Date(Date.now() - 14400000).toISOString(),
-    parcel: {
-      id: 103,
-      tracking_number: 'DBA-97992',
-      recipient_name: 'Dr. Faisal Qureshi',
-      recipient_address: 'Aga Khan University Hospital, Stadium Road, Karachi',
-      destination_city: { name: 'Karachi, PK' },
-      status: 'Failed Attempt'
-    },
-    rider: { name: 'Muhammad Asif' }
-  },
-  {
-    id: 4,
-    documentId: 'doc-4',
-    attempt_time: new Date(Date.now() - 86400000).toISOString(),
-    status: 'Attempt 3',
-    failure_reason: 'Refused by Consignee',
-    shipper_advice: 'Return to Shipper processed automatically',
-    advice_status: 'Failed',
-    createdAt: new Date(Date.now() - 345600000).toISOString(),
-    parcel: {
-      id: 104,
-      tracking_number: 'DBA-97881',
-      recipient_name: 'Imran Shah',
-      recipient_address: 'Office 12, Saima Trade Tower, I.I. Chundrigar Road, Karachi',
-      destination_city: { name: 'Karachi, PK' },
-      status: 'Ready To Return'
-    },
-    rider: { name: 'Kashif Khan' }
-  }
-];
-
 export default function ShipperAdvisePage() {
-  const [attempts, setAttempts] = React.useState<any[]>(FALLBACK_ATTEMPTS);
+  const [attempts, setAttempts] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   
   // Dialog States
@@ -139,14 +60,14 @@ export default function ShipperAdvisePage() {
     const createdTime = new Date(createdAt).getTime();
     const now = Date.now();
     const elapsed = now - createdTime;
+    const timeLeft = FORTY_EIGHT_HOURS_MS - elapsed;
 
-    if (elapsed >= FORTY_EIGHT_HOURS_MS) {
-      return { isExpired: true, hoursLeft: 0, label: 'Auto Ready to Return (48h Expired)' };
+    if (timeLeft <= 0) {
+      return { isExpired: true, hoursLeft: 0, label: 'Expired (Auto-Return to Shipper)' };
     }
 
-    const remainingMs = FORTY_EIGHT_HOURS_MS - elapsed;
-    const hoursLeft = Math.ceil(remainingMs / (1000 * 60 * 60));
-    return { isExpired: false, hoursLeft, label: `${hoursLeft}h left for Shipper Advice` };
+    const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60));
+    return { isExpired: false, hoursLeft, label: `${hoursLeft}h left to advise` };
   };
 
   const fetchAttempts = async () => {
@@ -161,9 +82,36 @@ export default function ShipperAdvisePage() {
       const data = response.data?.data || [];
       if (data.length > 0) {
         setAttempts(data);
+      } else {
+        // Fallback to real parcels that need shipper advice
+        const parcelsRes = await apiClient.get('/parcels', {
+          params: {
+            filters: {
+              status: { $in: ['Failed Attempt', 'Ready To Return', 'Return to Shipper'] }
+            },
+            populate: '*',
+            sort: ['createdAt:desc'],
+            pagination: { pageSize: 50 }
+          }
+        });
+        const failedParcels = parcelsRes.data?.data || [];
+        const mappedAttempts = failedParcels.map((p: any) => ({
+          id: p.id,
+          isParcelOnly: true,
+          attempt_time: p.updatedAt || p.createdAt,
+          status: 'Attempt 1',
+          failure_reason: p.comments || 'Delivery Attempt Failed',
+          shipper_advice: null,
+          advice_status: p.status === 'Ready To Return' || p.status === 'Return to Shipper' ? 'Failed' : 'Awaiting advice',
+          createdAt: p.createdAt,
+          parcel: p,
+          rider: p.rider ? { name: p.rider.name || p.rider.user?.fullName || 'Courier Rider' } : null
+        }));
+        setAttempts(mappedAttempts);
       }
     } catch (error) {
-      console.warn('Could not fetch delivery attempts, using fallback data:', error);
+      console.warn('Could not fetch delivery attempts:', error);
+      setAttempts([]);
     } finally {
       setLoading(false);
     }
@@ -210,26 +158,35 @@ export default function ShipperAdvisePage() {
         finalAdvice = `Return requested by Shipper. Reason: ${adviceText || 'Not available'}`;
       }
 
-      // 1. Update delivery attempt status
       const attemptPayload = {
         shipper_advice: finalAdvice,
-        advice_status: isReturn ? 'Failed' : 'Resolved'
+        advice_status: isReturn ? 'Failed' : 'Resolved',
       };
-      
-      await apiClient.put(`/delivery-attempts/${selectedAttempt.id}`, { data: attemptPayload });
 
-      // 2. If return, update parcel status to Ready To Return
-      if (isReturn && selectedAttempt.parcel?.id) {
-        await apiClient.put(`/parcels/${selectedAttempt.parcel.id}`, {
-          data: { status: 'Ready To Return' }
-        });
+      // 1. Update delivery attempt status if record exists
+      if (!selectedAttempt.isParcelOnly) {
+        try {
+          await apiClient.put(`/delivery-attempts/${selectedAttempt.id}`, { data: attemptPayload });
+        } catch (attErr) {
+          console.warn('Could not update delivery attempt entity:', attErr);
+        }
       }
 
-      // 3. If rerouted, update parcel address
-      if (isReroute && selectedAttempt.parcel?.id) {
-        await apiClient.put(`/parcels/${selectedAttempt.parcel.id}`, {
-          data: { recipient_address: newAddress }
-        });
+      // 2. Update parcel status & details
+      const parcelId = selectedAttempt.parcel?.id || selectedAttempt.id;
+      if (parcelId) {
+        const parcelData: any = {};
+        if (isReturn) {
+          parcelData.status = 'Ready To Return';
+        } else if (isReroute) {
+          parcelData.recipient_address = newAddress;
+        }
+        if (finalAdvice) {
+          parcelData.comments = finalAdvice;
+        }
+        if (Object.keys(parcelData).length > 0) {
+          await apiClient.put(`/parcels/${parcelId}`, { data: parcelData });
+        }
       }
 
       triggerToast(isReturn ? 'Initiated Return to Shipper.' : 'Delivery advice saved successfully.');
@@ -250,15 +207,22 @@ export default function ShipperAdvisePage() {
     }
 
     try {
-      await apiClient.put(`/delivery-attempts/${attempt.id}`, {
-        data: {
-          shipper_advice: `Return to Shipper processed automatically (${reasonText})`,
-          advice_status: 'Failed'
+      if (!attempt.isParcelOnly) {
+        try {
+          await apiClient.put(`/delivery-attempts/${attempt.id}`, {
+            data: {
+              shipper_advice: `Return to Shipper processed automatically (${reasonText})`,
+              advice_status: 'Failed'
+            }
+          });
+        } catch (attErr) {
+          console.warn('Could not update delivery attempt entity:', attErr);
         }
-      });
+      }
 
-      if (attempt.parcel?.id) {
-        await apiClient.put(`/parcels/${attempt.parcel.id}`, {
+      const parcelId = attempt.parcel?.id || attempt.id;
+      if (parcelId) {
+        await apiClient.put(`/parcels/${parcelId}`, {
           data: { status: 'Ready To Return' }
         });
       }

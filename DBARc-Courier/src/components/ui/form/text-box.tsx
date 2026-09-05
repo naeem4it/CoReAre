@@ -66,7 +66,9 @@ export function TextBox<TFieldValues extends FieldValues>({
               : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary",
             className
           )}
-          {...register(name)}
+          {...register(name, props.type === 'number' ? {
+            setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : isNaN(Number(v)) ? v : Number(v))
+          } : undefined)}
           {...props}
         />
         {rightElement && (
@@ -151,7 +153,7 @@ export function SearchableInputText<TFieldValues extends FieldValues>({
               : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary",
             className
           )}
-          {...register(name)}
+          {...register(name, props.type === 'number' ? { valueAsNumber: true } : undefined)}
           {...props}
         />
         <datalist id={datalistId}>

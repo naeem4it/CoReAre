@@ -2,7 +2,9 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Download, Upload, FileSpreadsheet, Trash2, Save, RefreshCw, CheckCircle2, FileText } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, Trash2, Save, RefreshCw, CheckCircle2, FileText, AlertCircle } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
+import { RiderService, ArrivalService } from '@/services/api';
 
 interface BulkShipmentItem {
   id: string;
@@ -13,20 +15,45 @@ interface BulkShipmentItem {
 
 export default function OperationsBulkArrivalsPage() {
   const [batchId, setBatchId] = React.useState<string>(`BAR-${Math.floor(100000 + Math.random() * 900000)}`);
-  const [selectedRider, setSelectedRider] = React.useState<string>('Zulqadar');
+  const [riders, setRiders] = React.useState<any[]>([]);
+  const [selectedRiderId, setSelectedRiderId] = React.useState<string>('');
   const [selectedFileName, setSelectedFileName] = React.useState<string>('');
   const [isLoadingFile, setIsLoadingFile] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const [shipments, setShipments] = React.useState<BulkShipmentItem[]>([
-    { id: '1', shipmentNumber: '400767519', pieces: 1, weight: 1.2 },
-    { id: '2', shipmentNumber: '400763641', pieces: 1, weight: 1.2 },
-    { id: '3', shipmentNumber: '400767438', pieces: 1, weight: 1.2 },
-    { id: '4', shipmentNumber: '400765987', pieces: 1, weight: 1.2 },
-    { id: '5', shipmentNumber: '400767489', pieces: 1, weight: 1.2 }
-  ]);
+  const [shipments, setShipments] = React.useState<BulkShipmentItem[]>([]);
+
+  // Toast notification
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+    show: false,
+    msg: '',
+    type: 'success',
+  });
+
+  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
+
+  // Fetch real active riders from backend
+  React.useEffect(() => {
+    const fetchRiders = async () => {
+      try {
+        const res = await RiderService.getAll('?filters[status][$ne]=inactive');
+        const ridersList = res.data || [];
+        setRiders(ridersList);
+        if (ridersList.length > 0) {
+          setSelectedRiderId(String(ridersList[0].id));
+        }
+      } catch (err) {
+        console.warn('Could not load riders list:', err);
+      }
+    };
+    fetchRiders();
+  }, []);
 
   const handleDownloadFormat = () => {
-    const csvContent = "data:text/csv;charset=utf-8,CN,WEIGHT\n400767519,1.2\n400763641,1.2\n400767438,1.2\n";
+    const csvContent = "data:text/csv;charset=utf-8,CN,WEIGHT,PIECES\nDBA-100234,1.2,1\nDBA-100235,0.8,1\n";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -44,18 +71,66 @@ export default function OperationsBulkArrivalsPage() {
     setSelectedFileName(file.name);
     setIsLoadingFile(true);
 
-    setTimeout(() => {
-      // Simulate parsed items from Excel sheet
-      const parsedItems: BulkShipmentItem[] = [
-        { id: Date.now().toString() + '1', shipmentNumber: '400763675', pieces: 1, weight: 1.2 },
-        { id: Date.now().toString() + '2', shipmentNumber: '400765956', pieces: 1, weight: 1.2 },
-        { id: Date.now().toString() + '3', shipmentNumber: '400764256', pieces: 1, weight: 1.2 },
-        { id: Date.now().toString() + '4', shipmentNumber: '400763687', pieces: 1, weight: 1.2 },
-        { id: Date.now().toString() + '5', shipmentNumber: '400763543', pieces: 1, weight: 1.2 },
-      ];
-      setShipments(prev => [...parsedItems, ...prev]);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) {
+          triggerToast('Uploaded file appears to be empty.', 'error');
+          setIsLoadingFile(false);
+          return;
+        }
+
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          triggerToast('No data rows found in uploaded file.', 'error');
+          setIsLoadingFile(false);
+          return;
+        }
+
+        const headerLine = lines[0].toLowerCase();
+        const headers = headerLine.split(/,|\t/).map(h => h.trim().replace(/['"]/g, ''));
+        const cnIndex = headers.findIndex(h => h === 'cn' || h.includes('tracking') || h.includes('shipment') || h.includes('number'));
+        const wtIndex = headers.findIndex(h => h === 'weight' || h.includes('wt'));
+        const pcsIndex = headers.findIndex(h => h === 'pieces' || h.includes('pcs') || h.includes('qty'));
+
+        const parsedItems: BulkShipmentItem[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(/,|\t/).map(c => c.trim().replace(/['"]/g, ''));
+          const cnVal = cnIndex !== -1 ? cols[cnIndex] : cols[0];
+          if (!cnVal) continue;
+
+          const wtVal = wtIndex !== -1 && cols[wtIndex] ? parseFloat(cols[wtIndex]) : 1.0;
+          const pcsVal = pcsIndex !== -1 && cols[pcsIndex] ? parseInt(cols[pcsIndex], 10) : 1;
+
+          parsedItems.push({
+            id: `row-${i}-${Date.now()}`,
+            shipmentNumber: cnVal.toUpperCase().replace('#', ''),
+            weight: isNaN(wtVal) ? 1.0 : wtVal,
+            pieces: isNaN(pcsVal) ? 1 : pcsVal,
+          });
+        }
+
+        if (parsedItems.length === 0) {
+          triggerToast('No valid shipment rows could be extracted.', 'error');
+        } else {
+          setShipments(prev => [...parsedItems, ...prev]);
+          triggerToast(`Successfully parsed ${parsedItems.length} shipment entries.`, 'success');
+        }
+      } catch (err) {
+        console.error('File parsing error:', err);
+        triggerToast('Failed to parse file. Please upload a valid CSV template.', 'error');
+      } finally {
+        setIsLoadingFile(false);
+      }
+    };
+
+    reader.onerror = () => {
+      triggerToast('Error reading the selected file.', 'error');
       setIsLoadingFile(false);
-    }, 600);
+    };
+
+    reader.readAsText(file);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -70,12 +145,59 @@ export default function OperationsBulkArrivalsPage() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (shipments.length === 0) {
-      alert('Please upload an Excel file or add shipments before saving.');
+      triggerToast('Please upload a spreadsheet or add shipments before saving.', 'error');
       return;
     }
-    alert(`Bulk arrival batch ${batchId} saved successfully for Rider ${selectedRider}! Total: ${shipments.length} shipments.`);
+
+    setIsSubmitting(true);
+    try {
+      // 1. Mark parcels as Arrived in Strapi
+      let updatedCount = 0;
+      for (const item of shipments) {
+        try {
+          const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+          const found = parcelRes.data?.data?.[0];
+          if (found) {
+            await apiClient.put(`/parcels/${found.id}`, {
+              data: {
+                status: 'Arrived',
+                arrival_date: new Date().toISOString()
+              }
+            });
+            updatedCount++;
+          }
+        } catch (e) {
+          console.warn(`Could not update parcel ${item.shipmentNumber}:`, e);
+        }
+      }
+
+      // 2. Persist Arrival Batch
+      try {
+        await ArrivalService.createBatch({
+          batch_id: batchId,
+          rider: selectedRiderId ? Number(selectedRiderId) : null,
+          total_shipments: shipments.length,
+          total_weight: totalWeight,
+          total_pieces: totalPieces,
+          scanned_items: shipments,
+          arrival_date: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('Batch entity notice:', e);
+      }
+
+      triggerToast(`Batch ${batchId} saved! ${shipments.length} parcels processed (${updatedCount} updated in system).`, 'success');
+      setBatchId(`BAR-${Math.floor(100000 + Math.random() * 900000)}`);
+      setShipments([]);
+      setSelectedFileName('');
+    } catch (err) {
+      console.error('Save error:', err);
+      triggerToast('Failed to save bulk arrivals batch.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const totalPieces = React.useMemo(() => shipments.reduce((acc, curr) => acc + curr.pieces, 0), [shipments]);
@@ -95,7 +217,8 @@ export default function OperationsBulkArrivalsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleSave}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              disabled={isSubmitting}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <Save className="w-4 h-4" /> Save
             </button>
@@ -123,16 +246,18 @@ export default function OperationsBulkArrivalsPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Rider</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Rider (Optional)</label>
               <select
-                value={selectedRider}
-                onChange={(e) => setSelectedRider(e.target.value)}
+                value={selectedRiderId}
+                onChange={(e) => setSelectedRiderId(e.target.value)}
                 className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
               >
-                <option value="Zulqadar">Zulqadar (Rider #2022)</option>
-                <option value="Hamza Baloch">Hamza Baloch (Rider #2851)</option>
-                <option value="Rahat Yousuf">Rahat Yousuf (Rider #3253)</option>
-                <option value="Saleem Usman">Saleem Usman (Rider #3254)</option>
+                <option value="">— No Rider Assigned —</option>
+                {riders.map((r: any) => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name || r.attributes?.name || `Rider #${r.id}`}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

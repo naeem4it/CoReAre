@@ -2,246 +2,351 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import { InvoiceService } from '@/services/api';
+import { Download, Filter, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+
+interface InvoiceItem {
+  id: number;
+  attributes?: {
+    invoice_number?: string;
+    invoice_date?: string;
+    period_start?: string;
+    period_end?: string;
+    total_charges?: number;
+    status?: 'Paid' | 'Pending' | 'Overdue';
+    shipper?: {
+      data?: {
+        id: number;
+        attributes?: {
+          name?: string;
+        };
+      };
+    };
+  };
+  invoice_number?: string;
+  invoice_date?: string;
+  period_start?: string;
+  period_end?: string;
+  total_charges?: number;
+  status?: 'Paid' | 'Pending' | 'Overdue';
+  shipper?: any;
+}
 
 export default function CustomerInvoicePage() {
+  const [invoices, setInvoices] = React.useState<InvoiceItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [selectedStatus, setSelectedStatus] = React.useState<'All' | 'Paid' | 'Pending' | 'Overdue'>('All');
   const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
+  const [page, setPage] = React.useState(1);
+  const [pageSize] = React.useState(10);
+  const [totalCount, setTotalCount] = React.useState(0);
 
-  const handleRowClick = (index: number) => {
-    setSelectedRow(index === selectedRow ? null : index);
+  const fetchInvoices = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      let query = `?populate=*&sort[0]=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}`;
+      if (selectedStatus !== 'All') {
+        query += `&filters[status][$eq]=${selectedStatus}`;
+      }
+      const res = await InvoiceService.getAll(query);
+      const data = res?.data || [];
+      setInvoices(data);
+      setTotalCount(res?.meta?.pagination?.total || data.length);
+    } catch (err) {
+      console.error('Error fetching customer invoices:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, pageSize, selectedStatus]);
+
+  React.useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  // Helper to extract fields regardless of Strapi v4 response format
+  const getField = (inv: InvoiceItem, field: string) => {
+    return (inv as any)[field] ?? inv.attributes?.[field as keyof typeof inv.attributes];
   };
 
-  const getRowClassName = (index: number, baseClass: string) => {
-    const isSelected = selectedRow === index;
-    return `${baseClass} transition-colors group cursor-pointer ${isSelected ? 'bg-primary-container/5 ring-1 ring-primary/20' : 'hover:bg-surface-container-low'}`;
+  const getShipperName = (inv: InvoiceItem) => {
+    const rawShipper = (inv as any).shipper ?? inv.attributes?.shipper;
+    if (!rawShipper) return 'Standard Corporate';
+    if (rawShipper.name) return rawShipper.name;
+    if (rawShipper.data?.attributes?.name) return rawShipper.data.attributes.name;
+    return 'Standard Corporate';
+  };
+
+  // Aggregate metrics
+  const totalInvoiced = React.useMemo(() => {
+    return invoices.reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
+  }, [invoices]);
+
+  const pendingAmount = React.useMemo(() => {
+    return invoices
+      .filter((inv) => getField(inv, 'status') === 'Pending')
+      .reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
+  }, [invoices]);
+
+  const overdueAmount = React.useMemo(() => {
+    return invoices
+      .filter((inv) => getField(inv, 'status') === 'Overdue')
+      .reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
+  }, [invoices]);
+
+  const paidCount = React.useMemo(() => {
+    return invoices.filter((inv) => getField(inv, 'status') === 'Paid').length;
+  }, [invoices]);
+
+  const paidRate = invoices.length > 0 ? ((paidCount / invoices.length) * 100).toFixed(1) : '0';
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  const handleExportCSV = () => {
+    const header = 'Invoice #,Customer,Date,Period,Charges,Status\n';
+    const rows = invoices.map((inv) => {
+      const invNum = getField(inv, 'invoice_number') || `INV-${inv.id}`;
+      const customer = getShipperName(inv);
+      const date = getField(inv, 'invoice_date') || '';
+      const period = `${getField(inv, 'period_start') || ''} - ${getField(inv, 'period_end') || ''}`;
+      const charges = getField(inv, 'total_charges') || 0;
+      const status = getField(inv, 'status') || 'Pending';
+      return `"${invNum}","${customer}","${date}","${period}",${charges},"${status}"`;
+    });
+    const blob = new Blob([header + rows.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `customer_invoices_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
   };
 
   return (
     <PortalLayout>
-      <div className="flex-1 p-lg">
-        <div className="max-w-[1280px] mx-auto">
+      <div className="flex-1 p-lg pb-16">
+        <div className="max-w-[1440px] mx-auto space-y-6">
           {/* Breadcrumbs & Header Actions */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-md mb-lg">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-md">
             <div>
               <nav className="flex items-center gap-2 text-outline font-label-md text-label-md mb-xs">
-                <a className="hover:text-primary" href="#">Customers</a>
+                <span>Customers</span>
                 <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                <span className="text-on-surface-variant">Invoices</span>
+                <span className="text-on-surface-variant font-medium">Invoices</span>
               </nav>
               <h1 className="font-headline-lg text-headline-lg text-on-surface">Customer Invoices</h1>
-              <p className="font-body-md text-body-md text-outline">Manage billing cycles and payment history for corporate partners.</p>
+              <p className="font-body-md text-body-md text-outline">Manage billing cycles, customer statements, and payment status.</p>
             </div>
-            <div className="flex items-center gap-sm">
-              <button className="flex items-center gap-xs px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors">
-                <span className="material-symbols-outlined text-[18px]">filter_list</span>
-                Filter
-              </button>
-              <button className="flex items-center gap-xs px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors">
-                <span className="material-symbols-outlined text-[18px]">download</span>
+            <div className="flex items-center gap-sm flex-wrap">
+              <div className="flex items-center bg-surface-container-lowest border border-outline-variant rounded-lg p-1">
+                {(['All', 'Paid', 'Pending', 'Overdue'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => {
+                      setSelectedStatus(status);
+                      setPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      selectedStatus === status
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-outline hover:text-on-surface'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-xs px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors"
+              >
+                <Download className="w-4 h-4" />
                 Export
               </button>
-              <button className="flex items-center gap-xs px-md py-2 bg-primary text-white rounded-lg font-label-md text-label-md hover:bg-primary/90 transition-colors">
-                <span className="material-symbols-outlined text-[18px]">receipt</span>
-                Generate Invoice
+              <button
+                onClick={() => fetchInvoices()}
+                disabled={isLoading}
+                className="flex items-center gap-xs px-md py-2 bg-primary text-white rounded-lg font-label-md text-label-md hover:bg-primary/90 transition-colors disabled:opacity-60"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
               </button>
             </div>
           </div>
-          
-          {/* KPI Cards (Bento Style) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md mb-xl">
-            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl hover:shadow-sm transition-shadow">
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md">
+            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-xs">
               <div className="flex justify-between items-start mb-xs">
-                <span className="font-label-md text-label-md text-outline uppercase">Total Invoiced</span>
-                <div className="bg-primary/10 p-2 rounded-lg">
-                  <span className="material-symbols-outlined text-primary text-[20px]">monetization_on</span>
+                <span className="font-label-md text-label-md text-outline uppercase font-semibold">Total Invoiced</span>
+                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                  <Receipt className="w-5 h-5" />
                 </div>
               </div>
-              <p className="font-display-lg text-display-lg text-on-surface">$124.5k</p>
-              <div className="flex items-center gap-xs mt-xs text-primary font-label-md text-label-md">
-                <span className="material-symbols-outlined text-[14px]">trending_up</span>
-                <span>+12.4% vs last month</span>
+              <p className="font-display-lg text-2xl font-bold text-on-surface">
+                Rs.{totalInvoiced.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-xs">
+                <span>{invoices.length} invoices on page</span>
               </div>
             </div>
-            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl hover:shadow-sm transition-shadow">
+
+            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-xs">
               <div className="flex justify-between items-start mb-xs">
-                <span className="font-label-md text-label-md text-outline uppercase">Pending</span>
-                <div className="bg-tertiary/10 p-2 rounded-lg">
-                  <span className="material-symbols-outlined text-tertiary text-[20px]">pending_actions</span>
+                <span className="font-label-md text-label-md text-outline uppercase font-semibold">Pending</span>
+                <div className="bg-amber-500/10 p-2 rounded-lg text-amber-600">
+                  <Clock className="w-5 h-5" />
                 </div>
               </div>
-              <p className="font-display-lg text-display-lg text-on-surface">$18.2k</p>
-              <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-label-md">
-                <span>7 invoices awaiting payment</span>
+              <p className="font-display-lg text-2xl font-bold text-amber-600">
+                Rs.{pendingAmount.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-xs">
+                <span>Awaiting settlement</span>
               </div>
             </div>
-            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl hover:shadow-sm transition-shadow">
+
+            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-xs">
               <div className="flex justify-between items-start mb-xs">
-                <span className="font-label-md text-label-md text-outline uppercase">Overdue</span>
-                <div className="bg-error/10 p-2 rounded-lg">
-                  <span className="material-symbols-outlined text-error text-[20px]">warning</span>
+                <span className="font-label-md text-label-md text-outline uppercase font-semibold">Overdue</span>
+                <div className="bg-error/10 p-2 rounded-lg text-error">
+                  <AlertTriangle className="w-5 h-5" />
                 </div>
               </div>
-              <p className="font-display-lg text-display-lg text-on-surface">$4.1k</p>
-              <div className="flex items-center gap-xs mt-xs text-error font-label-md text-label-md">
-                <span className="material-symbols-outlined text-[14px]">error</span>
-                <span>Action required on 2 items</span>
+              <p className="font-display-lg text-2xl font-bold text-error">
+                Rs.{overdueAmount.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-xs mt-xs text-error font-label-md text-xs">
+                <span>Action required</span>
               </div>
             </div>
-            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl hover:shadow-sm transition-shadow">
+
+            <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-xs">
               <div className="flex justify-between items-start mb-xs">
-                <span className="font-label-md text-label-md text-outline uppercase">Paid Rate</span>
-                <div className="bg-secondary/10 p-2 rounded-lg">
-                  <span className="material-symbols-outlined text-secondary text-[20px]">verified</span>
+                <span className="font-label-md text-label-md text-outline uppercase font-semibold">Paid Rate</span>
+                <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-600">
+                  <CheckCircle className="w-5 h-5" />
                 </div>
               </div>
-              <p className="font-display-lg text-display-lg text-on-surface">94.2%</p>
-              <div className="flex items-center gap-xs mt-xs text-primary font-label-md text-label-md">
-                <span className="material-symbols-outlined text-[14px]">trending_up</span>
-                <span>+2.1% improvement</span>
+              <p className="font-display-lg text-2xl font-bold text-emerald-600">{paidRate}%</p>
+              <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-xs">
+                <span>{paidCount} paid of {invoices.length}</span>
               </div>
             </div>
           </div>
-          
-          {/* Velocity Corporate Table Container */}
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+
+          {/* Table Container */}
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-surface-container-low border-b border-outline-variant">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-surface-container-low border-b border-outline-variant font-bold text-outline uppercase tracking-wider">
                   <tr>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider">
-                      <div className="flex items-center gap-xs">
-                        Invoice #
-                        <span className="material-symbols-outlined text-[16px]">expand_more</span>
-                      </div>
-                    </th>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider">Date</th>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider">Period</th>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider">Charges</th>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider">Status</th>
-                    <th className="px-md py-4 font-label-md text-label-md text-outline uppercase tracking-wider text-right">Actions</th>
+                    <th className="px-md py-3.5">Invoice #</th>
+                    <th className="px-md py-3.5">Customer</th>
+                    <th className="px-md py-3.5">Date</th>
+                    <th className="px-md py-3.5">Billing Period</th>
+                    <th className="px-md py-3.5 text-right">Total Charges</th>
+                    <th className="px-md py-3.5 text-center">Status</th>
+                    <th className="px-md py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-outline-variant/50">
-                  {/* Row 1 */}
-                  <tr className={getRowClassName(0, '')} onClick={() => handleRowClick(0)}>
-                    <td className="px-md py-4">
-                      <span className="font-tabular-nums text-tabular-nums text-primary font-semibold">INV-2024-0012</span>
-                    </td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface">Oct 12, 2024</td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface-variant">Sep 01 - Sep 30</td>
-                    <td className="px-md py-4 font-tabular-nums text-tabular-nums font-bold text-on-surface">$2,450.00</td>
-                    <td className="px-md py-4">
-                      <span className="px-2 py-1 bg-primary-container text-white text-[10px] font-bold rounded-lg uppercase tracking-widest">PAID</span>
-                    </td>
-                    <td className="px-md py-4 text-right">
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">visibility</button>
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">more_vert</button>
-                    </td>
-                  </tr>
-                  {/* Row 2 */}
-                  <tr className={getRowClassName(1, '')} onClick={() => handleRowClick(1)}>
-                    <td className="px-md py-4">
-                      <span className="font-tabular-nums text-tabular-nums text-primary font-semibold">INV-2024-0011</span>
-                    </td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface">Oct 10, 2024</td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface-variant">Sep 01 - Sep 30</td>
-                    <td className="px-md py-4 font-tabular-nums text-tabular-nums font-bold text-on-surface">$1,120.50</td>
-                    <td className="px-md py-4">
-                      <span className="px-2 py-1 bg-primary-container text-white text-[10px] font-bold rounded-lg uppercase tracking-widest">PAID</span>
-                    </td>
-                    <td className="px-md py-4 text-right">
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">visibility</button>
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">more_vert</button>
-                    </td>
-                  </tr>
-                  {/* Row 3 */}
-                  <tr className={getRowClassName(2, '')} onClick={() => handleRowClick(2)}>
-                    <td className="px-md py-4">
-                      <span className="font-tabular-nums text-tabular-nums text-primary font-semibold">INV-2024-0010</span>
-                    </td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface">Oct 05, 2024</td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface-variant">Aug 01 - Aug 31</td>
-                    <td className="px-md py-4 font-tabular-nums text-tabular-nums font-bold text-on-surface">$5,680.00</td>
-                    <td className="px-md py-4">
-                      <span className="px-2 py-1 bg-tertiary-container text-white text-[10px] font-bold rounded-lg uppercase tracking-widest">PENDING</span>
-                    </td>
-                    <td className="px-md py-4 text-right">
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">visibility</button>
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">more_vert</button>
-                    </td>
-                  </tr>
-                  {/* Row 4 */}
-                  <tr className={getRowClassName(3, 'bg-error/5')} onClick={() => handleRowClick(3)}>
-                    <td className="px-md py-4">
-                      <span className="font-tabular-nums text-tabular-nums text-primary font-semibold">INV-2024-0009</span>
-                    </td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface">Sep 28, 2024</td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface-variant">Aug 01 - Aug 31</td>
-                    <td className="px-md py-4 font-tabular-nums text-tabular-nums font-bold text-on-surface">$890.00</td>
-                    <td className="px-md py-4">
-                      <span className="px-2 py-1 bg-error text-white text-[10px] font-bold rounded-lg uppercase tracking-widest">OVERDUE</span>
-                    </td>
-                    <td className="px-md py-4 text-right">
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">visibility</button>
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">more_vert</button>
-                    </td>
-                  </tr>
-                  {/* Row 5 */}
-                  <tr className={getRowClassName(4, '')} onClick={() => handleRowClick(4)}>
-                    <td className="px-md py-4">
-                      <span className="font-tabular-nums text-tabular-nums text-primary font-semibold">INV-2024-0008</span>
-                    </td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface">Sep 15, 2024</td>
-                    <td className="px-md py-4 font-body-md text-body-md text-on-surface-variant">Jul 01 - Jul 31</td>
-                    <td className="px-md py-4 font-tabular-nums text-tabular-nums font-bold text-on-surface">$12,400.00</td>
-                    <td className="px-md py-4">
-                      <span className="px-2 py-1 bg-primary-container text-white text-[10px] font-bold rounded-lg uppercase tracking-widest">PAID</span>
-                    </td>
-                    <td className="px-md py-4 text-right">
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">visibility</button>
-                      <button className="material-symbols-outlined text-outline hover:text-primary p-1 rounded transition-all">more_vert</button>
-                    </td>
-                  </tr>
+                <tbody className="divide-y divide-outline-variant/50 font-semibold text-on-surface">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-md py-12 text-center text-outline">
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                          <span>Loading invoice records...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : invoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-md py-12 text-center text-outline">
+                        No invoices found for the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    invoices.map((inv, index) => {
+                      const id = inv.id;
+                      const invNumber = getField(inv, 'invoice_number') || `INV-${id}`;
+                      const customer = getShipperName(inv);
+                      const invDate = getField(inv, 'invoice_date') || '-';
+                      const start = getField(inv, 'period_start');
+                      const end = getField(inv, 'period_end');
+                      const period = start && end ? `${start} - ${end}` : '-';
+                      const charges = Number(getField(inv, 'total_charges')) || 0;
+                      const status = (getField(inv, 'status') || 'Pending') as 'Paid' | 'Pending' | 'Overdue';
+                      const isSelected = selectedRow === index;
+
+                      return (
+                        <tr
+                          key={id}
+                          onClick={() => setSelectedRow(isSelected ? null : index)}
+                          className={`hover:bg-surface-container-low transition-colors cursor-pointer ${
+                            isSelected ? 'bg-primary/5' : ''
+                          }`}
+                        >
+                          <td className="px-md py-3.5 font-bold font-mono text-primary">{invNumber}</td>
+                          <td className="px-md py-3.5 font-bold">{customer}</td>
+                          <td className="px-md py-3.5 text-outline font-normal">{invDate}</td>
+                          <td className="px-md py-3.5 text-outline font-normal">{period}</td>
+                          <td className="px-md py-3.5 text-right font-bold text-on-surface">
+                            Rs.{charges.toLocaleString()}
+                          </td>
+                          <td className="px-md py-3.5 text-center">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                status === 'Paid'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : status === 'Overdue'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {status}
+                            </span>
+                          </td>
+                          <td className="px-md py-3.5 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                alert(`Viewing details for invoice ${invNumber}`);
+                              }}
+                              className="text-primary hover:underline text-xs font-bold"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-            {/* Pagination (Velocity Corporate Style) */}
-            <div className="px-md py-md border-t border-outline-variant flex items-center justify-between bg-surface-container-lowest">
-              <p className="font-body-md text-body-md text-outline">Showing <span className="font-bold text-on-surface">1-5</span> of <span className="font-bold text-on-surface">128</span> invoices</p>
-              <div className="flex items-center gap-xs">
-                <button className="p-2 border border-outline-variant rounded-lg text-outline hover:bg-surface-container-low transition-all disabled:opacity-50" disabled>
-                  <span className="material-symbols-outlined">chevron_left</span>
+
+            {/* Pagination */}
+            <div className="px-md py-3.5 border-t border-outline-variant flex items-center justify-between bg-surface-container-lowest text-xs text-outline">
+              <p>
+                Showing {invoices.length} of {totalCount} invoices
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || isLoading}
+                  className="px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-low disabled:opacity-40"
+                >
+                  Prev
                 </button>
-                <button className="px-4 py-2 bg-primary text-white rounded-lg font-label-md text-label-md transition-all">1</button>
-                <button className="px-4 py-2 border border-outline-variant text-on-surface rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-all">2</button>
-                <button className="px-4 py-2 border border-outline-variant text-on-surface rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-all">3</button>
-                <span className="px-2 text-outline">...</span>
-                <button className="px-4 py-2 border border-outline-variant text-on-surface rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-all">24</button>
-                <button className="p-2 border border-outline-variant rounded-lg text-outline hover:bg-surface-container-low transition-all">
-                  <span className="material-symbols-outlined">chevron_right</span>
+                <span className="px-2 font-bold text-on-surface">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || isLoading}
+                  className="px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-low disabled:opacity-40"
+                >
+                  Next
                 </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Reference Preview Card (Mocking the legacy screen for redesign context) */}
-          <div className="mt-xl">
-            <h2 className="font-headline-md text-headline-md text-on-surface mb-md">Quick Summary Context</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-md">
-              <div className="lg:col-span-2 relative h-[300px] rounded-xl overflow-hidden border border-outline-variant shadow-lg group">
-                <img alt="Legacy UI Reference" className="w-full h-full object-cover filter contrast-125 opacity-40 transition-opacity duration-700 group-hover:opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRFVbKYY_rSSge4waXB8Yofx7CjcsuR6_CYzYOqzMqIzq6fbIUkiH37Ntxn7y5f5K1u4YxZstTZa4O-W5gHdTAsehrXnSGr2lK2o8n8dRKikblNCvTfRNWTBzidNAOxpS46sXcLchEvrdq0jx2w9ipdQJ0WC6LYJZK5x57mRLA8kpuU9759O3sgoe-eVnUOlcE0FvLFMW_AST5R2ZVYWn53R-ig8ghGqHYyAi-0XPxHhWdwuKOUQiAM9gv9CEq_yEu9He2ZE0Y8zk" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-lg">
-                  <span className="px-3 py-1 bg-primary text-white text-[10px] font-bold rounded-full w-fit mb-xs">SOURCE DESIGN REFERENCE</span>
-                  <h3 className="text-white font-headline-md text-headline-md">Historical Data Snapshot</h3>
-                  <p className="text-white/70 font-body-md text-body-md">Redesigned from legacy to follow Velocity Corporate aesthetic guidelines.</p>
-                </div>
-              </div>
-              <div className="bg-surface-container-lowest border border-outline-variant p-md rounded-xl flex flex-col justify-center items-center text-center">
-                <div className="w-16 h-16 bg-primary-container/10 rounded-full flex items-center justify-center mb-md">
-                  <span className="material-symbols-outlined text-primary text-[32px]">analytics</span>
-                </div>
-                <h3 className="font-headline-md text-headline-md text-on-surface">Data Fidelity</h3>
-                <p className="font-body-md text-body-md text-outline mt-xs mb-md">Enhanced table logic with high-density data fields and status indicators.</p>
-                <button className="w-full py-2 bg-surface-container-high text-on-surface-variant font-label-md text-label-md rounded-lg hover:bg-surface-container-highest transition-all">View Audit Trail</button>
               </div>
             </div>
           </div>

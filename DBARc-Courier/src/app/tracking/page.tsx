@@ -30,6 +30,8 @@ import {
   FileText
 } from 'lucide-react';
 
+import { useSearchParams } from 'next/navigation';
+
 interface TrackingEvent {
   title: string;
   description: string;
@@ -38,85 +40,15 @@ interface TrackingEvent {
   isCompleted: boolean;
 }
 
-const FALLBACK_PARCELS = [
-  {
-    id: 1,
-    tracking_number: 'DBA-9823-XK',
-    recipient_name: 'Zeeshan Ahmed',
-    recipient_phone: '+92 300 1234567',
-    recipient_address: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
-    status: 'Out For delivery',
-    createdAt: new Date().toISOString(),
-    description: 'Electronics & Accessories',
-    origin: 'Lahore Hub',
-    destination: 'Karachi Central Hub',
-    rider_name: 'Muhammad Asif',
-    cod_amount: 4500,
-  },
-  {
-    id: 2,
-    tracking_number: 'DBA-1104-ZA',
-    recipient_name: 'Mariam Khan',
-    recipient_phone: '+92 321 9876543',
-    recipient_address: 'House 42, Street 5, DHA Phase 6, Karachi',
-    status: 'Delivered',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    description: 'Apparel & Textiles',
-    origin: 'Faisalabad Hub',
-    destination: 'Karachi South Hub',
-    rider_name: 'Sajid Ali',
-    cod_amount: 2800,
-  },
-  {
-    id: 3,
-    tracking_number: 'DBA-8742-MM',
-    recipient_name: 'Dr. Faisal Qureshi',
-    recipient_phone: '+92 333 4567890',
-    recipient_address: 'Aga Khan University Hospital, Stadium Road, Karachi',
-    status: 'booked',
-    createdAt: new Date().toISOString(),
-    description: 'Medical Supplies',
-    origin: 'Karachi Central Hub',
-    destination: 'Karachi East Hub',
-    rider_name: 'Unassigned',
-    cod_amount: 12500,
-  },
-  {
-    id: 4,
-    tracking_number: 'DBA-4591-RS',
-    recipient_name: 'Bilal Hassan',
-    recipient_phone: '+92 312 3456789',
-    recipient_address: 'Shop 14, Commercial Market, Satellite Town, Rawalpindi',
-    status: 'Failed Attempt',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    description: 'Auto Spare Parts',
-    origin: 'Islamabad Hub',
-    destination: 'Rawalpindi Hub',
-    rider_name: 'Usman Tariq',
-    cod_amount: 6300,
-  },
-  {
-    id: 5,
-    tracking_number: 'DBA-3301-KL',
-    recipient_name: 'Ayesha Siddiqui',
-    recipient_phone: '+92 345 6789012',
-    recipient_address: 'Villa 18, Block B, Naval Anchorage, Islamabad',
-    status: 'Arrived',
-    createdAt: new Date(Date.now() - 43200000).toISOString(),
-    description: 'Home Decor & Crafts',
-    origin: 'Multan Hub',
-    destination: 'Islamabad Central Hub',
-    rider_name: 'Tahir Shah',
-    cod_amount: 3200,
-  }
-];
+function TrackingPageContent() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams?.get('search') || '';
 
-export default function TrackingPage() {
-  const [parcels, setParcels] = React.useState<any[]>(FALLBACK_PARCELS);
+  const [parcels, setParcels] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   // Filter States
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const [searchQuery, setSearchQuery] = React.useState(initialSearch);
   const [statusFilter, setStatusFilter] = React.useState('');
   const [dateFrom, setDateFrom] = React.useState('');
   const [dateTo, setDateTo] = React.useState('');
@@ -134,7 +66,7 @@ export default function TrackingPage() {
   const fetchParcels = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/parcels?populate=*');
+      const response = await apiClient.get('/parcels?populate=*&sort[0]=createdAt:desc');
       const data = response.data?.data || [];
       if (data.length > 0) {
         const mapped = data.map((item: any) => ({
@@ -146,15 +78,18 @@ export default function TrackingPage() {
           status: item.status || 'booked',
           createdAt: item.createdAt,
           description: item.description || 'General Cargo',
-          origin: item.origin_hub?.name || 'Origin Hub',
-          destination: item.destination_hub?.name || 'Destination Hub',
-          rider_name: item.rider?.user?.fullName || item.rider?.user?.username || 'Unassigned',
+          origin: item.origin_hub?.name || item.source_city?.name || 'Origin Hub',
+          destination: item.destination_hub?.name || item.destination_city?.name || 'Destination Hub',
+          rider_name: item.rider?.user?.fullName || item.rider?.user?.username || item.rider?.name || 'Unassigned',
           cod_amount: item.cod_amount || 0,
         }));
         setParcels(mapped);
+      } else {
+        setParcels([]);
       }
     } catch (error) {
-      console.warn('Could not fetch parcels, using fallbacks:', error);
+      console.warn('Could not fetch parcels:', error);
+      setParcels([]);
     } finally {
       setLoading(false);
     }
@@ -685,5 +620,17 @@ DBArc Logistics Team`;
       )}
 
     </PortalLayout>
+  );
+}
+
+export default function TrackingPage() {
+  return (
+    <React.Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <TrackingPageContent />
+    </React.Suspense>
   );
 }

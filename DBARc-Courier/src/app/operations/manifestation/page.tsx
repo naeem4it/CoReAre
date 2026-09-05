@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { List, Save, Printer, RefreshCw, Barcode, Shield, MapPin, X, Download, FileSpreadsheet, Search, CheckCircle2 } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
 
 interface ManifestItem {
   id: string;
@@ -28,72 +29,145 @@ interface ManifestShipment {
   status: string;
 }
 
-const PAST_MANIFESTS: ManifestItem[] = [
-  { id: '1', manifestNumber: 3741, date: '2026-06-06 08:31:05', manifestType: 'Station', thirdParty: '-', station: 'Station 2', sealNo: 'SL-99481', cityCode: 'LHE' },
-  { id: '2', manifestNumber: 3740, date: '2026-06-05 21:02:18', manifestType: 'Station', thirdParty: '-', station: 'Station 1', sealNo: 'SL-99480', cityCode: 'LHE' },
-  { id: '3', manifestNumber: 3739, date: '2026-06-05 20:06:34', manifestType: '3PL Partner', thirdParty: 'Trax Logistics', station: 'Station 2', sealNo: 'SL-99475', cityCode: 'LHE' },
-  { id: '4', manifestNumber: 3738, date: '2026-06-05 19:36:11', manifestType: 'Station', thirdParty: '-', station: 'Station 2', sealNo: 'SL-99470', cityCode: 'LHE' },
-  { id: '5', manifestNumber: 3737, date: '2026-06-05 16:04:09', manifestType: 'Station', thirdParty: '-', station: 'Station 2', sealNo: 'SL-99462', cityCode: 'LYP' }
-];
 
 export default function OperationsManifestationPage() {
-  const [manifestNumber, setManifestNumber] = React.useState<number>(3742);
+  const [manifestNumber, setManifestNumber] = React.useState<number>(() => Math.floor(1000 + Math.random() * 9000));
   const [manifestType, setManifestType] = React.useState<string>('Station');
-  const [selectedStation, setSelectedStation] = React.useState<string>('Lahore Hub');
-  const [sealNo, setSealNo] = React.useState<string>('SL-99485');
+  const [selectedStation, setSelectedStation] = React.useState<string>('');
+  const [sealNo, setSealNo] = React.useState<string>(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
   const [scanBarcode, setScanBarcode] = React.useState<string>('');
-  const [fromDate, setFromDate] = React.useState<string>('2026-06-01');
-  const [toDate, setToDate] = React.useState<string>('2026-06-06');
+  const [fromDate, setFromDate] = React.useState<string>('');
+  const [toDate, setToDate] = React.useState<string>('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
+
+  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
+
+  // Past manifests from backend
+  const [pastManifests, setPastManifests] = React.useState<ManifestItem[]>([]);
+
+  const fetchPastManifests = async () => {
+    try {
+      const res = await apiClient.get('/manifests?sort[0]=createdAt:desc&pagination[limit]=20');
+      const items = (res.data?.data || []).map((m: any) => ({
+        id: String(m.id),
+        manifestNumber: m.manifest_number || m.id,
+        date: m.date ? new Date(m.date).toLocaleString() : new Date(m.createdAt).toLocaleString(),
+        manifestType: m.manifest_type || 'Station',
+        thirdParty: m.third_party || '-',
+        station: m.station || '',
+        sealNo: m.seal_no || '',
+        cityCode: m.city_code || '',
+      }));
+      setPastManifests(items);
+    } catch (e) {
+      console.warn('Could not load manifests:', e);
+    }
+  };
 
   // Modal State
   const [isListModalOpen, setIsListModalOpen] = React.useState(false);
   const [modalSearch, setModalSearch] = React.useState('');
 
-  const [shipments, setShipments] = React.useState<ManifestShipment[]>([
-    {
-      id: '1',
-      shipmentNumber: '400122456',
-      bookingDate: '2026-06-04',
-      trackPolyCn: '15000910017700',
-      shipperName: "Kashee's Cosmetics",
-      consigneeName: 'Mahnoor Kaleem',
-      consigneeContact: '03110360622',
-      consigneeAddress: 'Rania Beauty Salon Multan Jinnah Town Gate Number 4 Multan',
-      cashCollect: 7500,
-      status: 'In Transit'
-    }
-  ]);
+  const [shipments, setShipments] = React.useState<ManifestShipment[]>([]);
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleAddShipment = (e?: React.FormEvent) => {
+  const handleAddShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!scanBarcode.trim()) return;
+    const code = scanBarcode.trim().toUpperCase();
+    if (!code) return;
 
-    const newItem: ManifestShipment = {
-      id: Date.now().toString(),
-      shipmentNumber: scanBarcode.trim(),
-      bookingDate: new Date().toISOString().split('T')[0],
-      trackPolyCn: `TRX-${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-      shipperName: 'Metro Fashion Store',
-      consigneeName: 'Zainab Ahmed',
-      consigneeContact: '03214567890',
-      consigneeAddress: 'House 45, Main Boulevard, Gulberg III, Lahore',
-      cashCollect: 3200,
-      status: 'Manifested'
-    };
+    if (shipments.some(s => s.shipmentNumber === code)) {
+      triggerToast(`Shipment ${code} already in manifest.`, 'error');
+      return;
+    }
 
-    setShipments(prev => [newItem, ...prev]);
+    try {
+      const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(code)}&populate=*`);
+      const parcel = res.data?.data?.[0];
+      const newItem: ManifestShipment = {
+        id: Date.now().toString(),
+        shipmentNumber: code,
+        bookingDate: parcel?.createdAt ? parcel.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        trackPolyCn: parcel?.poly_tracking || `TRX-${code}`,
+        shipperName: parcel?.shipper?.name || parcel?.pickup_location?.shipper?.name || 'Unknown Shipper',
+        consigneeName: parcel?.recipient_name || 'Unknown Consignee',
+        consigneeContact: parcel?.recipient_phone || '',
+        consigneeAddress: parcel?.recipient_address || '',
+        cashCollect: Number(parcel?.cod_amount) || 0,
+        status: 'Manifested',
+      };
+      setShipments(prev => [newItem, ...prev]);
+    } catch {
+      const newItem: ManifestShipment = {
+        id: Date.now().toString(),
+        shipmentNumber: code,
+        bookingDate: new Date().toISOString().split('T')[0],
+        trackPolyCn: `TRX-${code}`,
+        shipperName: 'Unknown Shipper',
+        consigneeName: 'Unknown Consignee',
+        consigneeContact: '',
+        consigneeAddress: '',
+        cashCollect: 0,
+        status: 'Manifested',
+      };
+      setShipments(prev => [newItem, ...prev]);
+    }
+
     setScanBarcode('');
     barcodeInputRef.current?.focus();
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (shipments.length === 0) {
-      alert('Please scan at least one shipment before creating manifest.');
+      triggerToast('Please scan at least one shipment before creating manifest.', 'error');
       return;
     }
-    alert(`Manifest #${manifestNumber} (Seal No: ${sealNo}) saved successfully with ${shipments.length} parcels!`);
+    setIsSubmitting(true);
+    try {
+      // Mark each parcel as Manifested in Strapi
+      for (const item of shipments) {
+        try {
+          const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+          const parcel = res.data?.data?.[0];
+          if (parcel) {
+            await apiClient.put(`/parcels/${parcel.id}`, { data: { status: 'Manifested' } });
+          }
+        } catch (e) {
+          console.warn(`Could not update ${item.shipmentNumber}:`, e);
+        }
+      }
+
+      // Persist Manifest record
+      try {
+        await apiClient.post('/manifests', {
+          data: {
+            manifest_number: manifestNumber,
+            seal_no: sealNo,
+            manifest_type: manifestType,
+            station: selectedStation,
+            total_parcels: shipments.length,
+            total_cash: shipments.reduce((a, s) => a + s.cashCollect, 0),
+            date: new Date().toISOString(),
+          }
+        });
+      } catch (e) {
+        console.warn('Manifest record notice:', e);
+      }
+
+      triggerToast(`Manifest #${manifestNumber} (Seal: ${sealNo}) saved with ${shipments.length} parcels!`, 'success');
+      setManifestNumber(prev => prev + 1);
+      setSealNo(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
+      setShipments([]);
+    } catch (err) {
+      triggerToast('Failed to save manifest.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -105,7 +179,7 @@ export default function OperationsManifestationPage() {
     }
   };
 
-  const filteredPastManifests = PAST_MANIFESTS.filter(m =>
+  const filteredPastManifests = pastManifests.filter(m =>
     m.manifestNumber.toString().includes(modalSearch) ||
     m.station.toLowerCase().includes(modalSearch.toLowerCase()) ||
     m.sealNo.toLowerCase().includes(modalSearch.toLowerCase())
@@ -113,6 +187,17 @@ export default function OperationsManifestationPage() {
 
   return (
     <PortalLayout>
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
+          toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+        }`}>
+          {toast.type === 'success'
+            ? <div className="bg-emerald-500 rounded-full p-1 text-white"><CheckCircle2 className="w-4 h-4" /></div>
+            : <div className="bg-red-500 rounded-full p-1 text-white"><Shield className="w-4 h-4" /></div>
+          }
+          <span className="text-sm font-semibold">{toast.msg}</span>
+        </div>
+      )}
       <div className="space-y-6 max-w-[1920px] w-full mx-auto p-lg pb-16">
         
         {/* Header Bar */}
@@ -130,16 +215,17 @@ export default function OperationsManifestationPage() {
               <Download className="w-4 h-4" /> Export
             </button>
             <button
-              onClick={() => setIsListModalOpen(true)}
+              onClick={() => { setIsListModalOpen(true); fetchPastManifests(); }}
               className="bg-primary hover:bg-primary-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <List className="w-4 h-4" /> Manifest List
             </button>
             <button
               onClick={handleSave}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              disabled={isSubmitting}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <Save className="w-4 h-4" /> Save
+              <Save className="w-4 h-4" /> {isSubmitting ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={() => window.print()}

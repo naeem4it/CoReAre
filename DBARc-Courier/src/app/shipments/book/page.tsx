@@ -68,24 +68,15 @@ const bookingSchema = z.object({
   
   weight: z.preprocess(
     preprocessNumber,
-    z.number({
-      required_error: 'Weight should not be empty',
-      invalid_type_error: 'Weight must be a valid number',
-    }).min(0.1, 'Weight must be at least 0.1 kg')
+    z.number({ message: 'Weight must be a valid number' }).min(0.1, 'Weight must be at least 0.1 kg')
   ),
   pieces: z.preprocess(
     preprocessNumber,
-    z.number({
-      required_error: 'Pieces should not be empty',
-      invalid_type_error: 'Pieces must be a valid number',
-    }).min(1, 'Must be at least 1 piece')
+    z.number({ message: 'Pieces must be a valid number' }).min(1, 'Must be at least 1 piece')
   ),
   codAmount: z.preprocess(
     preprocessNumber,
-    z.number({
-      required_error: 'COD amount should not be empty',
-      invalid_type_error: 'COD amount should not be empty',
-    }).min(0, 'COD amount cannot be negative')
+    z.number({ message: 'COD amount must be a valid number (enter 0 for prepaid)' }).min(0, 'COD amount cannot be negative')
   ),
   productDescription: z.string().min(2, 'Product description is required'),
   serviceType: z.string().default('Overnight'),
@@ -97,17 +88,17 @@ const bookingSchema = z.object({
   pickupLocation: z.union([z.number(), z.string()]).optional(),
   specialInstructions: z.string().optional(),
 
-  // Replacement Fields
-  referenceNo: z.string().optional(),
-  collectReplacement: z.string().default('No'),
-  parcelDetail: z.string().optional(),
+  // Replacement Fields (All Optional)
+  referenceNo: z.string().optional().or(z.literal('')),
+  collectReplacement: z.string().optional().default('No'),
+  parcelDetail: z.string().optional().or(z.literal('')),
   collectRs: z.preprocess(
     (val) => {
       if (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
         return 0;
       }
       const n = Number(val);
-      return isNaN(n) ? val : n;
+      return isNaN(n) ? 0 : n;
     },
     z.number().min(0, 'Collect Rs must be positive').optional()
   ),
@@ -144,58 +135,6 @@ interface GroupedBulkOrder {
   totalCod: number;
   createdAt: string;
 }
-
-const DEMO_BULK_ORDERS: GroupedBulkOrder[] = [
-  {
-    orderId: 'ORD-88210',
-    consigneeName: 'Zeeshan Ahmed',
-    consigneePhone: '+92 300 1234567',
-    consigneeAddress: 'Flat 402, Al-Rehman Heights, Gulshan-e-Iqbal, Karachi',
-    shipperName: 'Metro Fashion Store',
-    shipperAddress: 'Shop 12, Liberty Market, Gulberg III, Lahore',
-    shippingType: 'In-House',
-    primaryBarcode: 'DBA-88210-IH',
-    items: [
-      { itemId: 'ITM-01', itemName: 'Denim Jacket (Blue, L)', codAmount: 2500 },
-      { itemId: 'ITM-02', itemName: 'Cotton T-Shirt (White, M)', codAmount: 1500 }
-    ],
-    totalCod: 4000,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    orderId: 'ORD-88211',
-    consigneeName: 'Mariam Khan',
-    consigneePhone: '+92 321 9876543',
-    consigneeAddress: 'House 42, Street 5, DHA Phase 6, Karachi',
-    shipperName: 'Silk Threads Pakistan',
-    shipperAddress: 'Plot 88, Industrial Area, Faisalabad',
-    shippingType: '3PL',
-    primaryBarcode: 'DBA-88211-3P',
-    secondary3PLBarcode: 'TCS-99482103-PK',
-    items: [
-      { itemId: 'ITM-01', itemName: 'Embroidered Lawn Suit (Unstitched 3pc)', codAmount: 5500 }
-    ],
-    totalCod: 5500,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    orderId: 'ORD-88212',
-    consigneeName: 'Dr. Faisal Qureshi',
-    consigneePhone: '+92 333 4567890',
-    consigneeAddress: 'Aga Khan University Hospital, Stadium Road, Karachi',
-    shipperName: 'MedTech Supplies Ltd',
-    shipperAddress: 'Suite 404, Business Plaza, I.I. Chundrigar Road, Karachi',
-    shippingType: 'In-House',
-    primaryBarcode: 'DBA-88212-IH',
-    items: [
-      { itemId: 'ITM-01', itemName: 'Digital Stethoscope', codAmount: 8500 },
-      { itemId: 'ITM-02', itemName: 'Pulse Oximeter Pack', codAmount: 2200 },
-      { itemId: 'ITM-03', itemName: 'N95 Respirator Masks Box', codAmount: 1800 }
-    ],
-    totalCod: 12500,
-    createdAt: new Date().toISOString(),
-  }
-];
 
 // Validator for uploader spreadsheet rows
 const validateSpreadsheetRow = (row: any) => {
@@ -274,7 +213,7 @@ function BookShipmentForm() {
   const [offices, setOffices] = React.useState<{label: string, value: string}[]>([]);
 
   // Grouped Bulk Orders & Printing States
-  const [groupedOrders, setGroupedOrders] = React.useState<GroupedBulkOrder[]>(DEMO_BULK_ORDERS);
+  const [groupedOrders, setGroupedOrders] = React.useState<GroupedBulkOrder[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<'All' | 'In-House' | '3PL'>('All');
   const [selectedOrderForLabel, setSelectedOrderForLabel] = React.useState<GroupedBulkOrder | null>(null);
@@ -304,10 +243,7 @@ function BookShipmentForm() {
   const [editingRowId, setEditingRowId] = React.useState<string | null>(null);
   const [editFormData, setEditFormData] = React.useState<any>({});
 
-  const [uploadHistory, setUploadHistory] = React.useState<UploadHistoryItem[]>([
-    { id: '1', fileName: 'orders_karachi_june.xlsx', date: '2026-06-07 10:30 AM', count: 42, status: 'processed' },
-    { id: '2', fileName: 'bulk_delivery_orders_v2.csv', date: '2026-06-06 02:15 PM', count: 120, status: 'processed' },
-  ]);
+  const [uploadHistory, setUploadHistory] = React.useState<UploadHistoryItem[]>([]);
 
   const todayStr = React.useMemo(() => {
     const d = new Date();
@@ -631,12 +567,19 @@ function BookShipmentForm() {
             if (!line) continue;
 
             const values = line.split(',').map(v => v.trim());
-            const rowData: any = { id: `row-${i}` };
+            const rowData: any = { 
+              id: `row-${i}`,
+              serviceType: 'Overnight',
+              allowToOpen: 'No',
+              pieces: 1,
+              weight: 0.5,
+              codAmount: 0,
+            };
 
             headers.forEach((header, idx) => {
               const val = values[idx] || '';
               if (['weight', 'pieces', 'codAmount', 'collectRs'].includes(header)) {
-                rowData[header] = val ? parseFloat(val) : 0;
+                rowData[header] = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
               } else {
                 rowData[header] = val;
               }
@@ -650,43 +593,9 @@ function BookShipmentForm() {
           setBulkProgress(100);
           setBulkStatus('loaded');
         } else {
-          setTimeout(() => {
-            const mockRows = [
-              {
-                id: 'row-1',
-                consigneeName: 'Mohsin Khan',
-                consigneePhone: '+923001234567',
-                consigneeEmail: 'mohsin@example.com',
-                deliveryAddress: 'House 56, Block D, Gulshan',
-                destinationCity: 'Karachi',
-                weight: 1.2,
-                pieces: 1,
-                codAmount: 3500,
-                productDescription: 'Leather jacket',
-                serviceType: 'Overnight',
-                allowToOpen: 'Yes',
-                errors: {}
-              },
-              {
-                id: 'row-2',
-                consigneeName: 'Ayesha Bibi',
-                consigneePhone: '+923331122334',
-                consigneeEmail: 'ayesha@example.com',
-                deliveryAddress: 'Street 4, Sector G-9',
-                destinationCity: 'Islamabad',
-                weight: 0.5,
-                pieces: 1,
-                codAmount: 1500,
-                productDescription: 'Winter shawls',
-                serviceType: 'Overnight',
-                allowToOpen: 'No',
-                errors: {}
-              }
-            ];
-            setParsedRows(mockRows);
-            setBulkProgress(100);
-            setBulkStatus('loaded');
-          }, 800);
+          alert("Please save your Excel sheet as a .csv (Comma Delimited) file and upload it.");
+          setBulkStatus('idle');
+          setSelectedFile(null);
         }
       } catch (err) {
         console.error("Error reading file:", err);
@@ -805,48 +714,22 @@ function BookShipmentForm() {
     const headers = [
       'consigneeName',
       'consigneePhone',
-      'consigneeEmail',
-      'consigneeAltPhone',
       'deliveryAddress',
       'destinationCity',
-      'area',
       'weight',
       'pieces',
       'codAmount',
-      'productDescription',
-      'serviceType',
-      'allowToOpen',
-      'comments',
-      'pickupDate',
-      'pickupTimeSlot',
-      'specialInstructions',
-      'referenceNo',
-      'collectReplacement',
-      'parcelDetail',
-      'collectRs'
+      'productDescription'
     ];
     const sampleRow = [
       'John Doe',
       '+923001234567',
-      'john.doe@example.com',
-      '+923007654321',
       'House 12 Street 5 Sector F',
       'Islamabad',
-      'G-11/3',
       '1.5',
       '1',
       '2500',
-      'Leather Shoes',
-      'Overnight',
-      'Yes',
-      'Deliver in evening',
-      todayStr,
-      'Morning (09 AM - 12 PM)',
-      'Call customer before delivery',
-      'DBA-MOCK987',
-      'Yes',
-      'Exchange with brown leather boots',
-      '150'
+      'Leather Shoes'
     ];
     
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), sampleRow.join(",")].join("\n");

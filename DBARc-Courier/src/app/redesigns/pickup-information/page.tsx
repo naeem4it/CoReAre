@@ -1,4 +1,20 @@
-// This file is obsolete. The redesign has been fully integrated into the working page in src/app/pickup-information/page.tsx
-export default function ObsoletePickupInformationPage() {
-  return null;
+'use client';
+
+import * as React from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function PickupInformationRedesignPage() {
+  const router = useRouter();
+
+  React.useEffect(() => {
+    router.replace('/pickup-information');
+  }, [router]);
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="animate-spin h-8 w-8 text-primary border-4 border-solid border-current border-r-transparent rounded-full" role="status">
+        <span className="sr-only">Redirecting to Pickup Information...</span>
+      </div>
+    </div>
+  );
 }
