@@ -93,6 +93,35 @@ async function main() {
     const password = 'Password123!';
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Find or ensure Super Admin user
+    let superAdminRole = await strapi.db.query('admin::role').findOne({ where: { code: 'strapi-super-admin' } });
+    const superAdminEmail = 'naeem4it@gmail.com';
+    let adminSuperUser = await strapi.db.query('admin::user').findOne({ where: { email: superAdminEmail } });
+    if (adminSuperUser) {
+      await strapi.db.query('admin::user').update({
+        where: { id: adminSuperUser.id },
+        data: {
+          password: passwordHash,
+          isActive: true
+        }
+      });
+      console.log(`Updated Super-Admin ${superAdminEmail} password to Password123!`);
+    } else if (superAdminRole) {
+      await strapi.db.query('admin::user').create({
+        data: {
+          email: superAdminEmail,
+          username: 'naeem4it',
+          firstname: 'Naeem',
+          lastname: 'Khan',
+          password: passwordHash,
+          roles: [superAdminRole.id],
+          isActive: true,
+          registrationToken: null
+        }
+      });
+      console.log(`Created Super-Admin ${superAdminEmail} with password Password123!`);
+    }
+
     // Create Courier Admin User in admin::user
     const courierEmail = 'naeemcourier@test.com';
     let adminCourierUser = await strapi.db.query('admin::user').findOne({ where: { email: courierEmail } });

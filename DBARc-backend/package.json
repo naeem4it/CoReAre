@@ -12,7 +12,9 @@
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
-    "upgrade:dry": "npx @strapi/upgrade latest --dry"
+    "upgrade:dry": "npx @strapi/upgrade latest --dry",
+    "db:setup": "node scripts/setup-database.js",
+    "db:seed": "node scripts/create-shipper-admin.js"
   },
   "dependencies": {
     "@strapi/database": "5.52.2",
