@@ -141,7 +141,19 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4">
+    <div className="min-h-screen bg-slate-50 py-12 px-4 pt-24">
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+            DBARC
+          </span>
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap">
+            [Digital Business Automation for Routing & Courier]
+          </span>
+        </div>
+      </header>
+
       <div className="max-w-2xl mx-auto space-y-8">
         <div className="text-center space-y-4">
           <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-600 px-4 py-1 rounded-full text-sm font-bold border border-primary-100">

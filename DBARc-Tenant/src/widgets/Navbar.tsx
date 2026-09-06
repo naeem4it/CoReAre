@@ -12,6 +12,15 @@ export const Navbar = () => {
   return (
     <header className="h-16 border-b border-slate-200 bg-white px-6 flex items-center justify-between sticky top-0 z-30">
       <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 pr-3 sm:pr-4 border-r border-slate-200">
+          <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+            DBARC
+          </span>
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap">
+            [Digital Business Automation for Routing & Courier]
+          </span>
+        </div>
+
         <TenantHeader />
         
         {user?.shippers && user.shippers.length > 0 && (

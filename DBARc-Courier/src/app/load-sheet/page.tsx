@@ -3,281 +3,464 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
-import { LoadSheet } from '@/types/generated/load-sheet.types';
-import { Parcel } from '@/types/generated/parcel.types';
-import { Hub } from '@/types/generated/hub.types';
-import { Rider } from '@/types/generated/rider.types';
 import {
   Search,
-  Plus,
   Printer,
   Eye,
   Trash2,
   X,
   CheckCircle2,
   AlertCircle,
-  FileText,
   Calendar,
-  Truck,
-  User,
-  MapPin,
   Barcode,
   Package,
   Layers,
-  ChevronLeft,
-  ChevronRight,
-  ArrowRight
+  ArrowRight,
+  CheckSquare,
+  Square,
+  Truck,
+  User,
+  MapPin,
+  RefreshCw,
+  ScanLine,
+  FileCheck2,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
-export default function LoadSheetPage() {
-  const { isShipperEmployee } = useAuth();
-  const [loadSheets, setLoadSheets] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  
-  // Data for creation dropdowns
-  const [hubs, setHubs] = React.useState<any[]>([]);
-  const [riders, setRiders] = React.useState<any[]>([]);
-  const [unassignedParcels, setUnassignedParcels] = React.useState<any[]>([]);
+// =========================================================================
+// Code128 Barcode Generator (Pure SVG)
+// =========================================================================
+const CODE128_PATTERNS = [
+  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
+];
 
-  // Filter states (Only Date Range filter required)
+function Code128BarcodeSvg({ text, height = 50 }: { text: string; height?: number }) {
+  if (!text) return null;
+  const clean = text.trim();
+  const START_B = 104;
+  const STOP = 106;
+
+  let checksum = START_B;
+  const codes: number[] = [START_B];
+
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i) - 32;
+    if (code >= 0 && code <= 95) {
+      codes.push(code);
+      checksum += code * (i + 1);
+    }
+  }
+
+  const checkDigit = checksum % 103;
+  codes.push(checkDigit);
+  codes.push(STOP);
+
+  let patternStr = "";
+  for (const c of codes) {
+    patternStr += CODE128_PATTERNS[c] || "";
+  }
+
+  const rects: React.JSX.Element[] = [];
+  let currentX = 10; // Quiet zone 10 modules
+  for (let i = 0; i < patternStr.length; i++) {
+    const width = parseInt(patternStr[i], 10);
+    const isBar = i % 2 === 0;
+    if (isBar) {
+      rects.push(
+        <rect
+          key={i}
+          x={currentX}
+          y={0}
+          width={width}
+          height={height}
+          fill="#000000"
+        />
+      );
+    }
+    currentX += width;
+  }
+  const totalWidth = currentX + 10;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg
+        viewBox={`0 0 ${totalWidth} ${height}`}
+        className="max-h-[50px] w-auto"
+        preserveAspectRatio="none"
+        style={{ height: `${height}px` }}
+      >
+        <rect x={0} y={0} width={totalWidth} height={height} fill="#ffffff" />
+        {rects}
+      </svg>
+      <span className="font-mono text-[11px] font-bold tracking-widest text-slate-900 mt-1">
+        {clean}
+      </span>
+    </div>
+  );
+}
+
+export default function LoadSheetPage() {
+  const { isShipperEmployee, user, activeBusinessId } = useAuth();
+  
+  // Navigation tabs
+  const [activeTab, setActiveTab] = React.useState<'create' | 'history'>('create');
+
+  // Booked Unassigned Orders (for Load Sheet Generation)
+  const [bookedParcels, setBookedParcels] = React.useState<any[]>([]);
+  const [loadingParcels, setLoadingParcels] = React.useState(true);
+  const [checkedParcelIds, setCheckedParcelIds] = React.useState<number[]>([]);
+
+  // Generated Load Sheets History
+  const [loadSheets, setLoadSheets] = React.useState<any[]>([]);
+  const [loadingSheets, setLoadingSheets] = React.useState(true);
+
+  // Date Range Filters for Booked Orders
   const [startDate, setStartDate] = React.useState('');
   const [endDate, setEndDate] = React.useState('');
 
-  // Modals state
-  const [showCreateModal, setShowCreateModal] = React.useState(false);
+  // Date Range Filters for History
+  const [historyStartDate, setHistoryStartDate] = React.useState('');
+  const [historyEndDate, setHistoryEndDate] = React.useState('');
+
+  // Barcode Scanner Input for Rider Dispatch
+  const [scanBarcodeQuery, setScanBarcodeQuery] = React.useState('');
+  const [isProcessingScan, setIsProcessingScan] = React.useState(false);
+
+  // Detail / Print Modals
   const [selectedSheet, setSelectedSheet] = React.useState<any | null>(null);
   const [showPrintView, setShowPrintView] = React.useState<any | null>(null);
+  const [isGenerating, setIsGenerating] = React.useState(false);
 
-  // Form states for creation
-  const [newSheetId, setNewSheetId] = React.useState('');
-  const [originHubId, setOriginHubId] = React.useState('');
-  const [destHubId, setDestHubId] = React.useState('');
-  const [selectedRiderId, setSelectedRiderId] = React.useState('');
-  const [departureSchedule, setDepartureSchedule] = React.useState('');
-  const [vehicleDetails, setVehicleDetails] = React.useState('');
-  const [checkedParcelIds, setCheckedParcelIds] = React.useState<number[]>([]);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  // Hubs metadata
+  const [hubs, setHubs] = React.useState<any[]>([]);
 
-  // Success/Error notifications
-  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
+  // Toast
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+    show: false,
+    msg: '',
+    type: 'success',
+  });
 
   const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ show: true, msg, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
   };
 
-  const fetchLoadSheets = async () => {
+  // -------------------------------------------------------------------------
+  // Fetch Booked Parcels (Status: 'Total Booking', Unassigned to Load Sheet)
+  // -------------------------------------------------------------------------
+  const fetchBookedParcels = async () => {
     try {
-      setLoading(true);
-      const params: any = {
-        populate: ['origin_hub', 'destination_hub', 'rider', 'parcels'],
-        sort: ['createdAt:desc']
+      setLoadingParcels(true);
+      const filters: any = {
+        load_sheet: { id: { $null: true } },
+        status: { $eq: 'Total Booking' },
       };
-      
-      const filters: any = {};
+
+      if (activeBusinessId) {
+        filters.shipper = { id: { $eq: activeBusinessId } };
+      }
+
       if (startDate) {
-        filters.date_created = { ...filters.date_created, $gte: startDate };
+        filters.createdAt = {
+          ...filters.createdAt,
+          $gte: `${startDate}T00:00:00.000Z`,
+        };
       }
       if (endDate) {
-        filters.date_created = { ...filters.date_created, $lte: endDate };
+        filters.createdAt = {
+          ...filters.createdAt,
+          $lte: `${endDate}T23:59:59.999Z`,
+        };
+      }
+
+      const response = await apiClient.get('/parcels', {
+        params: {
+          filters,
+          populate: ['destination_city', 'source_city', 'shipper'],
+          sort: ['createdAt:desc'],
+          pagination: { pageSize: 150 },
+        },
+      });
+
+      const list = response.data?.data || [];
+      setBookedParcels(list);
+    } catch (err) {
+      console.error('Failed to fetch booked parcels:', err);
+      triggerToast('Failed to load booked orders.', 'error');
+    } finally {
+      setLoadingParcels(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Fetch Load Sheets History
+  // -------------------------------------------------------------------------
+  const fetchLoadSheets = async () => {
+    try {
+      setLoadingSheets(true);
+      const params: any = {
+        populate: ['origin_hub', 'destination_hub', 'rider', 'parcels', 'parcels.destination_city'],
+        sort: ['createdAt:desc'],
+        pagination: { pageSize: 50 },
+      };
+
+      const filters: any = {};
+      if (historyStartDate) {
+        filters.date_created = { ...filters.date_created, $gte: `${historyStartDate}T00:00:00.000Z` };
+      }
+      if (historyEndDate) {
+        filters.date_created = { ...filters.date_created, $lte: `${historyEndDate}T23:59:59.999Z` };
       }
 
       if (Object.keys(filters).length > 0) {
         params.filters = filters;
       }
-      
+
       const response = await apiClient.get('/load-sheets', { params });
       setLoadSheets(response.data?.data || []);
     } catch (error) {
       console.error('Failed to fetch load sheets:', error);
-      triggerToast('Failed to load sheets list', 'error');
     } finally {
-      setLoading(false);
+      setLoadingSheets(false);
     }
   };
 
-  const fetchMetadata = async () => {
+  const fetchHubs = async () => {
     try {
-      const [hubsRes, ridersRes] = await Promise.all([
-        apiClient.get('/hubs'),
-        apiClient.get('/riders')
-      ]);
-      setHubs(hubsRes.data?.data || []);
-      setRiders(ridersRes.data?.data || []);
-    } catch (err) {
-      console.error('Failed to fetch metadata:', err);
-    }
-  };
-
-  const fetchUnassignedParcels = async () => {
-    try {
-      // Display unassigned parcels that have not arrived yet (Total Booking, Not Arrived, booked)
-      const response = await apiClient.get('/parcels', {
-        params: {
-          filters: {
-            load_sheet: { id: { $null: true } },
-            $or: [
-              { status: { $eq: 'booked' } },
-              { status: { $eq: 'Total Booking' } },
-              { status: { $eq: 'Not Arrived' } }
-            ]
-          },
-          populate: '*',
-          sort: ['createdAt:desc'],
-          pagination: { pageSize: 100 }
-        }
-      });
-      setUnassignedParcels(response.data?.data || []);
-    } catch (err) {
-      console.error('Failed to fetch unassigned parcels:', err);
+      const res = await apiClient.get('/hubs');
+      setHubs(res.data?.data || []);
+    } catch (e) {
+      console.warn('Could not fetch hubs:', e);
     }
   };
 
   React.useEffect(() => {
+    fetchBookedParcels();
     fetchLoadSheets();
-    fetchMetadata();
-  }, [startDate, endDate]);
+    fetchHubs();
+  }, [startDate, endDate, activeBusinessId]);
 
-  // Open Create Modal
-  const handleOpenCreateModal = () => {
-    fetchUnassignedParcels();
-    
-    // Auto-generate Sheet ID
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    setNewSheetId(`LS-${today}-${rand}`);
-    
-    setOriginHubId('');
-    setDestHubId('');
-    setSelectedRiderId('');
-    setDepartureSchedule('');
-    setVehicleDetails('');
-    setCheckedParcelIds([]);
-    setShowCreateModal(true);
-  };
-
-  // Submit Create Load Sheet
-  const handleCreateLoadSheet = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!originHubId || !destHubId || !selectedRiderId || checkedParcelIds.length === 0) {
-      triggerToast('Please fill in all fields and select at least one parcel.', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        sheet_id: newSheetId,
-        date_created: new Date().toISOString(),
-        origin_hub: Number(originHubId),
-        destination_hub: Number(destHubId),
-        rider: Number(selectedRiderId),
-        departure_schedule: departureSchedule ? new Date(departureSchedule).toISOString() : null,
-        vehicle_details: vehicleDetails || null,
-        status: 'Pending',
-        parcels: checkedParcelIds
-      };
-
-      await apiClient.post('/load-sheets', { data: payload });
-      triggerToast('Load Sheet created successfully!');
-      setShowCreateModal(false);
+  React.useEffect(() => {
+    if (activeTab === 'history') {
       fetchLoadSheets();
-    } catch (err: any) {
-      console.error('Failed to create load sheet:', err);
-      triggerToast(err.response?.data?.error?.message || 'Failed to create load sheet.', 'error');
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  }, [historyStartDate, historyEndDate, activeTab]);
 
-  // Toggle checklist checkbox
+  // -------------------------------------------------------------------------
+  // Selection Logic
+  // -------------------------------------------------------------------------
   const handleToggleParcel = (parcelId: number) => {
-    setCheckedParcelIds(prev => 
+    setCheckedParcelIds(prev =>
       prev.includes(parcelId) ? prev.filter(id => id !== parcelId) : [...prev, parcelId]
     );
   };
 
-  // Select all unassigned parcels
   const handleSelectAllParcels = () => {
-    if (checkedParcelIds.length === unassignedParcels.length) {
+    if (checkedParcelIds.length === bookedParcels.length) {
       setCheckedParcelIds([]);
     } else {
-      setCheckedParcelIds(unassignedParcels.map(p => p.id));
+      setCheckedParcelIds(bookedParcels.map(p => p.id));
     }
   };
 
-  // Remove/Unlink parcel from an existing load sheet
-  const handleRemoveParcel = async (sheetId: number, currentParcels: any[], parcelToRemoveId: number) => {
-    if (!confirm('Are you sure you want to remove this parcel from the load sheet? It will be marked unavailable for this pickup.')) {
+  // Selected summaries
+  const selectedParcels = bookedParcels.filter(p => checkedParcelIds.includes(p.id));
+  const totalSelectedPieces = selectedParcels.reduce((sum, p) => sum + (p.pieces || 1), 0);
+  const totalSelectedWeight = selectedParcels.reduce((sum, p) => sum + (Number(p.weight) || 0.5), 0);
+  const totalSelectedCod = selectedParcels.reduce((sum, p) => sum + (Number(p.cod_amount) || 0), 0);
+
+  // -------------------------------------------------------------------------
+  // Generate Load Sheet
+  // -------------------------------------------------------------------------
+  const handleGenerateLoadSheet = async () => {
+    if (checkedParcelIds.length === 0) {
+      triggerToast('Please select at least one booked order to generate a load sheet.', 'error');
       return;
     }
 
+    setIsGenerating(true);
     try {
-      const updatedParcelIds = currentParcels
-        .filter(p => p.id !== parcelToRemoveId)
-        .map(p => p.id);
+      const now = new Date();
+      const dateCode = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const generatedSheetId = `LS-${dateCode}-${rand}`;
 
-      const response = await apiClient.put(`/load-sheets/${sheetId}`, {
-        data: { parcels: updatedParcelIds }
-      });
+      // Pick default origin hub if available
+      const defaultHubId = hubs.length > 0 ? hubs[0].id : null;
 
-      triggerToast('Parcel removed from Load Sheet.');
-      
-      // Update local states
-      const refreshedSheet = {
-        ...selectedSheet,
-        parcels: selectedSheet.parcels.filter((p: any) => p.id !== parcelToRemoveId)
+      // 1. Create Load Sheet record
+      const sheetPayload: any = {
+        sheet_id: generatedSheetId,
+        date_created: now.toISOString(),
+        status: 'Pending',
+        parcels: checkedParcelIds,
       };
-      setSelectedSheet(refreshedSheet);
+      if (defaultHubId) {
+        sheetPayload.origin_hub = defaultHubId;
+      }
+
+      const createRes = await apiClient.post('/load-sheets', { data: sheetPayload });
+      const createdSheet = createRes.data?.data;
+
+      // 2. Link each parcel's load_sheet relation
+      await Promise.all(
+        checkedParcelIds.map(id => {
+          const parcelObj = bookedParcels.find(p => p.id === id);
+          const pDocId = parcelObj?.documentId || id;
+          return apiClient.put(`/parcels/${pDocId}`, {
+            data: {
+              load_sheet: createdSheet?.documentId || createdSheet?.id,
+            },
+          }).catch(() => null);
+        })
+      );
+
+      triggerToast(`Load Sheet ${generatedSheetId} generated with ${checkedParcelIds.length} orders!`, 'success');
+
+      // 3. Prepare printable sheet object and immediately show PDF/Print view
+      const printableObj = {
+        id: createdSheet?.id,
+        documentId: createdSheet?.documentId,
+        sheet_id: generatedSheetId,
+        date_created: now.toISOString(),
+        status: 'Pending',
+        origin_hub: hubs.find(h => h.id === defaultHubId) || { name: 'Main City Facility' },
+        parcels: selectedParcels,
+        shipperName: user?.shipper?.[0]?.name || user?.name || 'Shipper Store',
+      };
+
+      setShowPrintView(printableObj);
+      setCheckedParcelIds([]);
+      fetchBookedParcels();
       fetchLoadSheets();
     } catch (err: any) {
-      console.error('Failed to remove parcel:', err);
-      triggerToast('Failed to remove parcel from sheet.', 'error');
+      console.error('Failed to generate load sheet:', err);
+      triggerToast(err.response?.data?.error?.message || 'Failed to generate load sheet.', 'error');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  // Update Load Sheet Status
-  const handleUpdateStatus = async (sheetId: number, nextStatus: string) => {
+  // -------------------------------------------------------------------------
+  // Dispatch Load Sheet (Sets Load Sheet to 'Dispatched' & Parcels to 'Not Arrived')
+  // -------------------------------------------------------------------------
+  const dispatchLoadSheetAction = async (sheet: any) => {
     try {
-      await apiClient.put(`/load-sheets/${sheetId}`, {
-        data: { status: nextStatus }
+      const sheetDocId = sheet.documentId || sheet.id;
+      // 1. Update load sheet to Dispatched
+      await apiClient.put(`/load-sheets/${sheetDocId}`, {
+        data: { status: 'Dispatched' },
       });
-      triggerToast(`Status updated to ${nextStatus}`);
-      setSelectedSheet((prev: any) => prev ? { ...prev, status: nextStatus } : null);
+
+      // 2. Update all linked parcels to 'Not Arrived'
+      const parcelsList = sheet.parcels || [];
+      if (parcelsList.length > 0) {
+        await Promise.all(
+          parcelsList.map((p: any) => {
+            const pDocId = p.documentId || p.id;
+            return apiClient.put(`/parcels/${pDocId}`, {
+              data: { status: 'Not Arrived' },
+            }).catch(e => console.warn(`Could not update parcel ${pDocId}:`, e));
+          })
+        );
+      }
+
+      triggerToast(
+        `Load Sheet ${sheet.sheet_id} Dispatched! ${parcelsList.length} parcel(s) transitioned to 'Not Arrived'.`,
+        'success'
+      );
+
       fetchLoadSheets();
+      fetchBookedParcels();
+      if (selectedSheet?.id === sheet.id) {
+        setSelectedSheet({ ...selectedSheet, status: 'Dispatched' });
+      }
     } catch (err: any) {
-      console.error('Failed to update load sheet status:', err);
-      triggerToast('Failed to update status', 'error');
+      console.error('Failed to dispatch load sheet:', err);
+      triggerToast('Failed to dispatch load sheet.', 'error');
+    }
+  };
+
+  // Barcode scan handler
+  const handleBarcodeScanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = scanBarcodeQuery.trim();
+    if (!query) return;
+
+    setIsProcessingScan(true);
+    try {
+      // Find matching load sheet by sheet_id
+      const res = await apiClient.get('/load-sheets', {
+        params: {
+          filters: {
+            sheet_id: { $eq: query },
+          },
+          populate: ['parcels'],
+        },
+      });
+
+      const sheets = res.data?.data || [];
+      if (sheets.length === 0) {
+        triggerToast(`No load sheet found matching barcode "${query}". Please check the ID.`, 'error');
+        return;
+      }
+
+      const sheet = sheets[0];
+      if (sheet.status === 'Dispatched') {
+        triggerToast(`Load Sheet ${sheet.sheet_id} is ALREADY marked as Dispatched.`, 'error');
+        setScanBarcodeQuery('');
+        return;
+      }
+
+      await dispatchLoadSheetAction(sheet);
+      setScanBarcodeQuery('');
+    } catch (err) {
+      console.error('Barcode scan dispatch error:', err);
+      triggerToast('Error processing barcode scan dispatch.', 'error');
+    } finally {
+      setIsProcessingScan(false);
     }
   };
 
   // Delete Load Sheet
   const handleDeleteLoadSheet = async (sheetId: number, sheetCode: string) => {
-    if (!confirm(`Are you sure you want to delete Load Sheet ${sheetCode}? Associated parcels will be released back to unassigned pool.`)) {
+    if (!confirm(`Are you sure you want to delete Load Sheet ${sheetCode}? Linked orders will be released back to the booked pool.`)) {
       return;
     }
 
     try {
-      await apiClient.delete(`/load-sheets/${sheetId}`);
+      const sheetObj = loadSheets.find(s => s.id === sheetId);
+      const sheetDocId = sheetObj?.documentId || sheetId;
+      await apiClient.delete(`/load-sheets/${sheetDocId}`);
       triggerToast(`Load Sheet ${sheetCode} deleted successfully.`);
       if (selectedSheet?.id === sheetId) setSelectedSheet(null);
       fetchLoadSheets();
+      fetchBookedParcels();
     } catch (err: any) {
       console.error('Failed to delete load sheet:', err);
       triggerToast(err.response?.data?.error?.message || 'Failed to delete load sheet.', 'error');
     }
   };
 
-
   const getStatusBadgeColors = (status?: string) => {
     switch (status) {
       case 'Delivered':
         return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'Dispatched':
-        return 'bg-green-100 text-green-700 border-green-200';
+        return 'bg-emerald-600 text-white border-emerald-700 shadow-xs';
       case 'Pending':
-        return 'bg-orange-100 text-orange-700 border-orange-200';
+        return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'On-Route':
         return 'bg-blue-100 text-blue-700 border-blue-200';
       default:
@@ -287,6 +470,7 @@ export default function LoadSheetPage() {
 
   return (
     <PortalLayout>
+      {/* Print stylesheet for A4 Sheet Format */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * {
@@ -301,6 +485,9 @@ export default function LoadSheetPage() {
             top: 0 !important;
             width: 100% !important;
             display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
           }
           .no-print {
             display: none !important;
@@ -310,10 +497,10 @@ export default function LoadSheetPage() {
 
       <div className="p-lg max-w-[1920px] mx-auto w-full flex flex-col gap-lg no-print">
         
-        {/* Success / Error Toast */}
+        {/* Floating Success / Error Notification */}
         {toast.show && (
-          <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
-            toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-200 border border-red-800'
+          <div className={`fixed bottom-6 right-6 z-50 py-3.5 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 border ${
+            toast.type === 'success' ? 'bg-slate-900 border-slate-700 text-white' : 'bg-red-950 border-red-800 text-red-200'
           }`}>
             {toast.type === 'success' ? (
               <div className="bg-emerald-500 rounded-full p-1 text-white">
@@ -328,698 +515,777 @@ export default function LoadSheetPage() {
           </div>
         )}
 
-        {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
+        {/* Header with Title & Barcode Scanner Quick Dispatch */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-md bg-white p-5 rounded-2xl border border-outline-variant shadow-xs">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                Official Manifest Lifecycle
+              </span>
+              <span className="text-xs text-slate-400 font-semibold">• DBARC Logistics Suite</span>
+            </div>
             <h2 className="font-headline-lg text-headline-lg text-on-surface flex items-center gap-2">
               <Layers className="w-6 h-6 text-primary" />
-              Load Sheet Management
+              Load Sheet & Manifest Management
             </h2>
-            <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-              Create, review, and print bulk shipment cargo sheets for booked orders.
+            <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">
+              Select date range, generate official cargo handover load sheets with barcodes, and dispatch to courier.
             </p>
           </div>
-          <div className="flex items-center gap-sm">
-            <button 
-              onClick={handleOpenCreateModal}
-              className="bg-primary text-white h-11 px-5 rounded-xl hover:shadow-lg active:scale-95 transition-all font-semibold text-sm flex items-center gap-1.5 cursor-pointer shadow-sm"
+
+          {/* Rider Barcode Scanner / Dispatch Quick Action */}
+          <form onSubmit={handleBarcodeScanSubmit} className="flex items-center gap-2 bg-slate-50 border border-slate-300 p-2 rounded-xl focus-within:ring-2 focus-within:ring-primary focus-within:bg-white transition-all max-w-md w-full">
+            <ScanLine className="w-5 h-5 text-primary shrink-0 ml-1" />
+            <input
+              type="text"
+              placeholder="Scan / Enter Load Sheet Barcode (LS-...)"
+              value={scanBarcodeQuery}
+              onChange={(e) => setScanBarcodeQuery(e.target.value)}
+              className="w-full bg-transparent text-xs font-mono font-bold text-slate-900 focus:outline-none placeholder:text-slate-400"
+            />
+            <button
+              type="submit"
+              disabled={isProcessingScan || !scanBarcodeQuery.trim()}
+              className="bg-primary hover:bg-primary-container text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
             >
-              <Plus className="w-4 h-4" />
-              Create Load Sheet
+              {isProcessingScan ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Barcode className="w-3.5 h-3.5" />
+                  <span>Scan & Dispatch</span>
+                </>
+              )}
             </button>
-          </div>
+          </form>
         </div>
 
-        {/* Date Range Filter Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-md bg-white p-4 border border-outline-variant rounded-2xl shadow-sm items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-outline uppercase tracking-wider">Start Date</label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-              <input 
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-outline-variant rounded-xl font-body-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary" 
-                type="date" 
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-          </div>
-          
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-outline uppercase tracking-wider">End Date</label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-              <input 
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-outline-variant rounded-xl font-body-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary" 
-                type="date" 
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={fetchLoadSheets}
-              className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Search className="w-4 h-4" />
-              Filter Date Range
-            </button>
-            {(startDate || endDate) && (
-              <button 
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                }}
-                className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-outline-variant"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-slate-200 gap-6">
+          <button
+            onClick={() => setActiveTab('create')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'create'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>Generate New Load Sheet ({bookedParcels.length} Booked Orders)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'history'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <FileCheck2 className="w-4 h-4" />
+            <span>Load Sheets History ({loadSheets.length} Manifests)</span>
+          </button>
         </div>
 
-        {/* Data Table Section */}
-        <div className="bg-white border border-outline-variant rounded-2xl overflow-hidden shadow-sm flex flex-col">
-          <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50/50">
-            <h4 className="font-bold text-sm text-on-surface">Recent Load Sheets</h4>
-            <span className="text-xs font-semibold text-outline">
-              Total {loadSheets.length} sheet{loadSheets.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-
-          <div className="overflow-x-auto min-h-[300px]">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center h-[300px] text-outline">
-                <span className="material-symbols-outlined animate-spin text-[32px] mb-2">sync</span>
-                <p className="text-sm font-medium">Loading load sheets...</p>
-              </div>
-            ) : loadSheets.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[300px] text-outline">
-                <span className="material-symbols-outlined text-[48px] mb-2 opacity-20">inventory</span>
-                <p className="text-sm font-bold text-on-surface-variant">No load sheets found</p>
-                <p className="text-xs mt-1">Adjust filters or create a new load sheet.</p>
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/50 border-b border-outline-variant">
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Sheet ID</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Date Created</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Route (Origin → Dest)</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Rider</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Parcels Count</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase">Status</th>
-                    <th className="px-4 py-3 font-semibold text-xs text-on-surface-variant uppercase text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant">
-                  {loadSheets.map((sheet) => (
-                    <tr key={sheet.id} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-4 py-4 font-mono font-bold text-sm text-primary">{sheet.sheet_id}</td>
-                      <td className="px-4 py-4 text-sm text-on-surface">
-                        {sheet.date_created ? new Date(sheet.date_created).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-on-surface font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span>{sheet.origin_hub?.name || 'N/A'}</span>
-                          <ArrowRight className="w-3.5 h-3.5 text-outline" />
-                          <span>{sheet.destination_hub?.name || 'N/A'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-on-surface font-medium">
-                        {sheet.rider?.name || 'Unassigned'}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-on-surface font-bold">
-                        {sheet.parcels?.length || 0} <span className="font-normal text-outline text-xs">units</span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadgeColors(sheet.status)}`}>
-                          {sheet.status || 'Pending'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button 
-                            onClick={() => setSelectedSheet(sheet)}
-                            title="View Details / Verification"
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-secondary hover:text-primary transition-colors cursor-pointer"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => setShowPrintView(sheet)}
-                            title="Print verification sheets"
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-secondary hover:text-primary transition-colors cursor-pointer"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-                          {!isShipperEmployee && (
-                            <button 
-                              onClick={() => handleDeleteLoadSheet(sheet.id, sheet.sheet_id)}
-                              title="Delete Load Sheet"
-                              className="p-1.5 rounded-lg hover:bg-rose-50 text-secondary hover:text-rose-600 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* CREATE LOAD SHEET MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-outline-variant animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="p-4 border-b border-outline-variant flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-lg text-on-surface flex items-center gap-1.5">
-                  <Plus className="w-5 h-5 text-primary" /> Create New Load Sheet
-                </h3>
-                <p className="text-xs text-secondary mt-0.5">Draft a new bulk shipment dispatch for pickup verification.</p>
-              </div>
-              <button onClick={() => setShowCreateModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-outline hover:text-slate-900 transition-colors cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateLoadSheet} className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* Sheet ID */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Sheet ID</label>
-                  <div className="relative">
-                    <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 pl-9 pr-3 py-2 border border-outline-variant rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary font-bold"
-                      value={newSheetId}
-                      onChange={(e) => setNewSheetId(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Origin Hub */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Origin Station</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-                    <select
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-outline-variant rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
-                      value={originHubId}
-                      onChange={(e) => setOriginHubId(e.target.value)}
-                      required
-                    >
-                      <option value="">Select Origin Hub</option>
-                      {hubs.map((hub) => (
-                        <option key={hub.id} value={hub.id}>{hub.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Destination Hub */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Destination Hub</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-                    <select
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-outline-variant rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
-                      value={destHubId}
-                      onChange={(e) => setDestHubId(e.target.value)}
-                      required
-                    >
-                      <option value="">Select Destination Hub</option>
-                      {hubs.map((hub) => (
-                        <option key={hub.id} value={hub.id}>{hub.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Assigned Rider */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Assigned Rider</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-                    <select
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-outline-variant rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
-                      value={selectedRiderId}
-                      onChange={(e) => setSelectedRiderId(e.target.value)}
-                      required
-                    >
-                      <option value="">Select Rider / Driver</option>
-                      {riders.map((rider) => (
-                        <option key={rider.id} value={rider.id}>{rider.name} ({rider.phone})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Schedule */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Departure Schedule</label>
+        {/* ========================================================================= */}
+        {/* TAB 1: GENERATE LOAD SHEET (Booked Orders Grid with Date Range Filter)    */}
+        {/* ========================================================================= */}
+        {activeTab === 'create' && (
+          <div className="flex flex-col gap-5">
+            
+            {/* Date Range Filter Section */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 border border-outline-variant rounded-2xl shadow-xs items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Booked Start Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                   <input
-                    type="datetime-local"
-                    className="w-full px-3 py-2 border border-outline-variant rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={departureSchedule}
-                    onChange={(e) => setDepartureSchedule(e.target.value)}
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
-
-                {/* Vehicle Details */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Vehicle Details</label>
-                  <div className="relative">
-                    <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="e.g. Van, AP-9921"
-                      className="w-full pl-9 pr-3 py-2 border border-outline-variant rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      value={vehicleDetails}
-                      onChange={(e) => setVehicleDetails(e.target.value)}
-                    />
-                  </div>
-                </div>
-
               </div>
 
-              {/* Parcel selection checklist */}
-              <div className="flex-1 flex flex-col gap-2 min-h-[250px]">
-                <div className="flex items-center justify-between border-b border-outline-variant pb-2">
-                  <span className="text-xs font-bold text-outline uppercase tracking-wider flex items-center gap-1">
-                    <Package className="w-4 h-4" /> Select unassigned parcels ({checkedParcelIds.length} / {unassignedParcels.length} selected)
-                  </span>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Booked End Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchBookedParcels}
+                  className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Filter Date Range</span>
+                </button>
+                {(startDate || endDate) && (
                   <button
-                    type="button"
-                    onClick={handleSelectAllParcels}
-                    className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                    }}
+                    className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-200"
                   >
-                    {checkedParcelIds.length === unassignedParcels.length ? 'Deselect All' : 'Select All Available'}
+                    Clear
                   </button>
+                )}
+              </div>
+
+              {/* Generate Load Sheet CTA Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleGenerateLoadSheet}
+                  disabled={isGenerating || checkedParcelIds.length === 0}
+                  className="w-full h-[38px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isGenerating ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4" />
+                      <span>Generate Load Sheet ({checkedParcelIds.length})</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Live Metrics Summary Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Selected Orders</span>
+                <span className="text-base font-black text-slate-900 font-mono">
+                  {checkedParcelIds.length} <span className="text-xs text-slate-500 font-normal">/ {bookedParcels.length}</span>
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Pieces</span>
+                <span className="text-base font-black text-slate-900 font-mono">{totalSelectedPieces} pcs</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Weight</span>
+                <span className="text-base font-black text-slate-900 font-mono">{totalSelectedWeight.toFixed(2)} kg</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total COD Value</span>
+                <span className="text-base font-black text-emerald-700 font-mono">PKR {totalSelectedCod.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Booked Orders Grid */}
+            <div className="bg-white border border-outline-variant rounded-2xl overflow-hidden shadow-xs flex flex-col">
+              <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSelectAllParcels}
+                    className="flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+                  >
+                    {checkedParcelIds.length === bookedParcels.length && bookedParcels.length > 0 ? (
+                      <>
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                        <span>Deselect All</span>
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-4 h-4 text-slate-400" />
+                        <span>Select All ({bookedParcels.length})</span>
+                      </>
+                    )}
+                  </button>
+                  <span className="text-xs text-slate-400">|</span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Orders with status <strong className="text-slate-800">"Total Booking"</strong> awaiting courier pickup
+                  </span>
                 </div>
 
-                <div className="overflow-y-auto max-h-[300px] border border-outline-variant rounded-xl divide-y divide-outline-variant bg-slate-50/20">
-                  {unassignedParcels.length === 0 ? (
-                    <div className="p-8 text-center text-outline text-sm">
-                      No unassigned booked parcels found in system. Book new parcels first.
-                    </div>
-                  ) : (
-                    unassignedParcels.map((p) => (
-                      <label 
-                        key={p.id} 
-                        className={`flex items-center justify-between p-3 text-xs cursor-pointer hover:bg-slate-50 transition-colors ${
-                          checkedParcelIds.includes(p.id) ? 'bg-primary-container/10' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-500">
+                  {bookedParcels.length} unassigned order{bookedParcels.length !== 1 ? 's' : ''} found
+                </span>
+              </div>
+
+              <div className="overflow-x-auto min-h-[300px]">
+                {loadingParcels ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-outline">
+                    <RefreshCw className="animate-spin text-primary w-8 h-8 mb-2" />
+                    <p className="text-sm font-medium">Loading booked orders...</p>
+                  </div>
+                ) : bookedParcels.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-outline p-6 text-center">
+                    <Package className="w-12 h-12 text-slate-300 mb-2" />
+                    <p className="text-base font-bold text-slate-800">No unassigned booked orders found</p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                      {startDate || endDate
+                        ? 'No orders booked in the selected date range. Try clearing or expanding the date filter.'
+                        : 'All booked orders have already been assigned to load sheets or dispatched.'}
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50/70 border-b border-outline-variant font-bold text-slate-600 uppercase">
+                        <th className="p-3 w-10 text-center">
                           <input
                             type="checkbox"
-                            className="w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary cursor-pointer"
-                            checked={checkedParcelIds.includes(p.id)}
-                            onChange={() => handleToggleParcel(p.id)}
+                            checked={checkedParcelIds.length === bookedParcels.length && bookedParcels.length > 0}
+                            onChange={handleSelectAllParcels}
+                            className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                           />
-                          <div className="flex flex-col">
-                            <span className="font-mono font-bold text-primary">{p.tracking_number}</span>
-                            <span className="text-slate-800 font-semibold">{p.recipient_name}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col text-right">
-                          <span className="text-slate-500 font-medium truncate max-w-[200px]">{p.recipient_address}</span>
-                          <span className="font-bold text-slate-800">PKR {p.cod_amount?.toLocaleString() || 0}</span>
-                        </div>
-                      </label>
-                    ))
-                  )}
+                        </th>
+                        <th className="p-3">Tracking Number</th>
+                        <th className="p-3">Consignee</th>
+                        <th className="p-3">Destination City</th>
+                        <th className="p-3 text-center">Pcs</th>
+                        <th className="p-3 text-center">Weight</th>
+                        <th className="p-3">Payment</th>
+                        <th className="p-3 text-right">COD Amount</th>
+                        <th className="p-3">Booked Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant">
+                      {bookedParcels.map((p) => {
+                        const isChecked = checkedParcelIds.includes(p.id);
+                        return (
+                          <tr
+                            key={p.id}
+                            onClick={() => handleToggleParcel(p.id)}
+                            className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                              isChecked ? 'bg-primary/5 font-medium' : ''
+                            }`}
+                          >
+                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleParcel(p.id)}
+                                className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-3 font-mono font-bold text-primary">
+                              {p.tracking_number}
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-slate-900">{p.recipient_name}</div>
+                              <div className="text-[11px] text-slate-500">{p.recipient_phone}</div>
+                            </td>
+                            <td className="p-3 font-medium text-slate-700">
+                              {p.destination_city?.name || p.recipient_address || 'Local City'}
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold">{p.pieces || 1}</td>
+                            <td className="p-3 text-center font-mono">{p.weight || 0.5} kg</td>
+                            <td className="p-3">
+                              {p.payment_type === 'PAID' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  PAID
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                                  COD
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-900">
+                              PKR {Number(p.cod_amount || 0).toLocaleString()}
+                            </td>
+                            <td className="p-3 text-slate-500 font-mono text-[11px]">
+                              {p.createdAt ? new Date(p.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: LOAD SHEETS HISTORY & DISPATCH                                     */}
+        {/* ========================================================================= */}
+        {activeTab === 'history' && (
+          <div className="flex flex-col gap-5">
+            
+            {/* History Date Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 border border-outline-variant rounded-2xl shadow-xs items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Start Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input
+                    type="date"
+                    value={historyStartDate}
+                    onChange={(e) => setHistoryStartDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
                 </div>
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex justify-end gap-3 border-t border-outline-variant pt-4 mt-auto">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-2.5 border border-outline-variant rounded-xl text-secondary hover:bg-slate-50 transition-all font-semibold text-sm active:scale-95 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || checkedParcelIds.length === 0}
-                  className="px-5 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Load Sheet'}
-                </button>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">End Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input
+                    type="date"
+                    value={historyEndDate}
+                    onChange={(e) => setHistoryEndDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
               </div>
 
-            </form>
-          </div>
-        </div>
-      )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchLoadSheets}
+                  className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Filter Manifests</span>
+                </button>
+                {(historyStartDate || historyEndDate) && (
+                  <button
+                    onClick={() => {
+                      setHistoryStartDate('');
+                      setHistoryEndDate('');
+                    }}
+                    className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-200"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
 
-      {/* DETAIL MODAL (Verification checklist & item removal) */}
+            {/* History Table */}
+            <div className="bg-white border border-outline-variant rounded-2xl overflow-hidden shadow-xs flex flex-col">
+              <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50/50">
+                <h4 className="font-bold text-sm text-slate-900">Generated Load Sheets & Manifests</h4>
+                <span className="text-xs font-semibold text-slate-500">
+                  Total {loadSheets.length} sheet{loadSheets.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto min-h-[300px]">
+                {loadingSheets ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-outline">
+                    <RefreshCw className="animate-spin text-primary w-8 h-8 mb-2" />
+                    <p className="text-sm font-medium">Loading load sheets...</p>
+                  </div>
+                ) : loadSheets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-outline p-6 text-center">
+                    <FileCheck2 className="w-12 h-12 text-slate-300 mb-2" />
+                    <p className="text-base font-bold text-slate-800">No load sheets found</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Generate your first load sheet from the "Generate New Load Sheet" tab.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50/70 border-b border-outline-variant font-bold text-slate-600 uppercase">
+                        <th className="p-3">Sheet ID / Barcode</th>
+                        <th className="p-3">Date Created</th>
+                        <th className="p-3">Origin Hub</th>
+                        <th className="p-3 text-center">Parcels</th>
+                        <th className="p-3 text-right">Total COD</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant">
+                      {loadSheets.map((sheet) => {
+                        const parcelsList = sheet.parcels || [];
+                        const sheetCodTotal = parcelsList.reduce((acc: number, p: any) => acc + (Number(p.cod_amount) || 0), 0);
+                        const isDispatched = sheet.status === 'Dispatched' || sheet.status === 'Delivered';
+
+                        return (
+                          <tr key={sheet.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="p-3">
+                              <span className="font-mono font-bold text-sm text-primary block">{sheet.sheet_id}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">Barcode Encoded</span>
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              {sheet.date_created ? new Date(sheet.date_created).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                            </td>
+                            <td className="p-3 text-slate-700 font-medium">
+                              {sheet.origin_hub?.name || 'Main Courier Hub'}
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-slate-900">
+                              {parcelsList.length} <span className="font-normal text-slate-400 text-[10px]">orders</span>
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-emerald-700">
+                              PKR {sheetCodTotal.toLocaleString()}
+                            </td>
+                            <td className="p-3">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadgeColors(sheet.status)}`}>
+                                {sheet.status || 'Pending'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setShowPrintView(sheet)}
+                                  title="Print / Save PDF Sheet"
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                  <span>Print PDF</span>
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedSheet(sheet)}
+                                  title="View Sheet Details"
+                                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+
+                                {!isDispatched && (
+                                  <button
+                                    onClick={() => dispatchLoadSheetAction(sheet)}
+                                    title="Dispatch to Courier (Sets parcels to 'Not Arrived')"
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                                  >
+                                    <Truck className="w-3.5 h-3.5" />
+                                    <span>Dispatch</span>
+                                  </button>
+                                )}
+
+                                {!isShipperEmployee && !isDispatched && (
+                                  <button
+                                    onClick={() => handleDeleteLoadSheet(sheet.id, sheet.sheet_id)}
+                                    title="Delete Load Sheet"
+                                    className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* DETAIL MODAL                                                              */}
+      {/* ========================================================================= */}
       {selectedSheet && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto no-print">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-outline-variant animate-in zoom-in-95 duration-200">
-            
-            {/* Modal Header */}
             <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50/50">
               <div>
-                <h3 className="font-bold text-lg text-on-surface font-mono">{selectedSheet.sheet_id} Details</h3>
-                <p className="text-xs text-secondary mt-0.5">Review, dispatch, or edit parcels on this load sheet.</p>
+                <h3 className="font-bold text-base text-slate-900 font-mono">
+                  Load Sheet {selectedSheet.sheet_id}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Manifest details and itemized order breakdown.</p>
               </div>
-              <div className="flex items-center gap-sm">
-                <button 
+              <div className="flex items-center gap-2">
+                <button
                   onClick={() => {
                     setShowPrintView(selectedSheet);
                     setSelectedSheet(null);
                   }}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-outline-variant rounded-lg text-xs font-bold text-secondary transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print Layout
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Open PDF Print View</span>
                 </button>
-                <button onClick={() => setSelectedSheet(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-outline hover:text-slate-900 transition-colors cursor-pointer">
+                <button onClick={() => setSelectedSheet(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
-              
-              {/* Loadsheet metadata overview */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 border border-outline-variant rounded-2xl text-xs">
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-4 border border-slate-200 rounded-xl text-xs">
                 <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Origin Station</span>
-                  <span className="font-bold text-slate-800">{selectedSheet.origin_hub?.name || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Destination Hub</span>
-                  <span className="font-bold text-slate-800">{selectedSheet.destination_hub?.name || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Assigned Rider</span>
-                  <span className="font-bold text-slate-800">{selectedSheet.rider?.name || 'Unassigned'}</span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Vehicle Details</span>
-                  <span className="font-bold text-slate-800">{selectedSheet.vehicle_details || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Departure Schedule</span>
-                  <span className="font-bold text-slate-800">
-                    {selectedSheet.departure_schedule ? new Date(selectedSheet.departure_schedule).toLocaleString() : 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Date Created</span>
-                  <span className="font-bold text-slate-800">
-                    {selectedSheet.date_created ? new Date(selectedSheet.date_created).toLocaleDateString() : 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-outline block font-medium uppercase tracking-wider text-[10px] mb-0.5">Load Sheet Status</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border mt-0.5 ${getStatusBadgeColors(selectedSheet.status)}`}>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Status</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border mt-0.5 ${getStatusBadgeColors(selectedSheet.status)}`}>
                     {selectedSheet.status || 'Pending'}
                   </span>
                 </div>
-              </div>
-
-              {/* Linked parcels list with removal actions */}
-              <div className="flex-1 flex flex-col gap-2">
-                <div className="border-b border-outline-variant pb-2 flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-outline uppercase tracking-wider flex items-center gap-1.5">
-                    <Package className="w-4 h-4" /> Itemized Parcels ({selectedSheet.parcels?.length || 0} items)
-                  </h4>
-                  <p className="text-[10px] text-outline font-medium italic">Remove items that rider reports as unavailable for pickup.</p>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Date Created</span>
+                  <span className="font-bold text-slate-800">{new Date(selectedSheet.date_created || Date.now()).toLocaleString()}</span>
                 </div>
-
-                <div className="border border-outline-variant rounded-xl divide-y divide-outline-variant overflow-hidden">
-                  {!selectedSheet.parcels || selectedSheet.parcels.length === 0 ? (
-                    <p className="p-8 text-center text-outline text-sm bg-slate-50">No parcels currently on this load sheet.</p>
-                  ) : (
-                    selectedSheet.parcels.map((parcel: any, idx: number) => (
-                      <div key={parcel.id} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-all text-xs">
-                        <div className="flex items-center gap-4">
-                          <span className="font-bold text-slate-400 text-[10px]">{idx + 1}</span>
-                          <div className="flex flex-col">
-                            <span className="font-mono font-bold text-primary">{parcel.tracking_number}</span>
-                            <span className="font-semibold text-slate-800">{parcel.recipient_name}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="flex flex-col text-right">
-                            <span className="text-slate-500 font-medium max-w-[240px] truncate">{parcel.recipient_address}</span>
-                            <span className="font-bold text-slate-800">PKR {parcel.cod_amount?.toLocaleString() || 0}</span>
-                          </div>
-                          
-                          {/* Remove button to unlink from load sheet */}
-                          {selectedSheet.status === 'Pending' && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveParcel(selectedSheet.id, selectedSheet.parcels, parcel.id)}
-                              className="p-1.5 text-outline hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Mark unavailable and remove from sheet"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Origin Station</span>
+                  <span className="font-bold text-slate-800">{selectedSheet.origin_hub?.name || 'Main Courier Hub'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Total Orders</span>
+                  <span className="font-mono font-bold text-slate-900">{selectedSheet.parcels?.length || 0}</span>
                 </div>
               </div>
 
-              {/* Status Update Options */}
-              {selectedSheet.status !== 'Delivered' && (
-                <div className="flex flex-col gap-2 border-t border-outline-variant pt-4">
-                  <span className="text-xs font-bold text-outline uppercase tracking-wider">Update Dispatch Status</span>
-                  <div className="flex gap-2">
-                    {selectedSheet.status === 'Pending' && (
-                      <button
-                        onClick={() => handleUpdateStatus(selectedSheet.id, 'Dispatched')}
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs py-2 px-4 rounded-lg active:scale-95 transition-all cursor-pointer"
-                      >
-                        Dispatch Load Sheet
-                      </button>
-                    )}
-                    {selectedSheet.status === 'Dispatched' && (
-                      <button
-                        onClick={() => handleUpdateStatus(selectedSheet.id, 'On-Route')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-2 px-4 rounded-lg active:scale-95 transition-all cursor-pointer"
-                      >
-                        Mark Out On Route
-                      </button>
-                    )}
-                    {selectedSheet.status === 'On-Route' && (
-                      <button
-                        onClick={() => handleUpdateStatus(selectedSheet.id, 'Delivered')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-4 rounded-lg active:scale-95 transition-all cursor-pointer"
-                      >
-                        Mark Delivery Complete
-                      </button>
-                    )}
+              {/* Barcode representation */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center">
+                <Code128BarcodeSvg text={selectedSheet.sheet_id} height={50} />
+              </div>
+
+              {/* Itemized Table */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase">
+                    <tr>
+                      <th className="p-2.5">#</th>
+                      <th className="p-2.5">Tracking Number</th>
+                      <th className="p-2.5">Recipient</th>
+                      <th className="p-2.5">Destination</th>
+                      <th className="p-2.5 text-center">Pcs</th>
+                      <th className="p-2.5 text-center">Weight</th>
+                      <th className="p-2.5 text-right">COD (PKR)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedSheet.parcels?.map((p: any, idx: number) => (
+                      <tr key={p.id || idx}>
+                        <td className="p-2.5 text-slate-400 font-bold">{idx + 1}</td>
+                        <td className="p-2.5 font-mono font-bold text-primary">{p.tracking_number}</td>
+                        <td className="p-2.5 font-semibold text-slate-800">{p.recipient_name}</td>
+                        <td className="p-2.5 text-slate-600">{p.destination_city?.name || p.recipient_address || 'Local'}</td>
+                        <td className="p-2.5 text-center font-mono">{p.pieces || 1}</td>
+                        <td className="p-2.5 text-center font-mono">{p.weight || 0.5} kg</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-900">PKR {Number(p.cod_amount || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Manual Dispatch CTA */}
+              {selectedSheet.status !== 'Dispatched' && selectedSheet.status !== 'Delivered' && (
+                <div className="flex items-center justify-between border-t border-slate-200 pt-4 bg-emerald-50/50 p-4 rounded-xl border">
+                  <div>
+                    <h5 className="font-bold text-xs text-emerald-950">Dispatch to Courier (Sets parcels to 'Not Arrived')</h5>
+                    <p className="text-[11px] text-slate-600 mt-0.5">Click to confirm physical handover to the courier pickup rider.</p>
                   </div>
+                  <button
+                    onClick={() => dispatchLoadSheetAction(selectedSheet)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Truck className="w-4 h-4" />
+                    <span>Confirm & Mark Dispatched</span>
+                  </button>
                 </div>
               )}
-
             </div>
           </div>
         </div>
       )}
 
-      {/* PRINT VIEW PREVIEW OVERLAY */}
+      {/* ========================================================================= */}
+      {/* PRINTABLE / DOWNLOADABLE PDF SHEET MODAL (#print-area)                   */}
+      {/* ========================================================================= */}
       {showPrintView && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto no-print">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-outline-variant animate-in zoom-in-95 duration-200">
-            {/* Modal Actions */}
-            <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50/50">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-300 animate-in zoom-in-95 duration-200">
+            
+            {/* Modal Header with Print CTA */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
               <div>
-                <h3 className="font-bold text-base text-on-surface">Print Preview</h3>
-                <p className="text-xs text-secondary mt-0.5">Click Print to launch the system print dialog. Page break is set between Rider and Shipper copies.</p>
+                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-primary" />
+                  Official Load Sheet Manifest (PDF Print Preview)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Click "Print / Save PDF" to open the browser print dialog and save or print this official handover sheet.
+                </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-primary text-white rounded-xl font-semibold text-xs hover:shadow-lg active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print Sheet
+                  <Printer className="w-4 h-4" />
+                  <span>Print / Save PDF</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setShowPrintView(null)}
-                  className="px-4 py-2 border border-outline-variant rounded-xl text-secondary hover:bg-slate-50 transition-all font-semibold text-xs active:scale-95 cursor-pointer"
+                  className="px-3 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs cursor-pointer"
                 >
-                  Close Preview
+                  Close
                 </button>
               </div>
             </div>
 
-            {/* Simulated Sheet Scrollable Frame */}
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-100 flex justify-center">
-              <div className="bg-white w-[790px] min-h-[1000px] border border-slate-300 p-8 shadow-md text-slate-800 text-xs font-sans flex flex-col gap-8">
+            {/* Scrollable Document Container */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-100 flex justify-center">
+              
+              {/* Target printable sheet (A4 dimensions style) */}
+              <div id="print-area" className="bg-white w-full max-w-[850px] p-8 border border-slate-300 shadow-lg text-slate-900 font-sans flex flex-col gap-6">
                 
-                {/* Visual rendering of the print wrapper */}
-                <div id="print-area" className="flex flex-col gap-12 w-full">
+                {/* Header with DBARC Branding & Load Sheet Barcode */}
+                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-black text-slate-900 tracking-tight">DBARC</span>
+                      <span className="text-xs font-semibold text-slate-600">
+                        [Digital Business Automation for Routing & Courier]
+                      </span>
+                    </div>
+                    <h1 className="text-base font-black text-slate-900 mt-1 uppercase tracking-tight">
+                      OFFICIAL COURIER LOAD SHEET & PICKUP MANIFEST
+                    </h1>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      Physical custody handover & verified cargo distribution dispatch document
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end">
+                    <Code128BarcodeSvg text={showPrintView.sheet_id} height={42} />
+                  </div>
+                </div>
+
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-300 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Manifest ID</span>
+                    <span className="font-mono font-bold text-slate-900">{showPrintView.sheet_id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Date & Time</span>
+                    <span className="font-semibold text-slate-800">
+                      {new Date(showPrintView.date_created || Date.now()).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Origin Facility</span>
+                    <span className="font-semibold text-slate-800">{showPrintView.origin_hub?.name || 'Main Courier Hub'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Shipper Business</span>
+                    <span className="font-semibold text-slate-800">{showPrintView.shipperName || user?.shipper?.[0]?.name || user?.name || 'Shipper'}</span>
+                  </div>
+                </div>
+
+                {/* Itemized Orders Table */}
+                <table className="w-full text-left border-collapse text-[10px] mt-1">
+                  <thead>
+                    <tr className="border-b-2 border-slate-900 bg-slate-100 text-slate-800 font-bold uppercase text-[9px]">
+                      <th className="py-2 px-2 w-8 text-center">#</th>
+                      <th className="py-2 px-2">Tracking Number</th>
+                      <th className="py-2 px-2">Recipient Name & Contact</th>
+                      <th className="py-2 px-2">Delivery Destination</th>
+                      <th className="py-2 px-2 text-center w-10">Pcs</th>
+                      <th className="py-2 px-2 text-center w-14">Weight</th>
+                      <th className="py-2 px-2 text-center w-16">Payment</th>
+                      <th className="py-2 px-2 text-right w-24">COD Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {showPrintView.parcels?.map((parcel: any, idx: number) => (
+                      <tr key={parcel.id || idx} className="align-top py-1.5">
+                        <td className="py-2 px-2 text-center font-bold text-slate-400">{idx + 1}</td>
+                        <td className="py-2 px-2 font-mono font-bold text-slate-900">{parcel.tracking_number}</td>
+                        <td className="py-2 px-2">
+                          <div className="font-bold text-slate-900">{parcel.recipient_name}</div>
+                          <div className="text-[9px] text-slate-500">{parcel.recipient_phone}</div>
+                        </td>
+                        <td className="py-2 px-2 text-slate-700 leading-tight">
+                          <div className="font-semibold">{parcel.destination_city?.name || 'Local'}</div>
+                          <div className="text-[9px] text-slate-500 truncate max-w-[200px]">{parcel.recipient_address}</div>
+                        </td>
+                        <td className="py-2 px-2 text-center font-mono font-bold">{parcel.pieces || 1}</td>
+                        <td className="py-2 px-2 text-center font-mono">{parcel.weight || 0.5} kg</td>
+                        <td className="py-2 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold ${
+                            parcel.payment_type === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {parcel.payment_type || 'COD'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                          PKR {Number(parcel.cod_amount || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-900 font-bold text-[11px] bg-slate-50">
+                      <td colSpan={4} className="py-2.5 px-2">Total Manifest Summary</td>
+                      <td className="py-2.5 px-2 text-center font-mono font-black">
+                        {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (p.pieces || 1), 0)}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono font-black">
+                        {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (Number(p.weight) || 0.5), 0).toFixed(2)} kg
+                      </td>
+                      <td className="py-2.5 px-2"></td>
+                      <td className="py-2.5 px-2 text-right font-mono font-black text-emerald-800">
+                        PKR {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (Number(p.cod_amount) || 0), 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                {/* Bottom Section: Scannable Barcode & Receiving Signatures */}
+                <div className="border-t-2 border-slate-900 pt-6 mt-4 flex flex-col gap-6">
                   
-                  {/* DUAL COPY 1: RIDER COPY */}
-                  <div className="flex flex-col gap-4 border-b border-dashed border-slate-400 pb-12 print-page-break">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h2 className="text-base font-extrabold text-slate-900 tracking-tight">DBARC COURIER LOGISTICS</h2>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">LOAD SHEET (RIDER COPY)</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-sm font-bold border border-slate-800 px-2 py-1 bg-slate-50 block rounded mb-1">{showPrintView.sheet_id}</span>
-                        <span className="text-[9px] text-slate-400 block font-semibold">Date Created: {new Date(showPrintView.date_created).toLocaleString()}</span>
+                  {/* Scannable Barcode */}
+                  <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-300 rounded-lg">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase mb-1">
+                      Courier Pickup Verification Barcode (Scan to Dispatch)
+                    </span>
+                    <Code128BarcodeSvg text={showPrintView.sheet_id} height={55} />
+                  </div>
+
+                  {/* Dual Signatures & Stamp Blocks */}
+                  <div className="grid grid-cols-2 gap-8 text-[10px]">
+                    <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
+                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
+                        Courier Rider Verification & Receiving
+                      </span>
+                      <div className="border-b border-slate-400 w-full mb-1" />
+                      <div className="flex justify-between text-slate-400 text-[9px]">
+                        <span>Rider Name / Phone / Vehicle No</span>
+                        <span>Signature & Stamp</span>
                       </div>
                     </div>
 
-                    <hr className="border-slate-800" />
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-medium bg-slate-50 p-3 rounded">
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Origin Station</span> {showPrintView.origin_hub?.name || 'N/A'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Destination Hub</span> {showPrintView.destination_hub?.name || 'N/A'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Assigned Rider</span> {showPrintView.rider?.name || 'Unassigned'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Vehicle Details</span> {showPrintView.vehicle_details || 'N/A'}</div>
-                    </div>
-
-                    <table className="w-full text-left border-collapse text-[9px] mt-2">
-                      <thead>
-                        <tr className="border-b-2 border-slate-800 text-slate-500 uppercase font-bold text-[8px]">
-                          <th className="py-1.5 w-8">#</th>
-                          <th className="py-1.5">Tracking Number</th>
-                          <th className="py-1.5">Recipient Name</th>
-                          <th className="py-1.5">Delivery Address</th>
-                          <th className="py-1.5 w-12 text-center">Pcs</th>
-                          <th className="py-1.5 w-16 text-center">Weight</th>
-                          <th className="py-1.5 w-20 text-right">COD (PKR)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {showPrintView.parcels?.map((parcel: any, idx: number) => (
-                          <tr key={parcel.id} className="align-top py-1.5">
-                            <td className="py-2 font-bold text-slate-400">{idx + 1}</td>
-                            <td className="py-2 font-mono font-bold text-slate-900">{parcel.tracking_number}</td>
-                            <td className="py-2 font-bold">{parcel.recipient_name}</td>
-                            <td className="py-2 text-slate-600 leading-relaxed pr-2">{parcel.recipient_address}</td>
-                            <td className="py-2 text-center font-bold">{parcel.pieces || 1}</td>
-                            <td className="py-2 text-center font-mono font-semibold">{parcel.weight || 0} kg</td>
-                            <td className="py-2 text-right font-mono font-bold">PKR {parcel.cod_amount?.toLocaleString() || 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-slate-800 font-bold text-[10px] bg-slate-50">
-                          <td colSpan={4} className="py-2 pl-2">Total Load Sheet Summary</td>
-                          <td className="py-2 text-center">{showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.pieces || 1), 0)}</td>
-                          <td className="py-2 text-center font-mono">{showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.weight || 0), 0).toFixed(2)} kg</td>
-                          <td className="py-2 text-right font-mono pr-1">
-                            PKR {showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.cod_amount || 0), 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-
-                    <div className="grid grid-cols-2 gap-12 mt-8 text-[9px] font-bold">
-                      <div className="flex flex-col gap-6">
-                        <span className="text-slate-400 block font-bold text-[8px] uppercase">Rider Verification & Custody Signature</span>
-                        <div className="border-b border-slate-400 w-full h-8 flex items-end text-slate-400 font-normal italic">Signature / Date / Time</div>
-                      </div>
-                      <div className="flex flex-col gap-6">
-                        <span className="text-slate-400 block font-bold text-[8px] uppercase">Shipper Handover Signature</span>
-                        <div className="border-b border-slate-400 w-full h-8 flex items-end text-slate-400 font-normal italic">Signature / Date / Time</div>
+                    <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
+                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
+                        Shipper Store Handover Confirmation
+                      </span>
+                      <div className="border-b border-slate-400 w-full mb-1" />
+                      <div className="flex justify-between text-slate-400 text-[9px]">
+                        <span>Authorized Signatory</span>
+                        <span>Date & Stamp</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* DUAL COPY 2: SHIPPER COPY */}
-                  <div className="flex flex-col gap-4 pt-12">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h2 className="text-base font-extrabold text-slate-900 tracking-tight">DBARC COURIER LOGISTICS</h2>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">LOAD SHEET (SHIPPER COPY)</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-sm font-bold border border-slate-800 px-2 py-1 bg-slate-50 block rounded mb-1">{showPrintView.sheet_id}</span>
-                        <span className="text-[9px] text-slate-400 block font-semibold">Date Created: {new Date(showPrintView.date_created).toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    <hr className="border-slate-800" />
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-medium bg-slate-50 p-3 rounded">
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Origin Station</span> {showPrintView.origin_hub?.name || 'N/A'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Destination Hub</span> {showPrintView.destination_hub?.name || 'N/A'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Assigned Rider</span> {showPrintView.rider?.name || 'Unassigned'}</div>
-                      <div><span className="text-slate-400 block font-bold text-[8px] uppercase">Vehicle Details</span> {showPrintView.vehicle_details || 'N/A'}</div>
-                    </div>
-
-                    <table className="w-full text-left border-collapse text-[9px] mt-2">
-                      <thead>
-                        <tr className="border-b-2 border-slate-800 text-slate-500 uppercase font-bold text-[8px]">
-                          <th className="py-1.5 w-8">#</th>
-                          <th className="py-1.5">Tracking Number</th>
-                          <th className="py-1.5">Recipient Name</th>
-                          <th className="py-1.5">Delivery Address</th>
-                          <th className="py-1.5 w-12 text-center">Pcs</th>
-                          <th className="py-1.5 w-16 text-center">Weight</th>
-                          <th className="py-1.5 w-20 text-right">COD (PKR)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {showPrintView.parcels?.map((parcel: any, idx: number) => (
-                          <tr key={parcel.id} className="align-top py-1.5">
-                            <td className="py-2 font-bold text-slate-400">{idx + 1}</td>
-                            <td className="py-2 font-mono font-bold text-slate-900">{parcel.tracking_number}</td>
-                            <td className="py-2 font-bold">{parcel.recipient_name}</td>
-                            <td className="py-2 text-slate-600 leading-relaxed pr-2">{parcel.recipient_address}</td>
-                            <td className="py-2 text-center font-bold">{parcel.pieces || 1}</td>
-                            <td className="py-2 text-center font-mono font-semibold">{parcel.weight || 0} kg</td>
-                            <td className="py-2 text-right font-mono font-bold">PKR {parcel.cod_amount?.toLocaleString() || 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-slate-800 font-bold text-[10px] bg-slate-50">
-                          <td colSpan={4} className="py-2 pl-2">Total Load Sheet Summary</td>
-                          <td className="py-2 text-center">{showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.pieces || 1), 0)}</td>
-                          <td className="py-2 text-center font-mono">{showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.weight || 0), 0).toFixed(2)} kg</td>
-                          <td className="py-2 text-right font-mono pr-1">
-                            PKR {showPrintView.parcels?.reduce((sum: number, p: any) => sum + (p.cod_amount || 0), 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-
-                    <div className="grid grid-cols-2 gap-12 mt-8 text-[9px] font-bold">
-                      <div className="flex flex-col gap-6">
-                        <span className="text-slate-400 block font-bold text-[8px] uppercase">Rider Verification & Custody Signature</span>
-                        <div className="border-b border-slate-400 w-full h-8 flex items-end text-slate-400 font-normal italic">Signature / Date / Time</div>
-                      </div>
-                      <div className="flex flex-col gap-6">
-                        <span className="text-slate-400 block font-bold text-[8px] uppercase">Shipper Handover Signature</span>
-                        <div className="border-b border-slate-400 w-full h-8 flex items-end text-slate-400 font-normal italic">Signature / Date / Time</div>
-                      </div>
-                    </div>
+                  {/* Footer Notice */}
+                  <div className="text-[9px] text-slate-400 text-center font-medium">
+                    This load sheet serves as legal custody handover between Shipper and DBARC Courier.
+                    Upon rider optical scan of the barcode above, all listed orders automatically transition to "Not Arrived" (In Handover Transit).
                   </div>
 
                 </div>
 
               </div>
             </div>
+
           </div>
         </div>
       )}

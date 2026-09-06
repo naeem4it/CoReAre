@@ -112,10 +112,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       : [];
   }, [user, isShipperUser]);
 
-  const showShipmentBooking = React.useMemo(() => {
-    if (!user) return false;
-    return true;
-  }, [user]);
+  // Shipment booking menus hidden as requested
+  const showShipmentBooking = false;
 
   if (!isAuthenticated) {
     return (
@@ -136,7 +134,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             {logoUrl ? (
               <img src={logoUrl} alt={businessName} className="h-8 object-contain" />
             ) : (
-              <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">{businessName}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">{businessName}</span>
+                <span className="text-xs font-semibold text-slate-500 hidden xl:inline">
+                  [Digital Business Automation for Routing & Courier]
+                </span>
+              </div>
             )}
           </div>
 
@@ -468,28 +471,32 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
         /* ==================== SHIPPER MERCHANT MENU (EXCLUSIVE) ==================== */
         <>
           <NavLink href="/orders" icon="list_alt" label="Booked Orders" />
-          <NavLink href="/shipments/book?tab=manual" icon="add_box" label="Book Order" />
+          {showShipmentBooking && (
+            <NavLink href="/shipments/book?tab=manual" icon="add_box" label="Book Order" />
+          )}
           <NavLink href="/load-sheet" icon="route" label="Load Sheet" />
           <NavLink href="/pickup-information" icon="local_shipping" label="Pickup Info" />
           <NavLink href="/shipper-advise" icon="quick_reference_all" label="Shipper Advice" />
 
-          {/* Booking & Bulk Section */}
-          <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-            <button onClick={() => toggleMenu('shipment')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
-              <div className="flex items-center gap-md">
-                <span className="material-symbols-outlined">inventory_2</span>
-                <span className="font-label-md text-label-md">Shipment Booking</span>
-              </div>
-              <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'shipment' ? 'rotate(180deg)' : '' }}>expand_more</span>
-            </button>
-            {expandedMenu === 'shipment' && (
-              <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
-                <NavLink href="/shipments/book?tab=manual" icon="local_shipping" label="Single Booking" />
-                <NavLink href="/shipments/book?tab=bulk" icon="upload_file" label="Bulk CSV Upload" />
-                <NavLink href="/cargo-distribution" icon="route" label="Cargo Dispatch" />
-              </div>
-            )}
-          </div>
+          {/* Booking & Bulk Section (Hidden if showShipmentBooking is false) */}
+          {showShipmentBooking && (
+            <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+              <button onClick={() => toggleMenu('shipment')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+                <div className="flex items-center gap-md">
+                  <span className="material-symbols-outlined">inventory_2</span>
+                  <span className="font-label-md text-label-md">Shipment Booking</span>
+                </div>
+                <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'shipment' ? 'rotate(180deg)' : '' }}>expand_more</span>
+              </button>
+              {expandedMenu === 'shipment' && (
+                <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+                  <NavLink href="/shipments/book?tab=manual" icon="local_shipping" label="Single Booking" />
+                  <NavLink href="/shipments/book?tab=bulk" icon="upload_file" label="Bulk CSV Upload" />
+                  <NavLink href="/cargo-distribution" icon="route" label="Cargo Dispatch" />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Billing & Invoices Section */}
           <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">

@@ -75,7 +75,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 pt-16">
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+            DBARC
+          </span>
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap">
+            [Digital Business Automation for Routing & Courier]
+          </span>
+        </div>
+      </header>
+
       {/* Decorative Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-primary-200/20 blur-[120px] rounded-full" />
@@ -94,8 +106,8 @@ export default function LoginPage() {
             <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">
               DBARc
             </CardTitle>
-            <p className="text-slate-500 mt-2 font-medium">
-              Enterprise Logistics SaaS Portal
+            <p className="text-slate-500 mt-2 font-medium text-xs sm:text-sm">
+              DBARC [Digital Business Automation for Routing & Courier]
             </p>
           </div>
         </CardHeader>

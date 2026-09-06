@@ -28,7 +28,19 @@ export default function HomePage() {
   }, [isAuthenticated, user, router]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-slate-50">
+    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-slate-50 pt-20">
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+            DBARC
+          </span>
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap">
+            [Digital Business Automation for Routing & Courier]
+          </span>
+        </div>
+      </header>
+
       <Card className="w-full max-w-md shadow-2xl border border-slate-200 rounded-3xl overflow-hidden">
         <div className="h-2 bg-gradient-to-r from-blue-600 to-indigo-600" />
         <CardHeader className="text-center pt-8">
@@ -38,8 +50,8 @@ export default function HomePage() {
           <CardTitle className="text-3xl font-black text-slate-900 tracking-tight">
             DBARc Portal
           </CardTitle>
-          <p className="text-slate-500 mt-2 text-sm font-medium">
-            Multi-Tenant Logistics Management Suite
+          <p className="text-slate-500 mt-2 text-xs sm:text-sm font-medium">
+            DBARC [Digital Business Automation for Routing & Courier]
           </p>
         </CardHeader>
         <CardContent className="space-y-6 pb-8">

@@ -186,10 +186,15 @@ export const Sidebar = ({ role }: { role: UserRole }) => {
   return (
     <aside className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 z-40 border-r border-white/5">
       <div className="p-6 flex items-center gap-3">
-        <div className="h-10 w-10 bg-primary-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/20">
+        <div className="h-10 w-10 bg-primary-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/20 shrink-0">
           <Package className="h-6 w-6" />
         </div>
-        <span className="text-xl font-bold text-white tracking-tight">DBARc</span>
+        <div className="flex flex-col min-w-0">
+          <span className="text-lg font-bold text-white tracking-tight leading-none">DBARC</span>
+          <span className="text-[9px] text-slate-400 font-medium tracking-tight mt-1 leading-tight line-clamp-2">
+            [Digital Business Automation for Routing & Courier]
+          </span>
+        </div>
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1">
