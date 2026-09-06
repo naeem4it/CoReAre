@@ -38,6 +38,24 @@ export function TextBox<TFieldValues extends FieldValues>({
   const error = errors[name];
   const errorMessage = error?.message as string | undefined;
   const inputId = id || (name as string);
+  const cleanNumberLeadingZeros = (val: string): string => {
+    if (!val) return val;
+    // If string starts with 0 followed by digits 0-9 (not dot/decimal point):
+    // e.g. "01" -> "1", "0340" -> "340", "00" -> "0"
+    // But keeps "0.5", "0.05", "0", "0." untouched!
+    if (/^0[0-9]+/.test(val)) {
+      return val.replace(/^0+/, '') || '0';
+    }
+    return val;
+  };
+
+  const regProps = register(name, props.type === 'number' ? {
+    setValueAs: (v) => {
+      if (v === '' || v === null || v === undefined) return undefined;
+      const str = typeof v === 'string' ? cleanNumberLeadingZeros(v) : v;
+      return isNaN(Number(str)) ? str : Number(str);
+    }
+  } : undefined);
 
   return (
     <div className="flex flex-col gap-xs w-full">
@@ -66,10 +84,34 @@ export function TextBox<TFieldValues extends FieldValues>({
               : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary",
             className
           )}
-          {...register(name, props.type === 'number' ? {
-            setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : isNaN(Number(v)) ? v : Number(v))
-          } : undefined)}
+          {...regProps}
           {...props}
+          onFocus={(e) => {
+            if (props.type === 'number' && (e.target.value === '0' || e.target.value === '0.0')) {
+              e.target.select();
+            }
+            props.onFocus?.(e);
+          }}
+          onInput={(e: React.FormEvent<HTMLInputElement>) => {
+            if (props.type === 'number') {
+              const inputEl = e.currentTarget;
+              const cleaned = cleanNumberLeadingZeros(inputEl.value);
+              if (cleaned !== inputEl.value) {
+                inputEl.value = cleaned;
+              }
+            }
+            props.onInput?.(e as any);
+          }}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            if (props.type === 'number') {
+              const cleaned = cleanNumberLeadingZeros(e.target.value);
+              if (cleaned !== e.target.value) {
+                e.target.value = cleaned;
+              }
+            }
+            regProps.onChange(e);
+            props.onChange?.(e);
+          }}
         />
         {rightElement && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">

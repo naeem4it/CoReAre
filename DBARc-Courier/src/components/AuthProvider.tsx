@@ -6,6 +6,9 @@ interface AuthContextType {
   user: any;
   activeBusinessId: number | null;
   activeOfficeId: number | null;
+  isShipper: boolean;
+  isShipperAdmin: boolean;
+  isShipperEmployee: boolean;
   setActiveBusinessId: (id: number | null) => void;
   setActiveOfficeId: (id: number | null) => void;
   refreshUser: () => void;
@@ -15,6 +18,9 @@ const AuthContext = React.createContext<AuthContextType>({
   user: null,
   activeBusinessId: null,
   activeOfficeId: null,
+  isShipper: false,
+  isShipperAdmin: false,
+  isShipperEmployee: false,
   setActiveBusinessId: () => {},
   setActiveOfficeId: () => {},
   refreshUser: () => {},
@@ -56,6 +62,40 @@ export const AuthProvider = ({ children, initialUser }: { children: React.ReactN
     }
   }, [user]);
 
+  const isShipper = React.useMemo(() => {
+    if (!user) return false;
+    if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) return true;
+    const roleType = (
+      user.role?.type || 
+      user.role_type || 
+      user.role?.name || 
+      (typeof user.role === 'string' ? user.role : '')
+    ).toString().toLowerCase();
+    if (roleType.includes('shipper')) return true;
+    if (user.user_type === 'shipper' || user.type === 'shipper') return true;
+    if (user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : !!user.shipper)) {
+      const hasCourierRole = Array.isArray(user.role_definition) && user.role_definition.some((r: any) => 
+        ['admin', 'courier', 'super admin', 'rider', 'front desk'].some(c => (r.role_name || '').toLowerCase().includes(c))
+      );
+      if (!hasCourierRole) return true;
+    }
+    const email = (user.email || '').toLowerCase();
+    const username = (user.username || '').toLowerCase();
+    if (email.includes('shipper') || username.includes('shipper')) return true;
+    return false;
+  }, [user]);
+
+  const isShipperEmployee = React.useMemo(() => {
+    if (!isShipper) return false;
+    const roles = Array.isArray(user?.shipper_roles) ? user.shipper_roles : [];
+    return roles.some((r: string) => r.toLowerCase().includes('employee'));
+  }, [isShipper, user]);
+
+  const isShipperAdmin = React.useMemo(() => {
+    if (!isShipper) return false;
+    return !isShipperEmployee;
+  }, [isShipper, isShipperEmployee]);
+
   const setActiveBusinessId = (id: number | null) => {
     setActiveBusinessIdState(id);
     if (id) {
@@ -84,7 +124,17 @@ export const AuthProvider = ({ children, initialUser }: { children: React.ReactN
   };
 
   return (
-    <AuthContext.Provider value={{ user, activeBusinessId, activeOfficeId, setActiveBusinessId, setActiveOfficeId, refreshUser }}>
+    <AuthContext.Provider value={{
+      user,
+      activeBusinessId,
+      activeOfficeId,
+      isShipper,
+      isShipperAdmin,
+      isShipperEmployee,
+      setActiveBusinessId,
+      setActiveOfficeId,
+      refreshUser
+    }}>
       {children}
     </AuthContext.Provider>
   );

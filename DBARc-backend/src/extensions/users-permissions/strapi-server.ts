@@ -617,6 +617,9 @@ export default (plugin: any) => {
         } else if (shipper && adminShipperIds.includes(Number(shipper))) {
           targetShipperIds = [Number(shipper)];
         }
+        if (targetShipperIds.length === 0) {
+          targetShipperIds = adminShipperIds;
+        }
       } else if (shipper) {
         // Allow courier/tenant admin to specify shippers if it belongs to their tenant
         const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];

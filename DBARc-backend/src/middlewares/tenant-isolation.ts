@@ -53,13 +53,12 @@ export default (config: any, { strapi }: { strapi: any }) => {
         if (effectiveTenantId) {
           // If request body contains a different tenant, enforce the authenticated tenant
           if (ctx.request.body && ctx.request.body.data) {
-            if (
-              ctx.request.body.data.tenant &&
-              Number(ctx.request.body.data.tenant) !== Number(effectiveTenantId)
-            ) {
-              return ctx.forbidden('Cross-tenant data mutation is not permitted.');
+            if (ctx.request.body.data.tenant) {
+              if (Number(ctx.request.body.data.tenant) !== Number(effectiveTenantId)) {
+                return ctx.forbidden('Cross-tenant data mutation is not permitted.');
+              }
+              ctx.request.body.data.tenant = effectiveTenantId;
             }
-            ctx.request.body.data.tenant = effectiveTenantId;
           }
 
           // If query params are searching, ensure query doesn't try to access another tenant

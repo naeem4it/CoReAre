@@ -380,6 +380,17 @@ function BookShipmentForm() {
     };
   }, [weight, codAmount, serviceType, destinationCityId, destinationCityName, user]);
 
+  // Auto-populate estimated cost into COD Amount when COD is active and codAmount is 0 or empty
+  const hasInitializedCodAmount = React.useRef(false);
+  React.useEffect(() => {
+    if (paymentType === 'COD' && (!codAmount || codAmount === 0)) {
+      if (pricing.total > 0 && !hasInitializedCodAmount.current) {
+        setValue('codAmount', Math.round(pricing.total) || pricing.total);
+        hasInitializedCodAmount.current = true;
+      }
+    }
+  }, [pricing.total, paymentType, codAmount, setValue]);
+
   // Search Reference Order
   React.useEffect(() => {
     if (refSearchQuery.trim().length < 3) {
@@ -440,17 +451,17 @@ function BookShipmentForm() {
           tracking_number: trackingId,
           status: 'Total Booking',
           payment_type: data.paymentType || (data.codAmount > 0 ? 'COD' : 'PAID'),
-          cod_amount: data.paymentType === 'PAID' ? 0 : (data.codAmount || 0),
-          weight: data.weight,
+          cod_amount: data.paymentType === 'PAID' ? 0 : (Number(data.codAmount) || 0),
+          weight: Number(data.weight) || 0.5,
+          pieces: Number(data.pieces) || 1,
           delivery_charges: pricing.total,
           recipient_name: data.consigneeName,
           recipient_phone: data.consigneePhone,
           recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCityName || data.destinationCity}`,
-          consignee_email: data.consigneeEmail,
-          consignee_alt_phone: data.consigneeAltPhone,
-          allow_to_open: data.allowToOpen,
-          comments: data.comments,
-          tenant: tenantId,
+          consignee_email: data.consigneeEmail || '',
+          consignee_alt_phone: data.consigneeAltPhone || '',
+          allow_to_open: data.allowToOpen || 'No',
+          comments: data.comments || data.productDescription || '',
           shipper: shipperId || null,
           origin_office: originOfficeId,
         }
@@ -504,8 +515,15 @@ function BookShipmentForm() {
       }, 3000);
 
     } catch (err: any) {
-      console.error('Failed to book order:', err);
-      setErrorMessage(err.response?.data?.error?.message || 'Failed to connect to the server. Please try again.');
+      console.warn('Failed to book order:', err?.response?.data || err.message);
+      if (err.response?.status === 401) {
+        setErrorMessage('Your session has expired. Redirecting to login page...');
+        setTimeout(() => {
+          window.location.href = '/login?expired=1';
+        }, 1200);
+      } else {
+        setErrorMessage(err.response?.data?.error?.message || 'Failed to connect to the server. Please try again.');
+      }
       setBookingStatus('error');
     }
   };
@@ -750,34 +768,48 @@ function BookShipmentForm() {
     setBulkProgress(0);
     setErrorMessage('');
 
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
+    const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
+    const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
+    
+    let shipperId: number | null = null;
+    if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
+      const matchingShipper = user.shipper.find((s: any) => s.id === activeBusinessId);
+      shipperId = matchingShipper ? matchingShipper.id : user.shipper[0].id;
+    } else if (user?.shipper?.id) {
+      shipperId = user.shipper.id;
+    } else if (activeBusinessId && !isNaN(activeBusinessId)) {
+      shipperId = activeBusinessId;
+    }
+
     let successCount = 0;
 
     try {
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
-        const extraWeight = Math.max(0, row.weight - 0.5);
+        const extraWeight = Math.max(0, (row.weight || 0.5) - 0.5);
         const extraUnits = Math.ceil(extraWeight / 0.5);
         const deliveryCharge = 250 + (extraUnits * 100) + 35;
         const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-        const parcelRes = await apiClient.post('/parcels', {
-          data: {
-            tracking_number: trackingId,
-            status: 'Total Booking',
-            cod_amount: row.codAmount || 0,
-            weight: row.weight || 0.5,
-            delivery_charges: deliveryCharge,
-            recipient_name: row.consigneeName,
-            recipient_phone: row.consigneePhone,
-            recipient_address: `${row.deliveryAddress}${row.area ? `, ${row.area}` : ''}, ${row.destinationCity}`,
-            consignee_email: row.consigneeEmail || '',
-            consignee_alt_phone: row.consigneeAltPhone || '',
-            allow_to_open: row.allowToOpen || 'No',
-            comments: row.comments || '',
-            tenant: tenantId,
-          }
-        });
+        const parcelPayload: any = {
+          tracking_number: trackingId,
+          status: 'Total Booking',
+          payment_type: (row.codAmount && Number(row.codAmount) > 0) ? 'COD' : 'PAID',
+          cod_amount: Number(row.codAmount) || 0,
+          weight: Number(row.weight) || 0.5,
+          pieces: Number(row.pieces) || 1,
+          delivery_charges: deliveryCharge,
+          recipient_name: row.consigneeName || 'Customer',
+          recipient_phone: row.consigneePhone || '',
+          recipient_address: `${row.deliveryAddress || ''}${row.area ? `, ${row.area}` : ''}, ${row.destinationCity || ''}`,
+          consignee_email: row.consigneeEmail || '',
+          consignee_alt_phone: row.consigneeAltPhone || '',
+          allow_to_open: row.allowToOpen || 'No',
+          comments: row.productDescription || row.comments || '',
+          shipper: shipperId || null,
+        };
+
+        const parcelRes = await apiClient.post('/parcels', { data: parcelPayload });
 
         const newParcelId = parcelRes.data.data.id;
 
@@ -818,8 +850,12 @@ function BookShipmentForm() {
       }, 3000);
 
     } catch (err: any) {
-      console.error("Batch processing failed:", err);
-      setErrorMessage("An error occurred during batch booking. Please try again.");
+      console.warn("Batch processing failed:", err?.response?.data || err.message);
+      if (err.response?.status === 401) {
+        setErrorMessage("Your session has expired. Please refresh the page or log in again.");
+      } else {
+        setErrorMessage(err.response?.data?.error?.message || "An error occurred during batch booking. Please try again.");
+      }
       setBulkStatus('loaded');
     }
   };
@@ -962,7 +998,7 @@ function BookShipmentForm() {
           </div>
         </div>
 
-        {/* Manual Status Banners */}
+        {/* Status Banners */}
         {bookingMode === 'manual' && bookingStatus === 'success' && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300">
             <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
@@ -973,13 +1009,32 @@ function BookShipmentForm() {
           </div>
         )}
 
-        {bookingMode === 'manual' && bookingStatus === 'error' && (
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300">
-            <Info className="h-5 w-5 text-red-600 shrink-0" />
+        {bulkStatus === 'success' && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300">
+            <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
             <div>
-              <p className="font-bold">Booking Failed</p>
-              <p className="text-sm">{errorMessage}</p>
+              <p className="font-bold">Bulk Orders Booked Successfully!</p>
+              <p className="text-sm">All shipments have been created and assigned tracking numbers.</p>
             </div>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center gap-3">
+              <Info className="h-5 w-5 text-red-600 shrink-0" />
+              <div>
+                <p className="font-bold">Booking Notice</p>
+                <p className="text-sm">{errorMessage}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMessage('')}
+              className="text-red-700 hover:text-red-900 text-xs font-bold px-2 py-1 rounded cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -1146,6 +1201,9 @@ function BookShipmentForm() {
                           type="button"
                           onClick={() => {
                             setValue('paymentType', 'COD');
+                            if (pricing.total > 0) {
+                              setValue('codAmount', Math.round(pricing.total) || pricing.total);
+                            }
                           }}
                           className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                             paymentType === 'COD' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
@@ -1168,13 +1226,29 @@ function BookShipmentForm() {
                       </div>
                     </div>
 
-                    <TextBox<BookingFormValues>
-                      name="codAmount"
-                      label={paymentType === 'PAID' ? 'COD Amount (Disabled for PAID)' : 'COD Amount (PKR)'}
-                      placeholder="0"
-                      type="number"
-                      disabled={paymentType === 'PAID'}
-                    />
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700">
+                          {paymentType === 'PAID' ? 'COD Amount (Disabled for PAID)' : 'COD Amount (PKR)'}
+                        </label>
+                        {paymentType === 'COD' && pricing.total > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setValue('codAmount', Math.round(pricing.total) || pricing.total)}
+                            className="text-[10px] text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer bg-primary/5 px-2 py-0.5 rounded-md border border-primary/20"
+                            title="Set COD amount to estimated delivery total"
+                          >
+                            <span>Use Est: PKR {pricing.total.toFixed(2)}</span>
+                          </button>
+                        )}
+                      </div>
+                      <TextBox<BookingFormValues>
+                        name="codAmount"
+                        placeholder="0"
+                        type="number"
+                        disabled={paymentType === 'PAID'}
+                      />
+                    </div>
 
                     <SearchableDropdown<BookingFormValues>
                       name="serviceType"

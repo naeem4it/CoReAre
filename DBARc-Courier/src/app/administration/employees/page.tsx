@@ -3,7 +3,8 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
 import { CitySelect } from '@/components/ui/CitySelect';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -27,7 +28,7 @@ interface User {
   offices?: { id: number; name: string }[] | null;
 }
 
-const SHIPPER_SUB_ROLES = ['Finance', 'Shipment', 'Customer admin'];
+const SHIPPER_SUB_ROLES = ['Employee'];
 const COURIER_ROLE_NAMES = ['Super Admin', 'Admin', 'Front desk', 'shipment Booker', 'Rider'];
 
 // Password Policy: 8-20 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character
@@ -51,8 +52,17 @@ const validatePasswordRule = (pwd: string): { isValid: boolean; message?: string
 };
 
 function EmployeeManagementContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const typeParam = searchParams?.get('type') || 'courier';
+  const { user: authUser, isShipper, isShipperAdmin, isShipperEmployee } = useAuth();
+
+  // Guard: Shipper Employee cannot access team/employee administration
+  React.useEffect(() => {
+    if (isShipperEmployee) {
+      router.push('/');
+    }
+  }, [isShipperEmployee, router]);
 
   const [loggedInUser, setLoggedInUser] = React.useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -353,7 +363,7 @@ function EmployeeManagementContent() {
 
     if (isLoggedShipper) {
       setFormEmployeeType('shipper');
-      setAssignedShipperRoles([]); // Sub-roles for staff
+      setAssignedShipperRoles(['Employee']); // Default and only role for shipper staff
       const allUserBiz = loggedInUser?.shipper && Array.isArray(loggedInUser.shipper)
         ? loggedInUser.shipper
         : [];
@@ -546,7 +556,7 @@ function EmployeeManagementContent() {
           planName: b.planName || 'Standard Tariff Plan (Default)'
         }));
         payload.shipper = shipperObjects;
-        payload.shipper_roles = isLoggedShipper ? (assignedShipperRoles.length > 0 ? assignedShipperRoles : ['Shipment']) : ['shipper admin'];
+        payload.shipper_roles = isLoggedShipper ? ['Employee'] : ['shipper admin'];
         payload.role_definition = [];
       } else {
         payload.shipper = null;
@@ -618,7 +628,7 @@ function EmployeeManagementContent() {
           </h1>
           <p className="text-on-surface-variant font-body-md text-body-md">
             {isLoggedShipper
-              ? 'Manage your store team members, credentials, and access roles (Finance, Shipment, Customer admin).'
+              ? 'Manage your store team employees, credentials, and access permissions.'
               : (effectiveType === 'shipper'
                   ? 'Manage shipper admin accounts, credentials, permissions, and business assignments.'
                   : 'Manage courier staff credentials, permissions, and operational roles.')}
@@ -685,7 +695,7 @@ function EmployeeManagementContent() {
               className="bg-primary text-white h-10 px-4 rounded-xl hover:shadow-lg active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              {isLoggedShipper ? 'Add Team Member' : (effectiveType === 'shipper' ? 'Add Shipper' : 'Add Employee')}
+              {isLoggedShipper ? 'Add Employee' : (effectiveType === 'shipper' ? 'Add Shipper' : 'Add Employee')}
             </button>
             <button
               onClick={handleOpenEditForm}
@@ -695,14 +705,16 @@ function EmployeeManagementContent() {
               <span className="material-symbols-outlined text-[18px]">edit</span>
               Edit
             </button>
-            <button
-              onClick={handleDeleteUser}
-              disabled={!selectedUser || selectedUser.blocked}
-              className="bg-red-50 border border-red-200 text-red-700 h-10 px-4 rounded-xl hover:bg-red-100/50 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">delete</span>
-              Delete
-            </button>
+            {!isShipperEmployee && (
+              <button
+                onClick={handleDeleteUser}
+                disabled={!selectedUser || selectedUser.blocked}
+                className="bg-red-50 border border-red-200 text-red-700 h-10 px-4 rounded-xl hover:bg-red-100/50 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">delete</span>
+                Delete
+              </button>
+            )}
             <button
               onClick={handleResendInvite}
               disabled={!selectedUser || selectedUser.confirmed}
@@ -916,41 +928,15 @@ function EmployeeManagementContent() {
                   </div>
                 </div>
               ) : isLoggedShipper ? (
-                /* Shipper Admin assigning store sub-roles (Finance, Shipment, Customer admin) */
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Assign Store Roles <span className="text-red-500">*</span></label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {SHIPPER_SUB_ROLES.map((role) => {
-                      const isSelected = assignedShipperRoles.includes(role);
-                      return (
-                        <button
-                          key={role}
-                          type="button"
-                          onClick={() => {
-                            if (isSelected) {
-                              setAssignedShipperRoles(prev => prev.filter(r => r !== role));
-                            } else {
-                              setAssignedShipperRoles(prev => [...prev, role]);
-                            }
-                          }}
-                          className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
-                            isSelected
-                              ? 'border-primary bg-primary/5 text-primary shadow-xs'
-                              : 'border-outline-variant bg-white hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs">{role}</span>
-                            <span className="material-symbols-outlined text-[18px]">
-                              {isSelected ? 'check_circle' : 'radio_button_unchecked'}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500">
-                            {role === 'Finance' ? 'Invoices & COD reconciliation' : role === 'Shipment' ? 'Book & manage shipments' : 'Customer & tracking support'}
-                          </span>
-                        </button>
-                      );
-                    })}
+                /* Shipper Admin assigning store Employee role */
+                <div className="flex flex-col gap-1 border border-outline-variant rounded-xl p-3.5 bg-emerald-50/50">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Assigned Role</label>
+                  <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-emerald-200">
+                    <span className="material-symbols-outlined text-emerald-600 text-[24px]">badge</span>
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">Employee</div>
+                      <div className="text-xs text-slate-500">Operational team member: can book single and bulk orders, manage shipments, print sheets, and handle pickups. Restricted from deletion and store administration.</div>
+                    </div>
                   </div>
                 </div>
               ) : (

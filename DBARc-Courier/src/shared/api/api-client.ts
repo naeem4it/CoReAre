@@ -9,6 +9,21 @@ export const apiClient = axios.create({
   },
 });
 
+export function isTokenExpired(jwtToken: string | null): boolean {
+  if (!jwtToken || jwtToken.startsWith('mock-')) return false;
+  try {
+    const parts = jwtToken.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
 // Attach token & tenant interceptor if token exists in localStorage or environment
 apiClient.interceptors.request.use(
   (config) => {
@@ -16,6 +31,17 @@ apiClient.interceptors.request.use(
 
     if (typeof window !== 'undefined') {
       token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
+
+      // If token is expired, purge stale auth from localStorage so request doesn't fail with 401
+      if (token && isTokenExpired(token)) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('dbarc-token');
+        localStorage.removeItem('user');
+        token = null;
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login?expired=1';
+        }
+      }
 
       // Resolve tenant ID from user storage or env
       try {
@@ -53,9 +79,18 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (typeof window !== 'undefined' && (error.response?.status === 401 || error.response?.status === 403)) {
-      console.warn(`API Client ${error.response?.status} (${error.config?.url})`);
+    if (typeof window !== 'undefined' && error.response?.status === 401) {
+      console.warn(`API Client 401 Unauthorized (${error.config?.url}) - redirecting to login`);
+      localStorage.removeItem('token');
+      localStorage.removeItem('dbarc-token');
+      localStorage.removeItem('user');
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login?expired=1';
+      }
+    } else if (typeof window !== 'undefined' && error.response?.status === 403) {
+      console.warn(`API Client 403 Forbidden (${error.config?.url})`);
     }
     return Promise.reject(error);
   }
 );
+

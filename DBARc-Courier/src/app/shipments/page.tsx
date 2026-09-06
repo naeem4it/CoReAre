@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 type ShipmentRow = {
   id: number | string;
@@ -42,6 +43,7 @@ type ShipmentRow = {
 };
 
 export default function ShipmentsPage() {
+  const { isShipperEmployee } = useAuth();
   const [data, setData] = React.useState<ShipmentRow[]>([]);
   const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -430,13 +432,15 @@ export default function ShipmentsPage() {
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => setDeletingShipment(row)}
-                            title="Cancel / Soft Delete"
-                            className="p-2 rounded-xl bg-slate-100 hover:bg-rose-600 hover:text-white text-slate-600 transition-all cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isShipperEmployee && (
+                            <button
+                              onClick={() => setDeletingShipment(row)}
+                              title="Cancel / Soft Delete"
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-rose-600 hover:text-white text-slate-600 transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

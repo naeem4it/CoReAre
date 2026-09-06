@@ -13,8 +13,15 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = React.useState(false);
-  const { user, activeBusinessId, activeOfficeId, setActiveBusinessId, setActiveOfficeId, refreshUser } = useAuth();
+  const { user, activeBusinessId, activeOfficeId, isShipper, isShipperAdmin, isShipperEmployee, setActiveBusinessId, setActiveOfficeId, refreshUser } = useAuth();
   const { businessName, logoUrl } = useTenant();
+
+  // Enforce route protection: Shipper Employee cannot access any /administration routes
+  React.useEffect(() => {
+    if (isShipperEmployee && pathname?.startsWith('/administration')) {
+      router.push('/');
+    }
+  }, [isShipperEmployee, pathname, router]);
 
   React.useEffect(() => {
     const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
@@ -336,7 +343,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
 function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, isShipper, isShipperAdmin, isShipperEmployee } = useAuth();
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -358,29 +365,6 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   const toggleMenu = (menu: string) => {
     setExpandedMenu(expandedMenu === menu ? null : menu);
   };
-
-  const isShipper = React.useMemo(() => {
-    if (!user) return false;
-    if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) return true;
-    const roleType = (
-      user.role?.type || 
-      user.role_type || 
-      user.role?.name || 
-      (typeof user.role === 'string' ? user.role : '')
-    ).toString().toLowerCase();
-    if (roleType.includes('shipper')) return true;
-    if (user.user_type === 'shipper' || user.type === 'shipper') return true;
-    if (user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : !!user.shipper)) {
-      const hasCourierRole = Array.isArray(user.role_definition) && user.role_definition.some((r: any) => 
-        ['admin', 'courier', 'super admin', 'rider', 'front desk'].some(c => (r.role_name || '').toLowerCase().includes(c))
-      );
-      if (!hasCourierRole) return true;
-    }
-    const email = (user.email || '').toLowerCase();
-    const username = (user.username || '').toLowerCase();
-    if (email.includes('shipper') || username.includes('shipper')) return true;
-    return false;
-  }, [user]);
 
   const isActive = (path: string) => pathname === path;
 
@@ -542,10 +526,12 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             )}
           </div>
 
-          {/* Store Team Section (Only Sub-Accounts for this Shipper) */}
-          <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-            <NavLink href="/administration/employees?type=team" icon="group" label="My Store Team" />
-          </div>
+          {/* Store Team Section (Only for Shipper Admin, hidden for Shipper Employee) */}
+          {!isShipperEmployee && (
+            <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
+              <NavLink href="/administration/employees?type=team" icon="group" label="My Store Team" />
+            </div>
+          )}
         </>
       ) : (
         /* ==================== COURIER OPERATIONS MENU (EXCLUSIVE) ==================== */

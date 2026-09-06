@@ -28,8 +28,10 @@ import {
   ChevronRight,
   ArrowRight
 } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 export default function LoadSheetPage() {
+  const { isShipperEmployee } = useAuth();
   const [loadSheets, setLoadSheets] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   
@@ -473,13 +475,15 @@ export default function LoadSheetPage() {
                           >
                             <Printer className="w-4 h-4" />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteLoadSheet(sheet.id, sheet.sheet_id)}
-                            title="Delete Load Sheet"
-                            className="p-1.5 rounded-lg hover:bg-rose-50 text-secondary hover:text-rose-600 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isShipperEmployee && (
+                            <button 
+                              onClick={() => handleDeleteLoadSheet(sheet.id, sheet.sheet_id)}
+                              title="Delete Load Sheet"
+                              className="p-1.5 rounded-lg hover:bg-rose-50 text-secondary hover:text-rose-600 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
 
                       </td>
