@@ -558,32 +558,8 @@ export default function BookShipmentPage() {
       'parcelDetail',
       'collectRs'
     ];
-    const sampleRow = [
-      'John Doe',
-      '+923001234567',
-      'john.doe@example.com',
-      '+923007654321',
-      'House 12 Street 5 Sector F',
-      'Islamabad',
-      'G-11/3',
-      '1.5',
-      '1',
-      '2500',
-      'Leather Shoes',
-      'Overnight',
-      'Yes',
-      'Deliver in evening',
-      todayStr,
-      'Morning (09 AM - 12 PM)',
-      'Call customer before delivery',
-      'DBA-MOCK987',
-      'Yes',
-      'Exchange with brown leather boots',
-      '150'
-    ];
     
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), sampleRow.join(",")].join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
       
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");

@@ -12,7 +12,9 @@ type ShipmentRow = {
   avatar: string;
   origin: string;
   destination: string;
-  status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked';
+  paymentType: 'COD' | 'PAID';
+  codAmount: number;
+  status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'In Transit' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked';
   eta: string;
 };
 
@@ -102,6 +104,9 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
               }
             }
             
+            const paymentType: 'COD' | 'PAID' = (item as any).payment_type === 'PAID' || Number(item.cod_amount) === 0 ? 'PAID' : 'COD';
+            const codAmount = Number(item.cod_amount) || 0;
+
             return {
               id: item.id,
               trackingNumber: `#${item.tracking_number}`,
@@ -109,6 +114,8 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
               avatar: initials,
               origin,
               destination,
+              paymentType,
+              codAmount,
               status: uiStatus,
               eta: item.createdAt ? new Date(item.createdAt).toLocaleDateString() + ', ' + new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A',
             };
@@ -214,6 +221,7 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Customer</th>
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Origin / Destination</th>
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Status</th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Payment</th>
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant text-right">ETA / Date</th>
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Action</th>
             </tr>
@@ -221,7 +229,7 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
           <tbody className="divide-y divide-outline-variant">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-md py-12 text-center">
+                <td colSpan={7} className="px-md py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm text-slate-500 font-medium">Loading shipments...</p>
@@ -252,6 +260,17 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
                     </div>
                   </td>
                   <td className="px-md py-4">{getStatusBadge(row.status)}</td>
+                  <td className="px-md py-4">
+                    {row.paymentType === 'PAID' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        PAID
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                        COD: Rs. {row.codAmount.toLocaleString()}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-md py-4 text-right font-tabular-nums font-body-md text-body-md text-on-surface">
                     {row.eta}
                   </td>

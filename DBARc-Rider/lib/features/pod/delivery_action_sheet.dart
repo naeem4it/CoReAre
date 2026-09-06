@@ -130,20 +130,29 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.primarySubtle.withOpacity(0.2),
+                    color: widget.parcel.isPaid ? AppColors.successSubtle : AppColors.primarySubtle.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.primaryLight.withOpacity(0.4)),
+                    border: Border.all(
+                      color: widget.parcel.isPaid ? AppColors.success.withOpacity(0.4) : AppColors.primaryLight.withOpacity(0.4),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text('Collect COD', style: TextStyle(fontSize: 10, color: AppColors.primaryLight)),
                       Text(
-                        currencyFormatter.format(widget.parcel.codAmount),
+                        widget.parcel.isPaid ? 'PAID ORDER' : 'Collect COD',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: widget.parcel.isPaid ? AppColors.success : AppColors.primaryLight,
+                        ),
+                      ),
+                      Text(
+                        widget.parcel.isPaid ? 'PKR 0' : currencyFormatter.format(widget.parcel.codAmount),
                         style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primaryLight,
+                          color: widget.parcel.isPaid ? AppColors.success : AppColors.primaryLight,
                         ),
                       ),
                     ],

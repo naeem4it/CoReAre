@@ -24,6 +24,7 @@
         "Total Booking",
         "Not Arrived",
         "Arrived",
+        "In Transit",
         "Arrived At Destination",
         "Out For delivery",
         "Delivered",
@@ -32,6 +33,14 @@
         "Return Dispatched",
         "Return to Shipper"
       ]
+    },
+    "payment_type": {
+      "type": "enumeration",
+      "enum": [
+        "COD",
+        "PAID"
+      ],
+      "default": "COD"
     },
     "cod_amount": {
       "type": "decimal",
@@ -152,6 +161,12 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::shipper.shipper"
+    },
+    "manifest": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::manifest.manifest",
+      "inversedBy": "parcels"
     }
   }
 }

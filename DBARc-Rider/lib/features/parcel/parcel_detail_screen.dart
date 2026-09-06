@@ -115,55 +115,128 @@ class ParcelDetailScreen extends StatelessWidget {
               ),
             ],
 
-            // COD Header Card
+            // Payment Mode & COD Header Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.surfaceCard, AppColors.surface],
+                  colors: parcel.isPaid
+                      ? [AppColors.success.withOpacity(0.12), AppColors.surfaceCard]
+                      : [AppColors.surfaceCard, AppColors.surface],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(
+                  color: parcel.isPaid
+                      ? AppColors.success.withOpacity(0.5)
+                      : AppColors.border,
+                  width: parcel.isPaid ? 1.5 : 1,
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'CASH ON DELIVERY (COD)',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                parcel.isPaid ? LucideIcons.checkCheck : LucideIcons.banknote,
+                                size: 14,
+                                color: parcel.isPaid ? AppColors.success : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                parcel.isPaid ? 'PREPAID ORDER (PAID ONLINE)' : 'CASH ON DELIVERY (COD)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: parcel.isPaid ? AppColors.success : AppColors.textSecondary,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            parcel.isPaid ? 'PKR 0' : currencyFormatter.format(parcel.codAmount),
+                            style: GoogleFonts.outfit(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: parcel.isPaid ? AppColors.success : (parcel.codAmount > 0 ? AppColors.warning : AppColors.textPrimary),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        currencyFormatter.format(parcel.codAmount),
-                        style: GoogleFonts.outfit(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: parcel.codAmount > 0 ? AppColors.success : AppColors.textPrimary,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: parcel.isPaid ? AppColors.successSubtle : AppColors.primarySubtle,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: parcel.isPaid ? AppColors.success.withOpacity(0.4) : AppColors.primaryLight.withOpacity(0.4),
+                              ),
+                            ),
+                            child: Text(
+                              parcel.isPaid ? 'PAID' : 'COD',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: parcel.isPaid ? AppColors.success : AppColors.primaryLight,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: parcel.allowToOpen == 'Yes' ? AppColors.infoSubtle : AppColors.surface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Text(
+                              'Open Box: ${parcel.allowToOpen}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: parcel.allowToOpen == 'Yes' ? AppColors.info : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: parcel.allowToOpen == 'Yes' ? AppColors.infoSubtle : AppColors.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Text(
-                      'Open Box: ${parcel.allowToOpen}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: parcel.allowToOpen == 'Yes' ? AppColors.info : AppColors.textSecondary,
+                  if (parcel.isPaid) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(LucideIcons.alertCircle, size: 14, color: AppColors.success),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'DO NOT COLLECT CASH. Customer already paid via Shipper Online Checkout.',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.success),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

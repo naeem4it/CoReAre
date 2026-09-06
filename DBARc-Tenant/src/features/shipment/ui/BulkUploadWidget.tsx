@@ -43,9 +43,7 @@ export const BulkUploadWidget = () => {
   }, []);
 
   const downloadTemplate = () => {
-    const csvContent = 'recipient_name,recipient_phone,recipient_address,destination_city,cod_amount,weight,pieces,comments\n' +
-      'Ali Khan,03001234567,"House 12, Street 4, F-7",Islamabad,1500,0.5,1,Fragile items\n' +
-      'Sara Ahmed,03219876543,"Flat 3B, Clifton Block 2",Karachi,2500,1.0,1,Handle with care\n';
+    const csvContent = 'recipient_name,recipient_phone,recipient_address,destination_city,cod_amount,weight,pieces,comments\n';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

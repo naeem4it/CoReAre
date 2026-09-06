@@ -182,6 +182,9 @@ export default {
           `${baseAction}.find`,
           `${baseAction}.findOne`
         );
+        if (baseAction === 'api::parcel.parcel') {
+          publicPermissions.push(`${baseAction}.create`);
+        }
       });
 
       // Grant permissions to all roles

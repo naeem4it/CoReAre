@@ -21,6 +21,7 @@ class ParcelModel {
   final String? referenceNumber;
   final String? destinationCityName;
   final String? shipperName;
+  final String paymentType; // 'COD' or 'PAID'
   final List<DeliveryAttemptModel> deliveryAttempts;
   final String? latestShipperAdvice;
   final String? latestAdviceStatus;
@@ -30,6 +31,7 @@ class ParcelModel {
     required this.trackingNumber,
     required this.status,
     required this.codAmount,
+    this.paymentType = 'COD',
     required this.weight,
     required this.deliveryCharges,
     required this.recipientName,
@@ -54,6 +56,9 @@ class ParcelModel {
 
   int get attemptCount => deliveryAttempts.length;
 
+  bool get isPaid => paymentType.toUpperCase() == 'PAID' || codAmount <= 0;
+  bool get isCod => !isPaid;
+
   bool get hasActiveShipperAdvice =>
       latestShipperAdvice != null &&
       latestShipperAdvice!.isNotEmpty &&
@@ -77,11 +82,15 @@ class ParcelModel {
       adviceStatus = latest.adviceStatus;
     }
 
+    final double cod = double.tryParse(attributes['cod_amount']?.toString() ?? '0') ?? 0.0;
+    final String rawPaymentType = (attributes['payment_type']?.toString() ?? (cod == 0 ? 'PAID' : 'COD')).toUpperCase();
+
     return ParcelModel(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
       trackingNumber: attributes['tracking_number'] ?? '',
       status: attributes['status'] ?? 'Total Booking',
-      codAmount: double.tryParse(attributes['cod_amount']?.toString() ?? '0') ?? 0.0,
+      codAmount: cod,
+      paymentType: rawPaymentType == 'PAID' ? 'PAID' : 'COD',
       weight: double.tryParse(attributes['weight']?.toString() ?? '1') ?? 1.0,
       deliveryCharges: double.tryParse(attributes['delivery_charges']?.toString() ?? '0') ?? 0.0,
       recipientName: attributes['recipient_name'] ?? '',
@@ -108,6 +117,7 @@ class ParcelModel {
   ParcelModel copyWith({
     String? status,
     String? comments,
+    String? paymentType,
     List<DeliveryAttemptModel>? deliveryAttempts,
     String? latestShipperAdvice,
     String? latestAdviceStatus,
@@ -117,6 +127,7 @@ class ParcelModel {
       trackingNumber: trackingNumber,
       status: status ?? this.status,
       codAmount: codAmount,
+      paymentType: paymentType ?? this.paymentType,
       weight: weight,
       deliveryCharges: deliveryCharges,
       recipientName: recipientName,

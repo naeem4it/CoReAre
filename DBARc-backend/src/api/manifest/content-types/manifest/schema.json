@@ -1,0 +1,67 @@
+{
+  "kind": "collectionType",
+  "collectionName": "manifests",
+  "info": {
+    "singularName": "manifest",
+    "pluralName": "manifests",
+    "displayName": "Manifest",
+    "description": "Station and Linehaul Manifests for Logistics Hub Operations"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "manifest_number": {
+      "type": "integer",
+      "required": true
+    },
+    "seal_no": {
+      "type": "string",
+      "required": true
+    },
+    "manifest_type": {
+      "type": "enumeration",
+      "enum": [
+        "Station",
+        "TPL",
+        "Airport",
+        "Direct"
+      ],
+      "default": "Station"
+    },
+    "station": {
+      "type": "string"
+    },
+    "third_party": {
+      "type": "string"
+    },
+    "total_parcels": {
+      "type": "integer",
+      "default": 0
+    },
+    "total_cash": {
+      "type": "decimal",
+      "default": 0
+    },
+    "date": {
+      "type": "datetime"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "Draft",
+        "Dispatched",
+        "Received",
+        "Closed"
+      ],
+      "default": "Dispatched"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::parcel.parcel",
+      "mappedBy": "manifest"
+    }
+  }
+}

@@ -54,7 +54,17 @@ function EmployeeManagementContent() {
   const searchParams = useSearchParams();
   const typeParam = searchParams?.get('type') || 'courier';
 
-  const [loggedInUser, setLoggedInUser] = React.useState<any>(null);
+  const [loggedInUser, setLoggedInUser] = React.useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const userStr = localStorage.getItem('user');
+        return userStr ? JSON.parse(userStr) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
 
   React.useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -67,8 +77,31 @@ function EmployeeManagementContent() {
     }
   }, []);
 
-  const isLoggedShipper = !!loggedInUser?.shipper && Array.isArray(loggedInUser.shipper) && loggedInUser.shipper.length > 0;
-  const effectiveType = isLoggedShipper ? 'shipper' : typeParam;
+  const isLoggedShipper = React.useMemo(() => {
+    if (!loggedInUser) return false;
+    if (loggedInUser.shipper_roles && Array.isArray(loggedInUser.shipper_roles) && loggedInUser.shipper_roles.length > 0) return true;
+    const roleType = (
+      loggedInUser.role?.type || 
+      loggedInUser.role_type || 
+      loggedInUser.role?.name || 
+      (typeof loggedInUser.role === 'string' ? loggedInUser.role : '')
+    ).toString().toLowerCase();
+    if (roleType.includes('shipper')) return true;
+    if (loggedInUser.user_type === 'shipper' || loggedInUser.type === 'shipper') return true;
+    if (loggedInUser.shipper && (Array.isArray(loggedInUser.shipper) ? loggedInUser.shipper.length > 0 : !!loggedInUser.shipper)) {
+      const hasCourierRole = Array.isArray(loggedInUser.role_definition) && loggedInUser.role_definition.some((r: any) => 
+        ['admin', 'courier', 'super admin', 'rider', 'front desk'].some(c => (r.role_name || '').toLowerCase().includes(c))
+      );
+      if (!hasCourierRole) return true;
+    }
+    const email = (loggedInUser.email || '').toLowerCase();
+    const username = (loggedInUser.username || '').toLowerCase();
+    if (email.includes('shipper') || username.includes('shipper')) return true;
+    return false;
+  }, [loggedInUser]);
+
+  // Logged-in shipper only manages their Store Team. They never access courier shippers directory.
+  const effectiveType = isLoggedShipper ? 'team' : typeParam;
 
   const [employees, setEmployees] = React.useState<User[]>([]);
   const [roles, setRoles] = React.useState<RoleDefinition[]>([]);
@@ -226,7 +259,11 @@ function EmployeeManagementContent() {
         // Logged-in Shipper view: Exclude Shipper Admin self profile and show sub-employees
         const isShipperAdminSelf = emp.shipper_roles?.includes('shipper admin') || emp.username === loggedInUser?.username || emp.email === loggedInUser?.email;
         if (isShipperAdminSelf) return false;
-      } else if (typeParam === 'shipper') {
+        // Never show courier staff or courier admins to a shipper!
+        if (isCourierRole) return false;
+        // Never show other shipper admins in store team directory
+        if (emp.shipper_roles?.includes('shipper admin')) return false;
+      } else if (effectiveType === 'shipper') {
         // Courier Admin view on Shippers Directory: ONLY show Shippers. NEVER show Courier Admins!
         if (isCourierRole) return false;
       } else {
@@ -329,7 +366,7 @@ function EmployeeManagementContent() {
         isSelected: false
       })));
     } else {
-      const isShipperType = typeParam === 'shipper';
+      const isShipperType = effectiveType === 'shipper';
       setFormEmployeeType(isShipperType ? 'shipper' : 'courier');
       setAssignedShipperRoles(isShipperType ? ['shipper admin'] : []);
       // Reset business grid rows to clean empty state for new shipper
@@ -355,7 +392,7 @@ function EmployeeManagementContent() {
     setFormPhone(selectedUser.phone || '');
     setFormIsEnabled(!selectedUser.blocked);
 
-    const isShipperUser = typeParam === 'shipper' || effectiveType === 'shipper' || !!(selectedUser.shipper && selectedUser.shipper.length > 0);
+    const isShipperUser = isLoggedShipper || effectiveType === 'shipper' || !!(selectedUser.shipper && selectedUser.shipper.length > 0);
     setFormEmployeeType(isShipperUser ? 'shipper' : 'courier');
     setAssignedShipperIds(selectedUser.shipper ? selectedUser.shipper.map((s: any) => s.id) : []);
     setAssignedOfficeIds(selectedUser.offices ? selectedUser.offices.map((o: any) => o.id) : []);
@@ -460,7 +497,7 @@ function EmployeeManagementContent() {
       return;
     }
 
-    const isShipperFlow = formEmployeeType === 'shipper' || typeParam === 'shipper';
+    const isShipperFlow = formEmployeeType === 'shipper' || effectiveType === 'shipper';
 
     // Requirement: At least one business is mandatory for Shipper Admin creation
     if (isShipperFlow && !isLoggedShipper) {
@@ -573,15 +610,17 @@ function EmployeeManagementContent() {
       <div className="flex flex-col gap-lg animate-in fade-in duration-200">
         <div>
           <h1 className="font-display-lg text-display-lg text-on-surface">
-            {typeParam === 'shipper' 
-              ? 'Shippers Directory' 
-              : (isLoggedShipper ? 'Shipper Employee Directory' : 'Courier Employee Directory')}
+            {isLoggedShipper
+              ? 'Store Team Directory' 
+              : (effectiveType === 'shipper' 
+                  ? 'Shippers Directory' 
+                  : 'Courier Employee Directory')}
           </h1>
           <p className="text-on-surface-variant font-body-md text-body-md">
-            {typeParam === 'shipper'
-              ? 'Manage shipper admin accounts, credentials, permissions, and business assignments.'
-              : (isLoggedShipper
-                  ? 'Manage your company staff credentials, permissions, and sub-roles (Finance, Shipment, Customer admin).'
+            {isLoggedShipper
+              ? 'Manage your store team members, credentials, and access roles (Finance, Shipment, Customer admin).'
+              : (effectiveType === 'shipper'
+                  ? 'Manage shipper admin accounts, credentials, permissions, and business assignments.'
                   : 'Manage courier staff credentials, permissions, and operational roles.')}
           </p>
         </div>
@@ -634,7 +673,7 @@ function EmployeeManagementContent() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isLoggedShipper ? 'Search Username, Name or Role...' : (typeParam === 'shipper' ? 'Search Username, Name or Shipper...' : 'Search Username, Name or Courier Role...')}
+              placeholder={isLoggedShipper ? 'Search Username, Name or Role...' : (effectiveType === 'shipper' ? 'Search Username, Name or Shipper...' : 'Search Username, Name or Courier Role...')}
               className="w-full bg-slate-50 border border-outline-variant rounded-lg py-1.5 pl-10 pr-4 text-body-md focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container transition-all"
             />
           </div>
@@ -646,7 +685,7 @@ function EmployeeManagementContent() {
               className="bg-primary text-white h-10 px-4 rounded-xl hover:shadow-lg active:scale-95 transition-all font-semibold text-sm flex items-center gap-1 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              {typeParam === 'shipper' ? 'Add Shipper' : 'Add Employee'}
+              {isLoggedShipper ? 'Add Team Member' : (effectiveType === 'shipper' ? 'Add Shipper' : 'Add Employee')}
             </button>
             <button
               onClick={handleOpenEditForm}
@@ -787,8 +826,8 @@ function EmployeeManagementContent() {
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary-container">{isEditMode ? 'edit' : 'person_add'}</span>
                 {isEditMode 
-                  ? (((formEmployeeType === 'shipper' || typeParam === 'shipper') && !isLoggedShipper) ? 'Edit Shipper Admin' : 'Edit Employee')
-                  : (((formEmployeeType === 'shipper' || typeParam === 'shipper') && !isLoggedShipper) ? 'Add Shipper Admin' : 'Add Employee')}
+                  ? (isLoggedShipper ? 'Edit Team Member' : ((formEmployeeType === 'shipper' || effectiveType === 'shipper') ? 'Edit Shipper Admin' : 'Edit Employee'))
+                  : (isLoggedShipper ? 'Add Team Member' : ((formEmployeeType === 'shipper' || effectiveType === 'shipper') ? 'Add Shipper Admin' : 'Add Employee'))}
               </h2>
               <button
                 onClick={() => setIsFormOpen(false)}
@@ -864,8 +903,8 @@ function EmployeeManagementContent() {
                 </div>
               </div>
 
-              {/* ROLE SELECTION: Only 'shipper admin' for Shipper Admin creation */}
-              {(typeParam === 'shipper' || (formEmployeeType === 'shipper' && !isLoggedShipper)) ? (
+              {/* ROLE SELECTION: Only 'shipper admin' for Shipper Admin creation by Courier Admin */}
+              {(!isLoggedShipper && (effectiveType === 'shipper' || formEmployeeType === 'shipper')) ? (
                 <div className="flex flex-col gap-1 border border-outline-variant rounded-xl p-3.5 bg-blue-50/50">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Assigned Role</label>
                   <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-blue-200">
@@ -874,6 +913,44 @@ function EmployeeManagementContent() {
                       <div className="text-sm font-bold text-slate-900">Shipper Admin</div>
                       <div className="text-xs text-slate-500">Authorized merchant administrator role for Shipper portal & logistics</div>
                     </div>
+                  </div>
+                </div>
+              ) : isLoggedShipper ? (
+                /* Shipper Admin assigning store sub-roles (Finance, Shipment, Customer admin) */
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Assign Store Roles <span className="text-red-500">*</span></label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {SHIPPER_SUB_ROLES.map((role) => {
+                      const isSelected = assignedShipperRoles.includes(role);
+                      return (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setAssignedShipperRoles(prev => prev.filter(r => r !== role));
+                            } else {
+                              setAssignedShipperRoles(prev => [...prev, role]);
+                            }
+                          }}
+                          className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 text-primary shadow-xs'
+                              : 'border-outline-variant bg-white hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs">{role}</span>
+                            <span className="material-symbols-outlined text-[18px]">
+                              {isSelected ? 'check_circle' : 'radio_button_unchecked'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            {role === 'Finance' ? 'Invoices & COD reconciliation' : role === 'Shipment' ? 'Book & manage shipments' : 'Customer & tracking support'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
@@ -927,7 +1004,7 @@ function EmployeeManagementContent() {
               )}
 
               {/* COURIER ADMIN CREATING SHIPPER: Businesses Grid with Add Business Button in Top Right */}
-              {!isLoggedShipper && (formEmployeeType === 'shipper' || typeParam === 'shipper') && (
+              {!isLoggedShipper && (formEmployeeType === 'shipper' || effectiveType === 'shipper') && (
                 <div className="flex flex-col gap-2 border border-outline-variant rounded-xl p-4 bg-slate-50">
                   <div className="flex items-center justify-between">
                     <div>
@@ -997,7 +1074,7 @@ function EmployeeManagementContent() {
               )}
 
               {/* Office Selector - For Courier Employees */}
-              {formEmployeeType === 'courier' && typeParam !== 'shipper' && (
+              {formEmployeeType === 'courier' && effectiveType !== 'shipper' && !isLoggedShipper && (
                 <div className="flex flex-col gap-1 border border-outline-variant rounded-xl p-3.5 bg-slate-50">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Office Address</label>

@@ -1,0 +1,12 @@
+{
+  "name": "dbarc-sample-store",
+  "version": "1.0.0",
+  "description": "DBARc Local QA Sample E-Commerce Shirt Store running on Port 3002",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["dbarc", "ecommerce", "qa-store"],
+  "author": "DBARc Team",
+  "license": "ISC"
+}

@@ -33,9 +33,20 @@ export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
 
   const isShipper = React.useMemo(() => {
     if (!user) return false;
+    if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) return true;
+    const roleType = (
+      user.role?.type || 
+      user.role_type || 
+      user.role?.name || 
+      (typeof user.role === 'string' ? user.role : '')
+    ).toString().toLowerCase();
+    if (roleType.includes('shipper')) return true;
+    if (user.user_type === 'shipper' || user.type === 'shipper') return true;
+    const email = (user.email || '').toLowerCase();
+    const username = (user.username || '').toLowerCase();
+    if (email.includes('shipper') || username.includes('shipper')) return true;
     const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
-    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
-    return hasShipperRelation || hasShipperRoles;
+    return hasShipperRelation;
   }, [user]);
 
   const shipperId = React.useMemo(() => {
@@ -128,29 +139,51 @@ export const CourierStats = ({ fromDate, toDate }: CourierStatsProps) => {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-gutter mb-xl">
-      {/* Total Shippers (Clickable -> Shipper Listing) */}
-      <div 
-        onClick={() => router.push('/administration/employees?type=shipper')}
-        className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-primary transition-all group cursor-pointer"
-        title="Click to view Shippers Directory"
-      >
-        <div className="flex items-start justify-between mb-sm">
-          <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-            <span className="material-symbols-outlined">groups</span>
+      {/* If Courier Admin: Total Shippers (Clickable -> Shipper Listing)
+          If Shipper Admin: Store Team (Clickable -> Store Team Directory) */}
+      {!isShipper ? (
+        <div 
+          onClick={() => router.push('/administration/employees?type=shipper')}
+          className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-primary transition-all group cursor-pointer"
+          title="Click to view Shippers Directory"
+        >
+          <div className="flex items-start justify-between mb-sm">
+            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined">groups</span>
+            </div>
+            <span className="text-primary font-medium text-[11px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
+              View All <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </span>
           </div>
-          <span className="text-primary font-medium text-[11px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
-            View All <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-          </span>
+          <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Total Shippers</h3>
+          <p className="font-display-lg text-display-lg mt-1 tabular-nums text-slate-900">
+            {isLoading ? (
+              <span className="inline-block w-16 h-8 bg-slate-100 animate-pulse rounded"></span>
+            ) : (
+              totalShippers.toLocaleString()
+            )}
+          </p>
         </div>
-        <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Total Shippers</h3>
-        <p className="font-display-lg text-display-lg mt-1 tabular-nums text-slate-900">
-          {isLoading ? (
-            <span className="inline-block w-16 h-8 bg-slate-100 animate-pulse rounded"></span>
-          ) : (
-            totalShippers.toLocaleString()
-          )}
-        </p>
-      </div>
+      ) : (
+        <div 
+          onClick={() => router.push('/administration/employees?type=team')}
+          className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-primary transition-all group cursor-pointer"
+          title="Click to view Store Team"
+        >
+          <div className="flex items-start justify-between mb-sm">
+            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined">group</span>
+            </div>
+            <span className="text-primary font-medium text-[11px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
+              My Team <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </span>
+          </div>
+          <h3 className="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Store Team</h3>
+          <p className="font-display-lg text-display-lg mt-1 tabular-nums text-slate-900">
+            Active
+          </p>
+        </div>
+      )}
 
       {/* Total Shipments */}
       <div className="bg-white p-md rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow group">

@@ -23,7 +23,8 @@ import {
   Barcode as BarcodeIcon,
   Truck,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  ShoppingBag
 } from 'lucide-react';
 
 type OrderRow = {
@@ -38,6 +39,7 @@ type OrderRow = {
   shipperName: string;
   shipperAddress: string;
   shipperPhone: string;
+  paymentType: 'COD' | 'PAID';
   codAmount: number;
   weightKg: number;
   pieces: number;
@@ -154,7 +156,8 @@ export default function OrderList() {
               shipperName: item.shipper?.name || item.pickup_location?.shipper?.name || 'Shipper Account',
               shipperAddress: item.pickup_location?.address || 'Pickup Warehouse',
               shipperPhone,
-              codAmount: item.cod_amount || 0,
+              paymentType: item.payment_type === 'PAID' || Number(item.cod_amount) === 0 ? 'PAID' : 'COD',
+              codAmount: Number(item.cod_amount) || 0,
               weightKg: item.weight || 0.5,
               pieces,
               status: item.status || 'booked',
@@ -300,6 +303,16 @@ export default function OrderList() {
               Generate Dispatch Slips {selectedIds.length > 0 && `(${selectedIds.length})`}
             </button>
 
+            <a
+              href="/store"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+              title="Open customer-facing sample shirt store in a separate browser tab"
+            >
+              <ShoppingBag className="w-4 h-4" /> Open Shirt Store (QA)
+            </a>
+
             <Link
               href="/shipments/book"
               className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
@@ -376,7 +389,7 @@ export default function OrderList() {
                   <th className="px-4 py-3">Consignee</th>
                   <th className="px-4 py-3">Destination Address</th>
                   <th className="px-4 py-3">Shipper</th>
-                  <th className="px-4 py-3">COD Amount</th>
+                  <th className="px-4 py-3">Payment / COD</th>
                   <th className="px-4 py-3">Allow to Open</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Dispatch Slip</th>
@@ -430,8 +443,16 @@ export default function OrderList() {
                         {row.address}
                       </td>
                       <td className="px-4 py-4 text-slate-800 font-semibold">{row.shipperName}</td>
-                      <td className="px-4 py-4 font-bold text-slate-900">
-                        {row.codAmount > 0 ? `PKR ${row.codAmount.toLocaleString()}` : <span className="text-emerald-600 font-bold">Prepaid (PKR 0)</span>}
+                      <td className="px-4 py-4">
+                        {row.paymentType === 'PAID' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            PAID
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            COD: PKR {row.codAmount.toLocaleString()}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${

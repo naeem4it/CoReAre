@@ -129,34 +129,42 @@ export default function OperationsManifestationPage() {
     }
     setIsSubmitting(true);
     try {
-      // Mark each parcel as Manifested in Strapi
+      // 1. Persist Manifest record in Strapi backend
+      let savedManifestId: number | null = null;
+      try {
+        const manifestRes = await apiClient.post('/manifests', {
+          data: {
+            manifest_number: manifestNumber,
+            seal_no: sealNo,
+            manifest_type: manifestType === '3PL' ? 'TPL' : manifestType,
+            station: selectedStation,
+            total_parcels: shipments.length,
+            total_cash: shipments.reduce((a, s) => a + s.cashCollect, 0),
+            status: 'Dispatched',
+            date: new Date().toISOString(),
+          }
+        });
+        savedManifestId = manifestRes.data?.data?.id || null;
+      } catch (e: any) {
+        console.warn('Manifest persistence note:', e?.message || e);
+      }
+
+      // 2. Mark each parcel as In Transit and link to manifest
       for (const item of shipments) {
         try {
           const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
           const parcel = res.data?.data?.[0];
           if (parcel) {
-            await apiClient.put(`/parcels/${parcel.id}`, { data: { status: 'Manifested' } });
+            await apiClient.put(`/parcels/${parcel.id}`, { 
+              data: { 
+                status: 'In Transit',
+                ...(savedManifestId ? { manifest: savedManifestId } : {})
+              } 
+            });
           }
         } catch (e) {
           console.warn(`Could not update ${item.shipmentNumber}:`, e);
         }
-      }
-
-      // Persist Manifest record
-      try {
-        await apiClient.post('/manifests', {
-          data: {
-            manifest_number: manifestNumber,
-            seal_no: sealNo,
-            manifest_type: manifestType,
-            station: selectedStation,
-            total_parcels: shipments.length,
-            total_cash: shipments.reduce((a, s) => a + s.cashCollect, 0),
-            date: new Date().toISOString(),
-          }
-        });
-      } catch (e) {
-        console.warn('Manifest record notice:', e);
       }
 
       triggerToast(`Manifest #${manifestNumber} (Seal: ${sealNo}) saved with ${shipments.length} parcels!`, 'success');

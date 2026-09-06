@@ -7,10 +7,10 @@ echo =======================================================
 echo                 STOPPING DBARC SYSTEM                 
 echo =======================================================
 echo.
-echo Stopping services on ports 1337, 3000, and 3001...
+echo Stopping services on ports 1337, 3000, 3001, and 3002...
 echo.
 
-set PORTS=1337 3000 3001
+set PORTS=1337 3000 3001 3002
 
 for %%p in (%PORTS%) do (
     echo Checking port %%p...

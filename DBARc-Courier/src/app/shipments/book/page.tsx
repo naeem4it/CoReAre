@@ -74,6 +74,7 @@ const bookingSchema = z.object({
     preprocessNumber,
     z.number({ message: 'Pieces must be a valid number' }).min(1, 'Must be at least 1 piece')
   ),
+  paymentType: z.enum(['COD', 'PAID']).default('COD'),
   codAmount: z.preprocess(
     preprocessNumber,
     z.number({ message: 'COD amount must be a valid number (enter 0 for prepaid)' }).min(0, 'COD amount cannot be negative')
@@ -289,6 +290,7 @@ function BookShipmentForm() {
   // Watch fields for live estimated cost calculation
   const weight = watch('weight') || 0.5;
   const codAmount = watch('codAmount') || 0;
+  const paymentType = watch('paymentType') || 'COD';
   const serviceType = watch('serviceType') || 'Overnight';
   const destinationCityId = watch('destinationCity');
   const destinationCityName = watch('destinationCityName') || '';
@@ -437,7 +439,8 @@ function BookShipmentForm() {
         data: {
           tracking_number: trackingId,
           status: 'Total Booking',
-          cod_amount: data.codAmount,
+          payment_type: data.paymentType || (data.codAmount > 0 ? 'COD' : 'PAID'),
+          cod_amount: data.paymentType === 'PAID' ? 0 : (data.codAmount || 0),
           weight: data.weight,
           delivery_charges: pricing.total,
           recipient_name: data.consigneeName,
@@ -476,6 +479,7 @@ function BookShipmentForm() {
         reset({
           weight: 0.5,
           pieces: 1,
+          paymentType: 'COD',
           codAmount: 0,
           serviceType: 'Overnight',
           allowToOpen: 'No',
@@ -721,18 +725,8 @@ function BookShipmentForm() {
       'codAmount',
       'productDescription'
     ];
-    const sampleRow = [
-      'John Doe',
-      '+923001234567',
-      'House 12 Street 5 Sector F',
-      'Islamabad',
-      '1.5',
-      '1',
-      '2500',
-      'Leather Shoes'
-    ];
     
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), sampleRow.join(",")].join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -1145,11 +1139,41 @@ function BookShipmentForm() {
                       required
                     />
 
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-slate-700">Order Payment Type</label>
+                      <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setValue('paymentType', 'COD');
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                            paymentType === 'COD' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          COD
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setValue('paymentType', 'PAID');
+                            setValue('codAmount', 0);
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                            paymentType === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          PAID
+                        </button>
+                      </div>
+                    </div>
+
                     <TextBox<BookingFormValues>
                       name="codAmount"
-                      label="COD Amount (PKR)"
+                      label={paymentType === 'PAID' ? 'COD Amount (Disabled for PAID)' : 'COD Amount (PKR)'}
                       placeholder="0"
                       type="number"
+                      disabled={paymentType === 'PAID'}
                     />
 
                     <SearchableDropdown<BookingFormValues>

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
+import Link from 'next/link';
 
 export default function OrderApiPage() {
   const [copiedKey, setCopiedKey] = React.useState(false);
@@ -32,6 +33,13 @@ export default function OrderApiPage() {
               </p>
             </div>
             <div className="flex items-center gap-sm">
+              <Link 
+                href="/order-api/qa-sandbox"
+                className="px-md py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <span>Live QA Order Sandbox</span>
+                <span className="material-symbols-outlined text-sm">science</span>
+              </Link>
               <button className="px-md py-2 bg-primary text-white font-bold text-sm rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
                 Generate API Key
               </button>

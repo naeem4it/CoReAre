@@ -28,10 +28,16 @@ class DeliverySheetModel {
   int get pendingCount => parcels.where((p) => p.status != 'Delivered' && p.status != 'Ready To Return').length;
   int get failedCount => parcels.where((p) => p.status == 'Failed Attempt' || p.status == 'Ready To Return').length;
   
-  double get totalExpectedCod => parcels.fold(0.0, (sum, p) => sum + p.codAmount);
-  double get totalCollectedCod => parcels
-      .where((p) => p.status == 'Delivered')
+  double get totalExpectedCod => parcels
+      .where((p) => p.isCod)
       .fold(0.0, (sum, p) => sum + p.codAmount);
+
+  double get totalCollectedCod => parcels
+      .where((p) => p.status == 'Delivered' && p.isCod)
+      .fold(0.0, (sum, p) => sum + p.codAmount);
+
+  int get paidParcelsCount => parcels.where((p) => p.isPaid).length;
+  int get codParcelsCount => parcels.where((p) => p.isCod).length;
 
   factory DeliverySheetModel.fromJson(Map<String, dynamic> json) {
     final attributes = json['attributes'] ?? json;

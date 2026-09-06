@@ -88,9 +88,10 @@ class DBARc_Order_Sync {
             $city = $order->get_billing_city();
         }
 
-        // Calculate COD amount: If payment is COD, total order amount; otherwise 0 (Prepaid)
+        // Two types of order from shipper: COD or PAID
         $payment_method = $order->get_payment_method();
-        $is_cod = in_array($payment_method, ['cod', 'cash_on_delivery']);
+        $is_cod = in_array(strtolower($payment_method), ['cod', 'cash_on_delivery']);
+        $payment_type = $is_cod ? 'COD' : 'PAID';
         $cod_amount = $is_cod ? floatval($order->get_total()) : 0.0;
 
         // Weight Calculation
@@ -122,6 +123,7 @@ class DBARc_Order_Sync {
             'recipient_name'     => $name ?: 'Customer',
             'recipient_phone'    => $phone ?: '0000000000',
             'recipient_address'  => $address ?: 'Address not provided',
+            'payment_type'       => $payment_type,
             'cod_amount'         => $cod_amount,
             'weight'             => $total_weight,
             'pieces'             => $total_pieces ?: 1,
@@ -129,7 +131,7 @@ class DBARc_Order_Sync {
             'service_type'       => $default_service,
             'reference_number'   => $reference_number,
             'status'             => 'Total Booking',
-            'comments'           => 'Auto-booked from WooCommerce Order #' . $order->get_order_number(),
+            'comments'           => 'Auto-booked from WooCommerce Order #' . $order->get_order_number() . ' [' . $payment_type . ']',
         ];
 
         // Call API
@@ -142,6 +144,7 @@ class DBARc_Order_Sync {
             // Save to Order Meta
             $order->update_meta_data('_dbarc_tracking_number', $assigned_tracking);
             $order->update_meta_data('_dbarc_parcel_id', $response['parcel_id'] ?? 0);
+            $order->update_meta_data('_dbarc_payment_type', $payment_type);
             $order->update_meta_data('_dbarc_booked_date', current_time('mysql'));
             $order->save();
 
@@ -204,8 +207,17 @@ class DBARc_Order_Sync {
         <div style="font-size: 13px; color: #334155;">
             <?php if (!empty($tracking_number)) : ?>
                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                    <p style="margin: 0; font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Booked with DBARc</p>
-                    <p style="margin: 4px 0 0 0; font-family: monospace; font-size: 14px; font-weight: 700; color: #0f172a;"><?php echo esc_html($tracking_number); ?></p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Booked with DBARc</span>
+                        <?php 
+                        $p_type = $order->get_meta('_dbarc_payment_type') ?: ($order->get_payment_method() === 'cod' ? 'COD' : 'PAID');
+                        if ($p_type === 'PAID') : ?>
+                            <span style="background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">PAID ORDER</span>
+                        <?php else : ?>
+                            <span style="background: #fef3c7; color: #b45309; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">COD ORDER</span>
+                        <?php endif; ?>
+                    </div>
+                    <p style="margin: 0; font-family: monospace; font-size: 14px; font-weight: 700; color: #0f172a;"><?php echo esc_html($tracking_number); ?></p>
                     <?php if (!empty($booked_date)) : ?>
                         <p style="margin: 4px 0 0 0; font-size: 11px; color: #64748b;">Booked: <?php echo esc_html($booked_date); ?></p>
                     <?php endif; ?>

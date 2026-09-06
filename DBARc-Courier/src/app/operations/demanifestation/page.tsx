@@ -93,14 +93,28 @@ export default function OperationsDeManifestationPage() {
           const parcel = res.data?.data?.[0];
           if (parcel) {
             await apiClient.put(`/parcels/${parcel.id}`, {
-              data: { status: 'Arrived', arrival_date: new Date().toISOString() }
+              data: { status: 'Arrived At Destination', arrival_date: new Date().toISOString() }
             });
           }
         } catch (e) {
           console.warn(`Could not update ${item.shipmentNumber}:`, e);
         }
       }
-      triggerToast(`De-manifestation for Manifest #${manifestNumber} completed! ${shipments.length} parcels verified & marked Arrived.`, 'success');
+
+      // Update manifest status to Received if manifest ID exists
+      if (manifestNumber) {
+        try {
+          const mRes = await apiClient.get(`/manifests?filters[manifest_number][$eq]=${manifestNumber}`);
+          const mObj = mRes.data?.data?.[0];
+          if (mObj) {
+            await apiClient.put(`/manifests/${mObj.id}`, { data: { status: 'Received' } });
+          }
+        } catch (mErr) {
+          console.warn('Manifest status update notice:', mErr);
+        }
+      }
+
+      triggerToast(`De-manifestation for Manifest #${manifestNumber} completed! ${shipments.length} parcels verified & marked Arrived At Destination.`, 'success');
       setManifestNumber('');
       setSealNo('');
       setShipments([]);

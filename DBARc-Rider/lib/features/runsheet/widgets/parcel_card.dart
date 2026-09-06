@@ -193,18 +193,41 @@ class ParcelCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            'COD: ',
-                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                          ),
-                          Text(
-                            currencyFormatter.format(parcel.codAmount),
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: parcel.codAmount > 0 ? AppColors.success : AppColors.textPrimary,
+                          if (parcel.isPaid) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.successSubtle,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'PAID',
+                                style: TextStyle(fontSize: 10, color: AppColors.success, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
+                            Text(
+                              'PKR 0 (No Cash)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ] else ...[
+                            const Text(
+                              'COD: ',
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                            Text(
+                              currencyFormatter.format(parcel.codAmount),
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: parcel.codAmount > 0 ? AppColors.warning : AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       Row(

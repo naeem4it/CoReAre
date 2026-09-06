@@ -1089,6 +1089,50 @@ export interface ApiLoadSheetLoadSheet extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiManifestManifest extends Struct.CollectionTypeSchema {
+  collectionName: 'manifests';
+  info: {
+    description: 'Station and Linehaul Manifests for Logistics Hub Operations';
+    displayName: 'Manifest';
+    pluralName: 'manifests';
+    singularName: 'manifest';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    date: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::manifest.manifest'
+    > &
+      Schema.Attribute.Private;
+    manifest_number: Schema.Attribute.Integer & Schema.Attribute.Required;
+    manifest_type: Schema.Attribute.Enumeration<
+      ['Station', 'TPL', 'Airport', 'Direct']
+    > &
+      Schema.Attribute.DefaultTo<'Station'>;
+    parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
+    publishedAt: Schema.Attribute.DateTime;
+    seal_no: Schema.Attribute.String & Schema.Attribute.Required;
+    station: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<
+      ['Draft', 'Dispatched', 'Received', 'Closed']
+    > &
+      Schema.Attribute.DefaultTo<'Dispatched'>;
+    third_party: Schema.Attribute.String;
+    total_cash: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    total_parcels: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiOfficeOffice extends Struct.CollectionTypeSchema {
   collectionName: 'offices';
   info: {
@@ -1207,7 +1251,10 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       'api::parcel.parcel'
     > &
       Schema.Attribute.Private;
+    manifest: Schema.Attribute.Relation<'manyToOne', 'api::manifest.manifest'>;
     origin_office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    payment_type: Schema.Attribute.Enumeration<['COD', 'PAID']> &
+      Schema.Attribute.DefaultTo<'COD'>;
     pickup_location: Schema.Attribute.Relation<
       'manyToOne',
       'api::pickup-location.pickup-location'
@@ -1233,6 +1280,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
         'Total Booking',
         'Not Arrived',
         'Arrived',
+        'In Transit',
         'Arrived At Destination',
         'Out For delivery',
         'Delivered',
@@ -2566,6 +2614,7 @@ declare module '@strapi/strapi' {
       'api::hub.hub': ApiHubHub;
       'api::invoice.invoice': ApiInvoiceInvoice;
       'api::load-sheet.load-sheet': ApiLoadSheetLoadSheet;
+      'api::manifest.manifest': ApiManifestManifest;
       'api::office.office': ApiOfficeOffice;
       'api::parcel-hub-movement.parcel-hub-movement': ApiParcelHubMovementParcelHubMovement;
       'api::parcel.parcel': ApiParcelParcel;
