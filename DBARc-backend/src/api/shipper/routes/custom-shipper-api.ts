@@ -141,6 +141,40 @@ export default {
         auth: false,
       },
     },
+
+    // 8. Tariff Plan Association
+    {
+      method: 'GET',
+      path: '/shippers/with-plans',
+      handler: 'shipper.findShippersWithPlans',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/shippers',
+      handler: 'shipper.findShippersWithPlans',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/shippers/:id/assign-plan',
+      handler: 'shipper.assignPlan',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/shippers/:id',
+      handler: 'shipper.assignPlan',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };
 

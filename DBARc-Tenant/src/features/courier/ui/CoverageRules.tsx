@@ -4,20 +4,39 @@ import * as React from 'react';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { regions } from '@/entities/shipment/model/shipment.schema';
-import { mockTPLPartners } from '@/entities/courier/model/tpl.model';
+import { apiClient } from '@/shared/api/api-client';
 import { cn } from '@/shared/lib/utils';
 import { MapPin, ShieldCheck, Truck, ArrowRight } from 'lucide-react';
 
 export const CoverageRules = () => {
   const [selectedRegion, setSelectedRegion] = React.useState<string>(regions[0]);
   const [regionConfig, setRegionConfig] = React.useState<Record<string, string | null>>({});
+  const [tplPartners, setTplPartners] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        const res = await apiClient.get('/tpl-partner/list');
+        const list = res.data?.data || [];
+        setTplPartners(list.map((i: any) => ({
+          id: i.id,
+          name: i.attributes?.name || i.name,
+          provider_code: i.attributes?.provider_code || i.provider_code,
+          status: i.attributes?.status || i.status || 'active'
+        })));
+      } catch (err) {
+        console.error('Failed to load partners for coverage rules:', err);
+      }
+    };
+    fetchPartners();
+  }, []);
 
   const assignPartner = (partnerId: string | null) => {
     setRegionConfig({ ...regionConfig, [selectedRegion]: partnerId });
   };
 
   const currentPartnerId = regionConfig[selectedRegion] || null;
-  const currentPartner = mockTPLPartners.find(p => p.id === currentPartnerId);
+  const currentPartner = tplPartners.find(p => String(p.id) === String(currentPartnerId));
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 min-h-[500px]">
@@ -70,8 +89,8 @@ export const CoverageRules = () => {
                   <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900">Direct Coverage</h4>
-                  <p className="text-sm text-slate-500">Parcels are delivered by our own rider fleet.</p>
+                  <h4 className="font-bold text-slate-900">Direct Coverage (2PL)</h4>
+                  <p className="text-sm text-slate-500">Parcels are delivered directly by your own rider fleet.</p>
                 </div>
               </div>
               <Button 
@@ -88,38 +107,44 @@ export const CoverageRules = () => {
                 <div className="w-full border-t border-slate-200"></div>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-4 text-slate-500 font-bold">Or outsource to partner</span>
+                <span className="bg-white px-4 text-slate-500 font-bold">Or outsource to 3PL partner</span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {mockTPLPartners.filter(p => p.status === 'active').map((partner) => (
-                <div 
-                  key={partner.id}
-                  className={cn(
-                    'p-4 rounded-xl border transition-all duration-300 flex items-center justify-between',
-                    currentPartnerId === partner.id ? 'border-primary-500 bg-primary-50/30 ring-1 ring-primary-500' : 'border-slate-200 hover:border-slate-300'
-                  )}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 bg-white rounded-lg border border-slate-200 flex items-center justify-center font-bold">
-                      {partner.logo}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{partner.name}</h4>
-                      <p className="text-xs text-slate-500">Cost: Grade A Agreement</p>
-                    </div>
-                  </div>
-                  <Button 
-                    variant={currentPartnerId === partner.id ? 'primary' : 'ghost'} 
-                    size="sm"
-                    className="rounded-lg"
-                    onClick={() => assignPartner(partner.id)}
+              {tplPartners.length === 0 ? (
+                <p className="text-xs text-slate-400 italic p-4 text-center border border-dashed rounded-xl">
+                  No 3PL partners configured in the database yet. Configure 3PL partners in the 3PL Setup tab.
+                </p>
+              ) : (
+                tplPartners.filter(p => p.status === 'active').map((partner) => (
+                  <div 
+                    key={partner.id}
+                    className={cn(
+                      'p-4 rounded-xl border transition-all duration-300 flex items-center justify-between',
+                      String(currentPartnerId) === String(partner.id) ? 'border-primary-500 bg-primary-50/30 ring-1 ring-primary-500' : 'border-slate-200 hover:border-slate-300'
+                    )}
                   >
-                    {currentPartnerId === partner.id ? 'Selected' : 'Select Partner'}
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 bg-white rounded-lg border border-slate-200 flex items-center justify-center font-bold text-xs uppercase">
+                        {partner.provider_code?.substring(0, 3) || '3PL'}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{partner.name}</h4>
+                        <p className="text-xs text-slate-500">3PL Partner Network</p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant={String(currentPartnerId) === String(partner.id) ? 'primary' : 'ghost'} 
+                      size="sm"
+                      className="rounded-lg"
+                      onClick={() => assignPartner(String(partner.id))}
+                    >
+                      {String(currentPartnerId) === String(partner.id) ? 'Selected' : 'Select Partner'}
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </CardContent>

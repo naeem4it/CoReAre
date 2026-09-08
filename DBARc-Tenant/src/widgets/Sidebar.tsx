@@ -17,6 +17,8 @@ import {
   BadgeDollarSign,
   ChevronDown,
   ChevronRight,
+  MapPin,
+  Network,
 } from 'lucide-react';
 import { UserRole } from '@/shared/model/auth.store';
 
@@ -51,11 +53,17 @@ const SUPER_ADMINISTRATION_SUBMENU: NavItem[] = [
   { label: 'User Management', href: '/admin/users', icon: Users },
   { label: 'Role Definition', href: '/admin/roles', icon: ShieldCheck },
   { label: 'Plans', href: '/admin/plans', icon: FileText },
+  { label: 'Zone Setup (Default)', href: '/admin/regions', icon: MapPin },
+  { label: 'Self Service Areas (2PL)', href: '/admin/self-service', icon: Truck },
+  { label: '3PL Partner Setup', href: '/admin/tpl-setup', icon: Network },
 ];
 
 const COURIER_ADMINISTRATION_SUBMENU: NavItem[] = [
   { label: 'User Management', href: '/courier/users', icon: Users },
   { label: 'Role Definition', href: '/courier/roles', icon: ShieldCheck },
+  { label: 'Zone Setup', href: '/courier/regions', icon: MapPin },
+  { label: 'Self Service Areas (2PL)', href: '/courier/self-service', icon: Truck },
+  { label: '3PL Partner Setup', href: '/courier/tpl-setup', icon: Network },
 ];
 
 const MERCHANT_ADMINISTRATION_SUBMENU: NavItem[] = [

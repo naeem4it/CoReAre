@@ -56,6 +56,11 @@
       "relation": "oneToMany",
       "target": "api::pickup-location.pickup-location",
       "mappedBy": "shipper"
+    },
+    "preferred_tpl_partner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tpl-partner.tpl-partner"
     }
   }
 }

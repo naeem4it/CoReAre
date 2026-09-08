@@ -438,6 +438,18 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
           </Link>
 
           <Link
+            href="/administration/zones"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/zones' || pathname === '/administration/regions'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">map</span>
+            <span className="font-label-md text-label-md">Zone Setup</span>
+          </Link>
+
+          <Link
             href="/administration/employees?type=shipper"
             className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
               pathname === '/administration/employees' && !pathname.includes('type=courier')
@@ -455,6 +467,42 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
           >
             <span className="material-symbols-outlined text-[20px]">badge</span>
             <span className="font-label-md text-label-md">Courier Staff</span>
+          </Link>
+
+          <Link
+            href="/administration/self-service"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/self-service'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">local_shipping</span>
+            <span className="font-label-md text-label-md">Self Service Areas (2PL)</span>
+          </Link>
+
+          <Link
+            href="/administration/tpl-setup"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/tpl-setup'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">hub</span>
+            <span className="font-label-md text-label-md">3PL Partner Setup</span>
+          </Link>
+
+          <Link
+            href="/administration/shipper-tpl"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/shipper-tpl'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">alt_route</span>
+            <span className="font-label-md text-label-md">Shipper 3PL Setup</span>
           </Link>
         </div>
       )}

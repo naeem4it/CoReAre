@@ -5,7 +5,7 @@
     "singularName": "tpl-partner",
     "pluralName": "tpl-partners",
     "displayName": "TPL Partner",
-    "description": "Third-party logistics API integrations (e.g. Leopards, TCS)"
+    "description": "Third-party logistics API integrations (e.g. Trax, PostEx, Leopards, TCS, M&P, etc.)"
   },
   "options": {
     "draftAndPublish": false
@@ -16,12 +16,49 @@
       "type": "string",
       "required": true
     },
+    "provider_code": {
+      "type": "string",
+      "required": true
+    },
+    "is_preferred": {
+      "type": "boolean",
+      "default": false
+    },
+    "environment": {
+      "type": "enumeration",
+      "enum": ["sandbox", "production"],
+      "default": "sandbox"
+    },
     "api_credentials": {
       "type": "json"
+    },
+    "city_mappings": {
+      "type": "json"
+    },
+    "coverage_mode": {
+      "type": "enumeration",
+      "enum": ["all_pakistan", "specific_cities"],
+      "default": "all_pakistan"
+    },
+    "service_cities": {
+      "type": "json"
+    },
+    "verification_status": {
+      "type": "enumeration",
+      "enum": ["verified", "failed", "untested"],
+      "default": "untested"
+    },
+    "last_verified_at": {
+      "type": "datetime"
     },
     "status": {
       "type": "string",
       "default": "active"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
     }
   }
 }

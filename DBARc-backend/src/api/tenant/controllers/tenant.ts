@@ -290,6 +290,9 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
         business_name,
         theme_primary_color,
         logo,
+        self_service_cities,
+        tpl_partners,
+        preferred_tpl_partner,
         adminUsername,
         adminFullName,
         adminEmail,
@@ -308,6 +311,9 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       if (business_name !== undefined) updatePayload.business_name = business_name;
       if (theme_primary_color !== undefined) updatePayload.theme_primary_color = theme_primary_color;
       if (logo !== undefined) updatePayload.logo = logo;
+      if (self_service_cities !== undefined) updatePayload.self_service_cities = self_service_cities;
+      if (tpl_partners !== undefined) updatePayload.tpl_partners = tpl_partners;
+      if (preferred_tpl_partner !== undefined) updatePayload.preferred_tpl_partner = preferred_tpl_partner;
 
       // Safely resolve tenant_plan relation ID
       if (tenant_plan !== undefined) {

@@ -663,11 +663,14 @@ export interface ApiCityCity extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    district: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::city.city'> &
       Schema.Attribute.Private;
+    province: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     regions: Schema.Attribute.Relation<'manyToMany', 'api::region.region'>;
+    tehsil: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1694,6 +1697,9 @@ export interface ApiShipperPlanShipperPlan extends Struct.CollectionTypeSchema {
   };
   attributes: {
     api_access: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    cash_handling_min_fee: Schema.Attribute.Decimal;
+    cash_handling_type: Schema.Attribute.String;
+    cash_handling_value: Schema.Attribute.Decimal;
     charge_type: Schema.Attribute.Enumeration<
       ['percentage', 'fixed_rupees', 'tier_based']
     > &
@@ -1731,6 +1737,8 @@ export interface ApiShipperPlanShipperPlan extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    weight_tiers: Schema.Attribute.JSON;
+    zones: Schema.Attribute.JSON;
   };
 }
 
@@ -1795,6 +1803,10 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     pickup_locations: Schema.Attribute.Relation<
       'oneToMany',
       'api::pickup-location.pickup-location'
+    >;
+    preferred_tpl_partner: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::tpl-partner.tpl-partner'
     >;
     publishedAt: Schema.Attribute.DateTime;
     shipper_plan: Schema.Attribute.Relation<
@@ -1887,6 +1899,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
       Schema.Attribute.DefaultTo<2>;
     publishedAt: Schema.Attribute.DateTime;
     riders: Schema.Attribute.Relation<'oneToMany', 'api::rider.rider'>;
+    self_service_cities: Schema.Attribute.JSON;
     status: Schema.Attribute.Enumeration<['active', 'suspended', 'pending']> &
       Schema.Attribute.DefaultTo<'pending'>;
     tenant_plan: Schema.Attribute.Relation<
@@ -1895,6 +1908,10 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     >;
     theme_primary_color: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'#003ec7'>;
+    tpl_partners: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tpl-partner.tpl-partner'
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1908,7 +1925,7 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
 export interface ApiTplPartnerTplPartner extends Struct.CollectionTypeSchema {
   collectionName: 'tpl_partners';
   info: {
-    description: 'Third-party logistics API integrations (e.g. Leopards, TCS)';
+    description: 'Third-party logistics API integrations (e.g. Trax, PostEx, Leopards, TCS, M&P, etc.)';
     displayName: 'TPL Partner';
     pluralName: 'tpl-partners';
     singularName: 'tpl-partner';
@@ -1918,9 +1935,18 @@ export interface ApiTplPartnerTplPartner extends Struct.CollectionTypeSchema {
   };
   attributes: {
     api_credentials: Schema.Attribute.JSON;
+    city_mappings: Schema.Attribute.JSON;
+    coverage_mode: Schema.Attribute.Enumeration<
+      ['all_pakistan', 'specific_cities']
+    > &
+      Schema.Attribute.DefaultTo<'all_pakistan'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    environment: Schema.Attribute.Enumeration<['sandbox', 'production']> &
+      Schema.Attribute.DefaultTo<'sandbox'>;
+    is_preferred: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    last_verified_at: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1928,11 +1954,18 @@ export interface ApiTplPartnerTplPartner extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    provider_code: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    service_cities: Schema.Attribute.JSON;
     status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    verification_status: Schema.Attribute.Enumeration<
+      ['verified', 'failed', 'untested']
+    > &
+      Schema.Attribute.DefaultTo<'untested'>;
   };
 }
 

@@ -4,23 +4,49 @@ import * as React from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { shipmentSchema, ShipmentFormValues } from '@/entities/shipment/model/shipment.schema';
-import { CitySelect } from '@/shared/ui/CitySelect';
+import { PakistanLocationSelect } from '@/shared/ui/PakistanLocationSelect';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Card, CardContent } from '@/shared/ui/Card';
-import { Package, User, MapPin, BadgeDollarSign } from 'lucide-react';
+import { Package, User, MapPin, BadgeDollarSign, Navigation } from 'lucide-react';
 
 import { apiClient } from '@/shared/api/api-client';
 import { useAuthStore } from '@/shared/model/auth.store';
 
+const PAKISTAN_CITY_COORDINATES = [
+  { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
+  { name: 'Karachi', lat: 24.8607, lng: 67.0011 },
+  { name: 'Islamabad', lat: 33.6844, lng: 73.0479 },
+  { name: 'Rawalpindi', lat: 33.5651, lng: 73.0169 },
+  { name: 'Faisalabad', lat: 31.4504, lng: 73.1350 },
+  { name: 'Multan', lat: 30.1575, lng: 71.5249 },
+  { name: 'Peshawar', lat: 34.0151, lng: 71.5249 },
+  { name: 'Quetta', lat: 30.1798, lng: 66.9750 },
+  { name: 'Sialkot', lat: 32.4945, lng: 74.5229 },
+  { name: 'Gujranwala', lat: 32.1877, lng: 74.1945 },
+  { name: 'Hyderabad', lat: 25.3960, lng: 68.3578 },
+  { name: 'Sukkur', lat: 27.7052, lng: 68.8574 },
+  { name: 'Bahawalpur', lat: 29.3544, lng: 71.6911 },
+  { name: 'Sargodha', lat: 32.0836, lng: 72.6711 },
+  { name: 'Abbottabad', lat: 34.1688, lng: 73.2215 },
+  { name: 'Mardan', lat: 34.1989, lng: 72.0404 },
+  { name: 'Muzaffarabad', lat: 34.3597, lng: 73.4711 },
+  { name: 'Gilgit', lat: 35.9221, lng: 74.3087 },
+  { name: 'Mirpur', lat: 33.1484, lng: 73.7519 },
+  { name: 'Gwadar', lat: 25.1216, lng: 62.3254 },
+];
+
 export const CreateShipmentForm = () => {
   const { user } = useAuthStore();
   const defaultOutletId = user?.outlets && user.outlets.length > 0 ? String(user.outlets[0].id) : '';
+  const [isDetectingLocation, setIsDetectingLocation] = React.useState(false);
 
   const {
     register,
     control,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<ShipmentFormValues>({
@@ -37,6 +63,48 @@ export const CreateShipmentForm = () => {
     },
   });
 
+  const sourceCityVal = watch('sourceCity');
+  const destCityVal = watch('destinationCity');
+  const weightVal = watch('weight') || 0.5;
+
+  const estimatedCharges = React.useMemo(() => {
+    if (!sourceCityVal || !destCityVal) return 250;
+    const isSameCity = String(sourceCityVal).toLowerCase().trim() === String(destCityVal).toLowerCase().trim();
+    const baseRate = isSameCity ? 180 : 280;
+    const extraWeight = Math.max(0, (Number(weightVal) || 0.5) - 1);
+    return Math.round(baseRate + extraWeight * 80);
+  }, [sourceCityVal, destCityVal, weightVal]);
+
+  const handleDetectOriginLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsDetectingLocation(false);
+        const { latitude, longitude } = position.coords;
+        let closest = PAKISTAN_CITY_COORDINATES[0];
+        let minDist = Infinity;
+        for (const city of PAKISTAN_CITY_COORDINATES) {
+          const dist = Math.hypot(city.lat - latitude, city.lng - longitude);
+          if (dist < minDist) {
+            minDist = dist;
+            closest = city;
+          }
+        }
+        setValue('sourceCity', closest.name, { shouldValidate: true });
+      },
+      (err) => {
+        setIsDetectingLocation(false);
+        console.warn('Geolocation detection error:', err);
+        alert('Could not detect location. Please select your origin city manually.');
+      },
+      { timeout: 10000 }
+    );
+  };
+
   const onSubmit = async (data: ShipmentFormValues) => {
     try {
       // Generate tracking number
@@ -48,7 +116,7 @@ export const CreateShipmentForm = () => {
           status: 'Total Booking',
           cod_amount: data.codAmount,
           weight: data.weight,
-          delivery_charges: 250.00, // Fixed for now
+          delivery_charges: estimatedCharges,
           recipient_name: data.customerName,
           recipient_phone: data.customerPhone,
           recipient_address: data.customerAddress,
@@ -80,17 +148,28 @@ export const CreateShipmentForm = () => {
             <h3 className="font-bold text-slate-800">Shipment Details</h3>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Origin City</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700">Origin City / Tehsil</label>
+                <button
+                  type="button"
+                  onClick={handleDetectOriginLocation}
+                  disabled={isDetectingLocation}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                >
+                  <Navigation className={`h-3 w-3 ${isDetectingLocation ? 'animate-spin' : ''}`} />
+                  {isDetectingLocation ? 'Detecting...' : 'Auto-Detect Location'}
+                </button>
+              </div>
               <Controller
                 name="sourceCity"
                 control={control}
                 render={({ field }) => (
-                  <CitySelect
+                  <PakistanLocationSelect
                     value={field.value ?? ''}
-                    onChange={field.onChange}
-                    placeholder="Select Origin City"
+                    onChange={(val) => field.onChange(val)}
+                    placeholder="Select Origin Location"
                     error={errors.sourceCity?.message}
                   />
                 )}
@@ -98,15 +177,15 @@ export const CreateShipmentForm = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Destination City</label>
+              <label className="text-sm font-medium text-slate-700">Destination City / Tehsil</label>
               <Controller
                 name="destinationCity"
                 control={control}
                 render={({ field }) => (
-                  <CitySelect
+                  <PakistanLocationSelect
                     value={field.value ?? ''}
-                    onChange={field.onChange}
-                    placeholder="Select Destination City"
+                    onChange={(val) => field.onChange(val)}
+                    placeholder="Select Destination Location"
                     error={errors.destinationCity?.message}
                   />
                 )}
@@ -190,7 +269,7 @@ export const CreateShipmentForm = () => {
             </div>
             <div>
               <p className="text-sm font-medium">Estimated Delivery Charge</p>
-              <p className="text-2xl font-bold text-slate-900">PKR 250.00</p>
+              <p className="text-2xl font-bold text-slate-900">PKR {estimatedCharges.toFixed(2)}</p>
             </div>
           </div>
           <Button size="lg" type="submit" isLoading={isSubmitting} className="px-12 rounded-xl">

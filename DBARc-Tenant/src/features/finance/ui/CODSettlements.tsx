@@ -48,8 +48,8 @@ export const CODSettlements = () => {
           id: s.id,
           name: s.name || s.attributes?.name || `Merchant #${s.id}`,
           phone: s.phone || s.attributes?.phone || '',
-          pendingCod: totalCod > 0 ? totalCod : (s.id * 15400 + 4200), // fallback demo baseline
-          parcelCount: matchingParcels.length > 0 ? matchingParcels.length : 8,
+          pendingCod: totalCod,
+          parcelCount: matchingParcels.length,
           parcels: matchingParcels,
         };
       });

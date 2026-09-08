@@ -25,12 +25,17 @@ export const CityMultiSelect = ({ value, onChange, placeholder = 'Search cities.
   React.useEffect(() => {
     const fetchCities = async () => {
       try {
-        const res = await apiClient.get('/cities?pagination[limit]=200');
-        if (res.data?.data) {
-          setCities(res.data.data.map((c: any) => ({
+        const res = await apiClient.get('/cities?pagination[limit]=1000');
+        const rawList = res.data?.data || res.data || [];
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          const list: City[] = rawList.map((c: any) => ({
             id: c.id,
-            name: c.attributes?.name || c.name || '',
-          })));
+            name: (c.CityName || c.cityName || c.name || c.attributes?.CityName || c.attributes?.name || `City #${c.id}`).trim(),
+          })).filter((c: City) => c.name && !c.name.includes('#'));
+          
+          if (list.length > 0) {
+            setCities(list.sort((a, b) => a.name.localeCompare(b.name)));
+          }
         }
       } catch (err) {
         console.error('Failed to fetch cities:', err);

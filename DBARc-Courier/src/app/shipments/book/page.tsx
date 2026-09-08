@@ -36,7 +36,9 @@ import {
   Layers, 
   Upload, 
   Plus, 
-  HelpCircle
+  HelpCircle,
+  Navigation,
+  MapPin
 } from 'lucide-react';
 
 import PortalLayout from '@/components/PortalLayout';
@@ -44,7 +46,31 @@ import { apiClient } from '@/shared/api/api-client';
 import { TextBox } from '@/components/ui/form/text-box';
 import { TextAreaInput } from '@/components/ui/form/text-area';
 import { SearchableDropdown } from '@/components/ui/form/searchable-dropdown';
-import { CitySelect } from '@/components/ui/CitySelect';
+import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
+import { evaluateLogisticsRouting, TPLPartnerModel } from '@/shared/data/pakistan-3pl-city-mappings';
+
+const PAKISTAN_CITY_COORDINATES = [
+  { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
+  { name: 'Karachi', lat: 24.8607, lng: 67.0011 },
+  { name: 'Islamabad', lat: 33.6844, lng: 73.0479 },
+  { name: 'Rawalpindi', lat: 33.5651, lng: 73.0169 },
+  { name: 'Faisalabad', lat: 31.4504, lng: 73.1350 },
+  { name: 'Multan', lat: 30.1575, lng: 71.5249 },
+  { name: 'Peshawar', lat: 34.0151, lng: 71.5249 },
+  { name: 'Quetta', lat: 30.1798, lng: 66.9750 },
+  { name: 'Sialkot', lat: 32.4945, lng: 74.5229 },
+  { name: 'Gujranwala', lat: 32.1877, lng: 74.1945 },
+  { name: 'Hyderabad', lat: 25.3960, lng: 68.3578 },
+  { name: 'Sukkur', lat: 27.7052, lng: 68.8574 },
+  { name: 'Bahawalpur', lat: 29.3544, lng: 71.6911 },
+  { name: 'Sargodha', lat: 32.0836, lng: 72.6711 },
+  { name: 'Abbottabad', lat: 34.1688, lng: 73.2215 },
+  { name: 'Mardan', lat: 34.1989, lng: 72.0404 },
+  { name: 'Muzaffarabad', lat: 34.3597, lng: 73.4711 },
+  { name: 'Gilgit', lat: 35.9221, lng: 74.3087 },
+  { name: 'Mirpur', lat: 33.1484, lng: 73.7519 },
+  { name: 'Gwadar', lat: 25.1216, lng: 62.3254 },
+];
 
 // Form validation schema using Zod for manual entry
 const preprocessNumber = (val: unknown) => {
@@ -61,6 +87,8 @@ const bookingSchema = z.object({
   consigneeEmail: z.string().email('Invalid email address').or(z.literal('')),
   consigneeAltPhone: z.string().optional(),
   
+  sourceCity: z.union([z.number(), z.string()]).optional(),
+  sourceCityName: z.string().optional(),
   deliveryAddress: z.string().min(5, 'Delivery address is too short'),
   destinationCity: z.union([z.number(), z.string()]).refine(val => val !== '', 'Please select a destination city'),
   destinationCityName: z.string().optional(),
@@ -254,6 +282,8 @@ function BookShipmentForm() {
   const methods = useForm<BookingFormValues>({
     resolver: zodResolver(bookingSchema) as any,
     defaultValues: {
+      sourceCity: '',
+      sourceCityName: '',
       weight: 0.5,
       pieces: 1,
       codAmount: 0,
@@ -274,39 +304,255 @@ function BookShipmentForm() {
     control,
   } = methods;
 
+  const [configuredZones, setConfiguredZones] = React.useState<any[]>([]);
+  const [detailedOffices, setDetailedOffices] = React.useState<any[]>([]);
+  const [isDetectingOriginLocation, setIsDetectingOriginLocation] = React.useState(false);
+
+  // 2PL and 3PL Routing states
+  const [courierSelfServiceCities, setCourierSelfServiceCities] = React.useState<string[]>([]);
+  const [courierTplPartners, setCourierTplPartners] = React.useState<TPLPartnerModel[]>([]);
+  const [shipperPreferredTplId, setShipperPreferredTplId] = React.useState<string | number | null>(null);
+
+  // Fetch courier 2PL self-service areas and configured 3PL partners
   React.useEffect(() => {
-    if (user?.id) {
-      apiClient.get(`/users/${user.id}?populate=offices`).then(res => {
-        const userOffices = res.data?.offices || [];
-        const mappedOffices = userOffices.map((o: any) => ({ label: o.name || `Office #${o.id}`, value: String(o.id) }));
-        setOffices(mappedOffices);
-        if (mappedOffices.length > 0) {
-          setValue('pickupLocation', mappedOffices[0].value);
+    const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : 2);
+    apiClient.get('/tenants', {
+      params: {
+        filters: {
+          $or: [
+            { id: { $eq: tenantId } },
+            { documentId: { $eq: user?.tenant?.documentId || String(tenantId) } }
+          ]
         }
-      }).catch(err => console.warn('Could not fetch user offices:', err));
+      }
+    }).then(res => {
+      const items = res.data?.data || [];
+      const data = items[0]?.attributes || items[0] || null;
+      if (data?.self_service_cities && Array.isArray(data.self_service_cities)) {
+        setCourierSelfServiceCities(data.self_service_cities);
+      } else {
+        const saved = localStorage.getItem(`self_service_cities_${tenantId}`);
+        if (saved) try { setCourierSelfServiceCities(JSON.parse(saved)); } catch {}
+        else setCourierSelfServiceCities(['Lahore', 'Rawalpindi', 'Islamabad', 'Faisalabad']);
+      }
+    }).catch(() => {
+      const saved = localStorage.getItem(`self_service_cities_${tenantId}`);
+      if (saved) try { setCourierSelfServiceCities(JSON.parse(saved)); } catch {}
+      else setCourierSelfServiceCities(['Lahore', 'Rawalpindi', 'Islamabad', 'Faisalabad']);
+    });
+
+    // 2. 3PL Partners
+    apiClient.get('/tpl-partners', {
+      params: { filters: { tenant: tenantId }, populate: '*' }
+    }).then(res => {
+      let loaded = (res.data?.data || []).map((item: any) => ({ id: item.id, ...(item.attributes || item) }));
+      if (loaded.length === 0) {
+        const saved = localStorage.getItem(`tpl_partners_${tenantId}`);
+        if (saved) try { loaded = JSON.parse(saved); } catch {}
+      }
+      setCourierTplPartners(loaded);
+    }).catch(() => {
+      const saved = localStorage.getItem(`tpl_partners_${tenantId}`);
+      if (saved) try { setCourierTplPartners(JSON.parse(saved)); } catch {}
+    });
+
+    // 3. Check shipper preferred 3PL mapping
+    const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
+    const shipperId = activeBusinessIdStr || user?.shipper?.id || (Array.isArray(user?.shipper) ? user.shipper[0]?.id : null);
+    if (shipperId) {
+      const mapKey = `shipper_tpl_map_${tenantId}`;
+      const savedMap = localStorage.getItem(mapKey);
+      if (savedMap) {
+        try {
+          const map = JSON.parse(savedMap);
+          if (map[shipperId]) setShipperPreferredTplId(map[shipperId]);
+        } catch {}
+      }
     }
+  }, [user]);
+
+  // Fetch configured zones (tenant-specific or global defaults)
+  React.useEffect(() => {
+    const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : 2);
+    apiClient.get('/regions', {
+      params: {
+        filters: { tenant: tenantId },
+        populate: ['cities'],
+        pagination: { limit: 100 }
+      }
+    }).then(res => {
+      const data = res.data?.data || res.data || [];
+      if (Array.isArray(data) && data.length > 0) {
+        setConfiguredZones(data);
+      } else {
+        // Fallback to Super Admin Global Defaults
+        apiClient.get('/regions', {
+          params: {
+            filters: { tenant: { $null: true } },
+            populate: ['cities'],
+            pagination: { limit: 100 }
+          }
+        }).then(globalRes => {
+          const gData = globalRes.data?.data || globalRes.data || [];
+          if (Array.isArray(gData) && gData.length > 0) {
+            setConfiguredZones(gData);
+          }
+        }).catch(() => null);
+      }
+    }).catch(err => console.warn('Could not fetch tenant regions:', err));
+  }, [user]);
+
+  // Fetch offices with linked city and auto-detect source city
+  React.useEffect(() => {
+    const fetchOfficesData = async () => {
+      try {
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null);
+        const res = await apiClient.get('/offices', {
+          params: {
+            filters: tenantId ? { courier: tenantId } : {},
+            populate: ['city'],
+            pagination: { limit: 50 }
+          }
+        }).catch(() => null);
+
+        let officeList = res?.data?.data || [];
+        if (!Array.isArray(officeList) || officeList.length === 0) {
+          if (user?.id) {
+            const userRes = await apiClient.get(`/users/${user.id}?populate[offices][populate]=city`).catch(() => null);
+            officeList = userRes?.data?.offices || [];
+          }
+        }
+
+        if (Array.isArray(officeList) && officeList.length > 0) {
+          const mappedDetailed = officeList.map((o: any) => {
+            const attrs = o.attributes || o;
+            const cityObj = attrs.city?.data?.attributes || attrs.city || {};
+            const cityName = cityObj.CityName || cityObj.name || attrs.cityName || '';
+            return {
+              id: String(o.id),
+              name: attrs.name || `Office #${o.id}`,
+              address: attrs.address || '',
+              cityName: cityName || (attrs.address ? attrs.address.split(',').pop()?.trim() : '') || 'Lahore',
+            };
+          });
+
+          setDetailedOffices(mappedDetailed);
+          const dropdownItems = mappedDetailed.map(o => ({ label: `${o.name} (${o.cityName})`, value: o.id }));
+          setOffices(dropdownItems);
+
+          // Auto-select first office & auto-populate source city!
+          if (mappedDetailed.length > 0) {
+            setValue('pickupLocation', mappedDetailed[0].id);
+            setValue('sourceCity', mappedDetailed[0].cityName);
+            setValue('sourceCityName', mappedDetailed[0].cityName);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch offices for source auto-selection:', e);
+      }
+    };
+
+    fetchOfficesData();
   }, [user, setValue]);
+
+  // When pickup location changes, sync sourceCity
+  const selectedPickupLocation = watch('pickupLocation');
+  React.useEffect(() => {
+    if (selectedPickupLocation && detailedOffices.length > 0) {
+      const match = detailedOffices.find(o => o.id === String(selectedPickupLocation));
+      if (match && match.cityName) {
+        setValue('sourceCity', match.cityName);
+        setValue('sourceCityName', match.cityName);
+      }
+    }
+  }, [selectedPickupLocation, detailedOffices, setValue]);
+
+  // GPS Auto-detect location
+  const handleDetectOriginLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsDetectingOriginLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsDetectingOriginLocation(false);
+        const { latitude, longitude } = position.coords;
+        let closest = PAKISTAN_CITY_COORDINATES[0];
+        let minDist = Infinity;
+        for (const city of PAKISTAN_CITY_COORDINATES) {
+          const dist = Math.hypot(city.lat - latitude, city.lng - longitude);
+          if (dist < minDist) {
+            minDist = dist;
+            closest = city;
+          }
+        }
+        setValue('sourceCity', closest.name);
+        setValue('sourceCityName', closest.name);
+      },
+      (err) => {
+        setIsDetectingOriginLocation(false);
+        console.warn('Geolocation error:', err);
+        alert('Could not auto-detect location. Please select origin city manually.');
+      },
+      { timeout: 10000 }
+    );
+  };
 
   // Watch fields for live estimated cost calculation
   const weight = watch('weight') || 0.5;
   const codAmount = watch('codAmount') || 0;
   const paymentType = watch('paymentType') || 'COD';
   const serviceType = watch('serviceType') || 'Overnight';
+  const sourceCityVal = watch('sourceCity');
+  const sourceCityName = watch('sourceCityName') || (typeof sourceCityVal === 'string' ? sourceCityVal : '');
   const destinationCityId = watch('destinationCity');
-  const destinationCityName = watch('destinationCityName') || '';
+  const destinationCityName = watch('destinationCityName') || (typeof destinationCityId === 'string' ? destinationCityId : '');
 
   const pricing = React.useMemo(() => {
     const activePlanName = user?.tariffPlan || user?.planName || (typeof window !== 'undefined' ? localStorage.getItem('activeBusinessTariffPlan') : null) || 'Standard Tariff Plan';
-    const cityLower = String(destinationCityName || '').toLowerCase();
+    const sourceLower = String(sourceCityName || '').toLowerCase().trim();
+    const cityLower = String(destinationCityName || '').toLowerCase().trim();
     let zoneName = 'Within City';
-    if (cityLower.includes('karachi') || cityLower.includes('lahore') || cityLower.includes('islamabad') || cityLower.includes('rawalpindi')) {
-      zoneName = 'Zone A (Major Hubs)';
-    } else if (cityLower.includes('faisalabad') || cityLower.includes('multan') || cityLower.includes('peshawar') || cityLower.includes('gujranwala') || cityLower.includes('sialkot') || cityLower.includes('hyderabad')) {
-      zoneName = 'Zone B (Regional)';
-    } else if (cityLower.includes('quetta') || cityLower.includes('sukkur') || cityLower.includes('bahawalpur') || cityLower.includes('sargodha') || cityLower.includes('abbottabad')) {
-      zoneName = 'Zone C (Remote)';
-    } else if (destinationCityId) {
-      zoneName = 'Zone D (Other)';
+
+    // 1. Same origin and destination city -> "Within City"
+    const isSameCity = sourceLower && cityLower && (sourceLower === cityLower || sourceLower.includes(cityLower) || cityLower.includes(sourceLower));
+
+    if (isSameCity) {
+      zoneName = 'Within City';
+    } else {
+      // 2. Check tenant configured zones
+      let matchedInConfigured = false;
+      if (configuredZones.length > 0 && cityLower) {
+        for (const reg of configuredZones) {
+          const attrs = reg.attributes || reg;
+          if (attrs.name.toLowerCase().includes('within')) continue;
+
+          const regCities = attrs.cities?.data || attrs.cities || [];
+          const isMatched = regCities.some((c: any) => {
+            const cName = (c.attributes?.CityName || c.attributes?.name || c.CityName || c.name || '').toLowerCase().trim();
+            return cName && (cityLower === cName || cityLower.includes(cName) || cName.includes(cityLower));
+          });
+          if (isMatched) {
+            zoneName = attrs.name;
+            matchedInConfigured = true;
+            break;
+          }
+        }
+      }
+
+      // 3. Fallback heuristic if not found in configured zones
+      if (!matchedInConfigured && destinationCityId) {
+        if (cityLower.includes('karachi') || cityLower.includes('lahore') || cityLower.includes('islamabad') || cityLower.includes('rawalpindi')) {
+          zoneName = 'Zone A (Major Metros)';
+        } else if (cityLower.includes('faisalabad') || cityLower.includes('multan') || cityLower.includes('peshawar') || cityLower.includes('gujranwala') || cityLower.includes('sialkot') || cityLower.includes('hyderabad')) {
+          zoneName = 'Zone B (Regional Hubs)';
+        } else if (cityLower.includes('quetta') || cityLower.includes('sukkur') || cityLower.includes('bahawalpur') || cityLower.includes('sargodha') || cityLower.includes('abbottabad')) {
+          zoneName = 'Zone C (Secondary Cities)';
+        } else {
+          zoneName = 'Zone D (Remote & Extended)';
+        }
+      }
     }
 
     const isCorporate = activePlanName.toLowerCase().includes('corporate');
@@ -316,19 +562,20 @@ function BookShipmentForm() {
     let oneKgRate = isVip ? 130 : isCorporate ? 140 : 150;
     let addKgRate = isVip ? 120 : isCorporate ? 130 : 150;
 
-    if (zoneName.includes('Zone A')) {
+    const zLower = zoneName.toLowerCase();
+    if (zLower.includes('zone a') || zLower.includes('metro')) {
       halfKgRate = Math.round(halfKgRate * 1.2);
       oneKgRate = Math.round(oneKgRate * 1.2);
       addKgRate = Math.round(addKgRate * 1.2);
-    } else if (zoneName.includes('Zone B')) {
+    } else if (zLower.includes('zone b') || zLower.includes('regional')) {
       halfKgRate = Math.round(halfKgRate * 1.3);
       oneKgRate = Math.round(oneKgRate * 1.3);
       addKgRate = Math.round(addKgRate * 1.3);
-    } else if (zoneName.includes('Zone C')) {
+    } else if (zLower.includes('zone c') || zLower.includes('secondary')) {
       halfKgRate = Math.round(halfKgRate * 1.4);
       oneKgRate = Math.round(oneKgRate * 1.4);
       addKgRate = Math.round(addKgRate * 1.4);
-    } else if (zoneName.includes('Zone D')) {
+    } else if (zLower.includes('zone d') || zLower.includes('remote') || zLower.includes('other')) {
       halfKgRate = Math.round(halfKgRate * 1.5);
       oneKgRate = Math.round(oneKgRate * 1.5);
       addKgRate = Math.round(addKgRate * 1.5);
@@ -391,6 +638,18 @@ function BookShipmentForm() {
     }
   }, [pricing.total, paymentType, codAmount, setValue]);
 
+  // Dynamic 5-scenario 2PL vs 3PL Routing Calculation
+  const logisticsRouting = React.useMemo(() => {
+    const dest = destinationCityName || destinationCityId;
+    if (!dest) return null;
+    return evaluateLogisticsRouting({
+      destinationCity: dest,
+      selfServiceCities: courierSelfServiceCities,
+      shipperPreferredTplId,
+      courierTplPartners,
+    });
+  }, [destinationCityName, destinationCityId, courierSelfServiceCities, shipperPreferredTplId, courierTplPartners]);
+
   // Search Reference Order
   React.useEffect(() => {
     if (refSearchQuery.trim().length < 3) {
@@ -427,6 +686,13 @@ function BookShipmentForm() {
   const onSubmit = async (data: BookingFormValues) => {
     setBookingStatus('submitting');
     setErrorMessage('');
+
+    // Strict Scenario 5 enforcement: Reject if no 2PL or 3PL covers the area
+    if (logisticsRouting && !logisticsRouting.allowed) {
+      setErrorMessage("Sorry, we don't have delivery service in that area.");
+      setBookingStatus('error');
+      return;
+    }
     
     try {
       const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -458,12 +724,18 @@ function BookShipmentForm() {
           recipient_name: data.consigneeName,
           recipient_phone: data.consigneePhone,
           recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCityName || data.destinationCity}`,
+          source_city: data.sourceCityName || data.sourceCity || 'Lahore',
+          destination_city: data.destinationCityName || data.destinationCity,
           consignee_email: data.consigneeEmail || '',
           consignee_alt_phone: data.consigneeAltPhone || '',
           allow_to_open: data.allowToOpen || 'No',
           comments: data.comments || data.productDescription || '',
           shipper: shipperId || null,
           origin_office: originOfficeId,
+          fulfillment_type: logisticsRouting?.fulfillmentType || '2PL',
+          tpl_partner: logisticsRouting?.partner?.id || null,
+          tpl_city_code: logisticsRouting?.partnerCityCode || null,
+          routing_scenario: logisticsRouting?.scenario || 1,
         }
       });
 
@@ -1115,20 +1387,56 @@ function BookShipmentForm() {
                     />
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-bold text-on-surface">Destination City <span className="text-error">*</span></label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-on-surface flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-primary" />
+                          Origin City / Tehsil
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleDetectOriginLocation}
+                          disabled={isDetectingOriginLocation}
+                          className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Auto-detect closest city via GPS"
+                        >
+                          <Navigation className={`h-3 w-3 ${isDetectingOriginLocation ? 'animate-spin' : ''}`} />
+                          {isDetectingOriginLocation ? 'Detecting...' : 'Auto-Detect'}
+                        </button>
+                      </div>
+                      <Controller
+                        name="sourceCity"
+                        control={control}
+                        render={({ field }) => (
+                          <PakistanLocationSelect
+                            value={field.value ?? ''}
+                            onChange={(val, loc: any) => {
+                              field.onChange(val);
+                              if (loc) {
+                                setValue('sourceCityName', loc.cityName || loc.tehsil);
+                              }
+                            }}
+                            placeholder="Origin City / Tehsil"
+                          />
+                        )}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-on-surface">Destination City / Tehsil <span className="text-error">*</span></label>
                       <Controller
                         name="destinationCity"
                         control={control}
                         render={({ field, fieldState }) => (
-                          <CitySelect
-                            value={field.value as any}
-                            onChange={(cityId, cityName) => {
-                              field.onChange(cityId);
-                              if (cityName) {
-                                setValue('destinationCityName', cityName);
+                          <PakistanLocationSelect
+                            value={field.value ?? ''}
+                            onChange={(val, loc: any) => {
+                              field.onChange(val);
+                              if (loc) {
+                                setValue('destinationCityName', loc.cityName || loc.tehsil);
                               }
                             }}
-                            error={fieldState.error?.message}
+                            placeholder="Select Destination Location"
+                            error={fieldState.error?.message || undefined}
                           />
                         )}
                       />
@@ -1148,6 +1456,49 @@ function BookShipmentForm() {
                         required
                       />
                     </div>
+
+                    {/* Live Logistics Fulfillment Routing Banner */}
+                    {logisticsRouting && (
+                      <div className="sm:col-span-2 lg:col-span-4 mt-1">
+                        {!logisticsRouting.allowed ? (
+                          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 flex items-center gap-3 animate-in fade-in">
+                            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                            <div>
+                              <div className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+                                Delivery Service Unavailable (Scenario 5)
+                              </div>
+                              <div className="text-xs font-medium">
+                                {logisticsRouting.message}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs animate-in fade-in">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`w-2.5 h-2.5 rounded-full ${
+                                logisticsRouting.fulfillmentType === '2PL' ? 'bg-emerald-500' : 'bg-blue-500'
+                              }`} />
+                              <div>
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  Fulfillment: {logisticsRouting.serviceType}
+                                </span>
+                                <span className="text-slate-500 block text-[11px]">
+                                  {logisticsRouting.message}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className={`px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase tracking-wider ${
+                              logisticsRouting.fulfillmentType === '2PL'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            }`}>
+                              {logisticsRouting.fulfillmentType} Active
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
 

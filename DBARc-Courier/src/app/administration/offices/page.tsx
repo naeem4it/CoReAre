@@ -4,7 +4,7 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { useAuth } from '@/components/AuthProvider';
 import { apiClient } from '@/shared/api/api-client';
-import { CitySelect } from '@/components/ui/CitySelect';
+import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
 
 export default function OfficesPage() {
   const { user, activeBusinessId } = useAuth();
@@ -17,7 +17,7 @@ export default function OfficesPage() {
     name: '',
     address: '',
     phone: '',
-    cityId: '' as number | '',
+    cityId: '' as number | string,
     status: true,
   });
 
@@ -209,10 +209,11 @@ export default function OfficesPage() {
                 </div>
                 
                 <div className="flex flex-col gap-1.5 z-50">
-                  <label className="text-sm font-bold text-slate-700">City</label>
-                  <CitySelect 
+                  <label className="text-sm font-bold text-slate-700">City / Location</label>
+                  <PakistanLocationSelect 
                     value={formData.cityId}
-                    onChange={(id) => setFormData({ ...formData, cityId: typeof id === 'number' ? id : (id ? Number(id) : '') })}
+                    onChange={(val) => setFormData({ ...formData, cityId: val })}
+                    placeholder="Select City / Tehsil..."
                   />
                 </div>
 

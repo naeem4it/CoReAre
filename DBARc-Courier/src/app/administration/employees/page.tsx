@@ -5,7 +5,7 @@ import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
-import { CitySelect } from '@/components/ui/CitySelect';
+import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
 import { Eye, EyeOff } from 'lucide-react';
 
 interface RoleDefinition {
@@ -30,6 +30,35 @@ interface User {
 
 const SHIPPER_SUB_ROLES = ['Employee'];
 const COURIER_ROLE_NAMES = ['Super Admin', 'Admin', 'Front desk', 'shipment Booker', 'Rider'];
+
+export interface CustomPlanData {
+  name: string;
+  cashHandlingType: 'percentage' | 'fixed';
+  cashHandlingValue: number;
+  cashHandlingMinFee: number;
+  rtoChargeValue: number;
+  weightTiers: Array<{ id: string; label: string }>;
+  zones: Array<{
+    zoneName: string;
+    tierRates: { [tierId: string]: number };
+    returnCharges: number;
+    insurance: string | number;
+  }>;
+}
+
+const DEFAULT_CUSTOM_WEIGHT_TIERS = [
+  { id: 'tier_half_kg', label: '0.01 to 0.5 kg' },
+  { id: 'tier_one_kg', label: '0.51 to 1.0 kg' },
+  { id: 'tier_add_kg', label: 'Additional KG' },
+];
+
+const DEFAULT_CUSTOM_ZONES = [
+  { zoneName: 'Within City', tierRates: { tier_half_kg: 135, tier_one_kg: 150, tier_add_kg: 150 }, returnCharges: 50, insurance: '-' },
+  { zoneName: 'Zone A', tierRates: { tier_half_kg: 165, tier_one_kg: 180, tier_add_kg: 180 }, returnCharges: 50, insurance: '-' },
+  { zoneName: 'Zone B', tierRates: { tier_half_kg: 175, tier_one_kg: 195, tier_add_kg: 195 }, returnCharges: 100, insurance: '-' },
+  { zoneName: 'Zone C', tierRates: { tier_half_kg: 185, tier_one_kg: 205, tier_add_kg: 205 }, returnCharges: 100, insurance: '-' },
+  { zoneName: 'Zone D', tierRates: { tier_half_kg: 195, tier_one_kg: 220, tier_add_kg: 220 }, returnCharges: 100, insurance: '-' },
+];
 
 // Password Policy: 8-20 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character
 const validatePasswordRule = (pwd: string): { isValid: boolean; message?: string } => {
@@ -115,11 +144,17 @@ function EmployeeManagementContent() {
 
   const [employees, setEmployees] = React.useState<User[]>([]);
   const [roles, setRoles] = React.useState<RoleDefinition[]>([]);
-  const [shippers, setShippers] = React.useState<{ id: number; name: string }[]>([]);
+  const [shippers, setShippers] = React.useState<{ id: number; name: string; shipper_plan?: any }[]>([]);
   const [offices, setOffices] = React.useState<{ id: number; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'active' | 'quit'>('active');
   const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
+
+  // Change Tariff Plan for Shipper Modal State
+  const [isChangePlanModalOpen, setIsChangePlanModalOpen] = React.useState(false);
+  const [targetShipperForPlanChange, setTargetShipperForPlanChange] = React.useState<{ id: number; name: string; currentPlanId?: number; currentPlanName?: string } | null>(null);
+  const [newAssignedPlanId, setNewAssignedPlanId] = React.useState<number>(1);
+  const [isSavingShipperPlan, setIsSavingShipperPlan] = React.useState(false);
 
   // Multi-roles state (for Courier)
   const [assignedRoleIds, setAssignedRoleIds] = React.useState<number[]>([]);
@@ -131,12 +166,8 @@ function EmployeeManagementContent() {
   const [assignedShipperIds, setAssignedShipperIds] = React.useState<number[]>([]);
   const [assignedOfficeIds, setAssignedOfficeIds] = React.useState<number[]>([]);
 
-  // Available Tariff Plans (Live + default fallback)
-  const [availablePlans, setAvailablePlans] = React.useState<Array<{ id: number; name: string }>>([
-    { id: 1, name: 'Standard Tariff Plan (Default)' },
-    { id: 2, name: 'VIP Shipper Flat Rate Plan' },
-    { id: 3, name: 'Overnight Express Special Plan' }
-  ]);
+  // Available Tariff Plans (loaded strictly from database)
+  const [availablePlans, setAvailablePlans] = React.useState<Array<{ id: number; name: string }>>([]);
 
   // Clean empty Initial Shipper Business Grid State
   const [businessGridRows, setBusinessGridRows] = React.useState<Array<{
@@ -145,8 +176,9 @@ function EmployeeManagementContent() {
     name: string;
     address?: string;
     city?: string;
-    planId?: number;
+    planId?: number | 'custom';
     planName: string;
+    customPlanData?: CustomPlanData;
     isSelected?: boolean;
     isEditingName?: boolean;
     isEditingPlan?: boolean;
@@ -182,7 +214,21 @@ function EmployeeManagementContent() {
   const [newBusinessName, setNewBusinessName] = React.useState('');
   const [newBusinessAddress, setNewBusinessAddress] = React.useState('');
   const [newBusinessCity, setNewBusinessCity] = React.useState('');
-  const [selectedPlanId, setSelectedPlanId] = React.useState<number>(1);
+  const [selectedPlanId, setSelectedPlanId] = React.useState<number | 'custom'>(1);
+
+  // Custom Tariff Plan configuration modal state
+  const [isCustomPlanModalOpen, setIsCustomPlanModalOpen] = React.useState(false);
+  const [customPlanDraft, setCustomPlanDraft] = React.useState<CustomPlanData>({
+    name: '',
+    cashHandlingType: 'percentage',
+    cashHandlingValue: 1.5,
+    cashHandlingMinFee: 30,
+    rtoChargeValue: 50,
+    weightTiers: DEFAULT_CUSTOM_WEIGHT_TIERS,
+    zones: DEFAULT_CUSTOM_ZONES,
+  });
+  const [configuredCustomPlan, setConfiguredCustomPlan] = React.useState<CustomPlanData | null>(null);
+  const [editingBusinessRowTempId, setEditingBusinessRowTempId] = React.useState<string | null>(null);
 
   const fetchEmployeesAndRoles = async () => {
     setIsLoading(true);
@@ -205,20 +251,21 @@ function EmployeeManagementContent() {
 
       // 3. Fetch shippers
       try {
-        const shippersRes = await apiClient.get('/shippers?populate=*');
+        const shippersRes = await apiClient.get('/shippers/with-plans').catch(() => apiClient.get('/shippers?populate=*'));
         const rawShippers = shippersRes.data?.data || [];
         const mappedShippers = rawShippers.map((item: any) => ({
           id: item.id,
           name: item.name || item.attributes?.name || `Shipper #${item.id}`,
+          shipper_plan: item.shipper_plan,
         }));
         setShippers(mappedShippers);
       } catch (shippersErr: any) {
         console.warn('Failed to load shippers list:', shippersErr?.message || shippersErr);
       }
 
-      // 4. Fetch tariff plans
+      // 4. Fetch tariff plans from database
       try {
-        const plansRes = await apiClient.get('/shipper-plans');
+        const plansRes = await apiClient.get('/shipper-plan/list').catch(() => apiClient.get('/shipper-plans'));
         const rawPlans = plansRes.data?.data || [];
         if (rawPlans.length > 0) {
           const mappedPlans = rawPlans.map((p: any) => ({
@@ -226,9 +273,12 @@ function EmployeeManagementContent() {
             name: p.name || p.attributes?.name || `Plan #${p.id}`
           }));
           setAvailablePlans(mappedPlans);
+        } else {
+          setAvailablePlans([]);
         }
       } catch (plansErr: any) {
-        console.warn('Failed to load shipper plans:', plansErr?.message || plansErr);
+        console.error('Failed to load shipper plans from database:', plansErr?.message || plansErr);
+        setAvailablePlans([]);
       }
 
       // 5. Fetch offices
@@ -303,6 +353,20 @@ function EmployeeManagementContent() {
       );
     });
   }, [employees, statusFilter, searchQuery, effectiveType, typeParam, isLoggedShipper, loggedInUser]);
+
+  // Selected user shipper resolution for action button
+  const selectedUserShipper = React.useMemo(() => {
+    if (!selectedUser) return null;
+    const rawShipper = Array.isArray(selectedUser.shipper) ? selectedUser.shipper[0] : (selectedUser as any).shipper;
+    if (!rawShipper) return null;
+    const sId = typeof rawShipper === 'object' ? rawShipper.id : rawShipper;
+    const matchInShippers = shippers.find(s => s.id === sId);
+    return {
+      id: sId,
+      name: matchInShippers?.name || (typeof rawShipper === 'object' ? rawShipper.name : `Shipper #${sId}`),
+      shipper_plan: matchInShippers?.shipper_plan || (typeof rawShipper === 'object' ? rawShipper.shipper_plan : null)
+    };
+  }, [selectedUser, shippers]);
 
   // Roles calculation for Courier employees and sub-roles
   const unassignedRoles = React.useMemo(() => {
@@ -460,6 +524,184 @@ function EmployeeManagementContent() {
     }
   };
 
+  // Open Change Tariff Plan modal for a shipper business
+  const handleOpenChangePlanForShipper = (shipperId?: number, shipperName?: string, currentPlanId?: number, currentPlanName?: string) => {
+    if (!shipperId) {
+      alert('No shipper ID found for this business.');
+      return;
+    }
+    setTargetShipperForPlanChange({
+      id: shipperId,
+      name: shipperName || `Shipper #${shipperId}`,
+      currentPlanId: currentPlanId || 1,
+      currentPlanName: currentPlanName || 'Standard Commercial Plan',
+    });
+    setNewAssignedPlanId(currentPlanId || availablePlans[0]?.id || 1);
+    setIsChangePlanModalOpen(true);
+  };
+
+  // Save new plan assignment for shipper
+  const handleSaveShipperPlanChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetShipperForPlanChange) return;
+
+    try {
+      setIsSavingShipperPlan(true);
+      await apiClient.put(`/shippers/${targetShipperForPlanChange.id}/assign-plan`, {
+        shipper_plan: newAssignedPlanId,
+      });
+
+      const selectedPlanObj = availablePlans.find(p => p.id === newAssignedPlanId);
+
+      // Update local state in shippers
+      setShippers(prev => prev.map(s => {
+        if (s.id === targetShipperForPlanChange.id) {
+          return {
+            ...s,
+            shipper_plan: selectedPlanObj || { id: newAssignedPlanId, name: `Plan #${newAssignedPlanId}` }
+          };
+        }
+        return s;
+      }));
+
+      // Update employees list state
+      setEmployees(prev => prev.map(emp => {
+        if (emp.shipper && Array.isArray(emp.shipper)) {
+          const hasTarget = emp.shipper.some((s: any) => s.id === targetShipperForPlanChange.id);
+          if (hasTarget) {
+            return {
+              ...emp,
+              shipper: emp.shipper.map((s: any) => {
+                if (s.id === targetShipperForPlanChange.id) {
+                  return {
+                    ...s,
+                    planName: selectedPlanObj?.name,
+                    shipper_plan: selectedPlanObj,
+                  };
+                }
+                return s;
+              })
+            };
+          }
+        }
+        return emp;
+      }));
+
+      alert(`Tariff plan for "${targetShipperForPlanChange.name}" successfully updated to "${selectedPlanObj?.name || 'Selected Plan'}"!`);
+      setIsChangePlanModalOpen(false);
+      setTargetShipperForPlanChange(null);
+    } catch (err: any) {
+      console.error('Failed to change plan for shipper:', err);
+      alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to change tariff plan for shipper.');
+    } finally {
+      setIsSavingShipperPlan(false);
+    }
+  };
+
+  // Open Custom Tariff Plan configuration popup
+  const handleOpenCustomPlanModal = (targetBusinessName?: string, existingData?: CustomPlanData | null, rowTempId?: string | null) => {
+    const businessLabel = targetBusinessName || newBusinessName || 'Shipper';
+    if (existingData) {
+      setCustomPlanDraft(JSON.parse(JSON.stringify(existingData)));
+    } else {
+      setCustomPlanDraft({
+        name: `${businessLabel.trim()} Custom Plan`,
+        cashHandlingType: 'percentage',
+        cashHandlingValue: 1.5,
+        cashHandlingMinFee: 30,
+        rtoChargeValue: 50,
+        weightTiers: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_WEIGHT_TIERS)),
+        zones: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_ZONES)),
+      });
+    }
+    setEditingBusinessRowTempId(rowTempId || null);
+    setIsCustomPlanModalOpen(true);
+  };
+
+  // Save Custom Tariff Plan from popup
+  const handleSaveCustomPlanModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customPlanDraft.name.trim()) {
+      alert('Plan Name is required.');
+      return;
+    }
+
+    if (targetShipperForPlanChange && isChangePlanModalOpen) {
+      // Save directly to Strapi and assign to targetShipperForPlanChange
+      (async () => {
+        try {
+          setIsSavingShipperPlan(true);
+          const payload = {
+            data: {
+              name: customPlanDraft.name.trim(),
+              cash_handling_type: customPlanDraft.cashHandlingType,
+              cash_handling_value: Number(customPlanDraft.cashHandlingValue),
+              cash_handling_min_fee: Number(customPlanDraft.cashHandlingMinFee || 0),
+              weight_tiers: customPlanDraft.weightTiers,
+              zones: customPlanDraft.zones,
+              shippers: [targetShipperForPlanChange.id],
+            }
+          };
+
+          const createRes = await apiClient.post('/shipper-plans', payload);
+          const createdPlanId = createRes.data?.data?.id || Date.now();
+
+          await apiClient.put(`/shippers/${targetShipperForPlanChange.id}/assign-plan`, {
+            shipper_plan: createdPlanId
+          });
+
+          const newPlanObj = {
+            id: createdPlanId,
+            name: customPlanDraft.name.trim()
+          };
+
+          setAvailablePlans(prev => [...prev.filter(p => p.id !== createdPlanId), newPlanObj]);
+          setShippers(prev => prev.map(s => s.id === targetShipperForPlanChange.id ? { ...s, shipper_plan: newPlanObj } : s));
+          setEmployees(prev => prev.map(emp => {
+            if (emp.shipper && Array.isArray(emp.shipper)) {
+              return {
+                ...emp,
+                shipper: emp.shipper.map((s: any) => s.id === targetShipperForPlanChange.id ? { ...s, planName: newPlanObj.name, shipper_plan: newPlanObj } : s)
+              };
+            }
+            return emp;
+          }));
+
+          alert(`Custom tariff plan "${newPlanObj.name}" created and assigned to "${targetShipperForPlanChange.name}" successfully!`);
+          setIsCustomPlanModalOpen(false);
+          setIsChangePlanModalOpen(false);
+          setTargetShipperForPlanChange(null);
+        } catch (err: any) {
+          console.error('Failed to create custom plan for shipper:', err);
+          alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to save custom plan.');
+        } finally {
+          setIsSavingShipperPlan(false);
+        }
+      })();
+      return;
+    }
+
+    if (editingBusinessRowTempId) {
+      // Editing an existing business row in the grid
+      setBusinessGridRows(prev => prev.map(row => {
+        if (row.tempId === editingBusinessRowTempId) {
+          return {
+            ...row,
+            planName: `★ ${customPlanDraft.name.trim()}`,
+            customPlanData: JSON.parse(JSON.stringify(customPlanDraft)),
+          };
+        }
+        return row;
+      }));
+    } else {
+      // Configuring custom plan for the business currently being added
+      setConfiguredCustomPlan(JSON.parse(JSON.stringify(customPlanDraft)));
+      setSelectedPlanId('custom');
+    }
+    setIsCustomPlanModalOpen(false);
+    setEditingBusinessRowTempId(null);
+  };
+
   // Add Business Modal submit
   const handleAddBusinessToGrid = (e: React.FormEvent) => {
     e.preventDefault();
@@ -468,15 +710,23 @@ function EmployeeManagementContent() {
       return;
     }
 
-    const planObj = availablePlans.find(p => p.id === selectedPlanId) || availablePlans[0];
+    const isCustom = selectedPlanId === 'custom';
+    if (isCustom && !configuredCustomPlan) {
+      alert('Please configure the Custom Tariff Plan rates before adding the business.');
+      handleOpenCustomPlanModal(newBusinessName);
+      return;
+    }
+
+    const planObj = isCustom ? null : (availablePlans.find(p => p.id === Number(selectedPlanId)) || availablePlans[0]);
     const newRow = {
       tempId: Date.now().toString(),
       name: newBusinessName.trim(),
       address: newBusinessAddress.trim(),
       city: newBusinessCity.trim(),
-      planId: planObj?.id || 1,
-      planName: planObj?.name || 'Standard Tariff Plan (Default)',
+      planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
+      planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
       isSelected: false,
+      ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
     };
 
     setBusinessGridRows(prev => [...prev, newRow]);
@@ -484,6 +734,8 @@ function EmployeeManagementContent() {
     setNewBusinessName('');
     setNewBusinessAddress('');
     setNewBusinessCity('');
+    setConfiguredCustomPlan(null);
+    setSelectedPlanId(availablePlans[0]?.id || 1);
     setFormError(null);
   };
 
@@ -547,14 +799,52 @@ function EmployeeManagementContent() {
       };
 
       if (isShipperFlow) {
-        const shipperObjects = businessGridRows.map((b, idx) => ({
-          id: b.id || (idx + 100),
-          name: b.name,
-          address: b.address || '',
-          city: b.city || '',
-          planId: b.planId || 1,
-          planName: b.planName || 'Standard Tariff Plan (Default)'
-        }));
+        const tenantId = loggedInUser?.tenant?.id || JSON.parse(localStorage.getItem('user') || '{}')?.tenant?.id;
+        
+        // Save any custom tariff plans to database first, so both records save and associate
+        const shipperObjects = [];
+        for (let idx = 0; idx < businessGridRows.length; idx++) {
+          const b = businessGridRows[idx];
+          let assignedPlanId = typeof b.planId === 'number' ? b.planId : 1;
+
+          if (b.customPlanData) {
+            try {
+              const customPayload = {
+                data: {
+                  name: b.customPlanData.name || `${b.name} Custom Plan`,
+                  charge_type: b.customPlanData.cashHandlingType === 'fixed' ? 'fixed_rupees' : 'percentage',
+                  charge_value: Number(b.customPlanData.cashHandlingValue) || 0,
+                  cod_charge_type: b.customPlanData.cashHandlingType === 'fixed' ? 'fixed_rupees' : 'percentage',
+                  cod_charge_value: Number(b.customPlanData.cashHandlingValue) || 0,
+                  rto_charge_type: 'percentage',
+                  rto_charge_value: Number(b.customPlanData.rtoChargeValue) || 50,
+                  cash_handling_type: b.customPlanData.cashHandlingType || 'percentage',
+                  cash_handling_value: Number(b.customPlanData.cashHandlingValue) || 1.5,
+                  cash_handling_min_fee: Number(b.customPlanData.cashHandlingMinFee) || 30,
+                  weight_tiers: b.customPlanData.weightTiers,
+                  zones: b.customPlanData.zones,
+                  tenant: tenantId,
+                }
+              };
+              const planRes = await apiClient.post('/shipper-plans', customPayload);
+              if (planRes?.data?.data?.id) {
+                assignedPlanId = planRes.data.data.id;
+              }
+            } catch (planErr: any) {
+              console.warn('Failed to save custom plan to server:', planErr?.message || planErr);
+            }
+          }
+
+          shipperObjects.push({
+            id: (b.id && typeof b.id === 'number' && b.id < 1000000000000) ? b.id : undefined,
+            name: b.name,
+            address: b.address || '',
+            city: b.city || '',
+            planId: assignedPlanId,
+            planName: b.planName || 'Standard Tariff Plan (Default)'
+          });
+        }
+
         payload.shipper = shipperObjects;
         payload.shipper_roles = isLoggedShipper ? ['Employee'] : ['shipper admin'];
         payload.role_definition = [];
@@ -715,6 +1005,28 @@ function EmployeeManagementContent() {
                 Delete
               </button>
             )}
+            {effectiveType === 'shipper' && !isLoggedShipper && (
+              <button
+                onClick={() => {
+                  if (!selectedUserShipper) {
+                    alert('Please select a shipper record from the directory first.');
+                    return;
+                  }
+                  handleOpenChangePlanForShipper(
+                    selectedUserShipper.id,
+                    selectedUserShipper.name,
+                    selectedUserShipper.shipper_plan?.id,
+                    selectedUserShipper.shipper_plan?.name
+                  );
+                }}
+                disabled={!selectedUser || !selectedUserShipper}
+                className="bg-indigo-50 border border-indigo-200 text-indigo-700 h-10 px-4 rounded-xl hover:bg-indigo-100/60 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title="Change tariff plan for the selected shipper"
+              >
+                <span className="material-symbols-outlined text-[18px]">price_change</span>
+                Change Tariff Plan
+              </button>
+            )}
             <button
               onClick={handleResendInvite}
               disabled={!selectedUser || selectedUser.confirmed}
@@ -741,8 +1053,14 @@ function EmployeeManagementContent() {
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Username</th>
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Full Name</th>
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Business Name</th>
+                    {effectiveType === 'shipper' && (
+                      <th className="px-lg py-4 font-bold text-label-md text-slate-600">Tariff Plan</th>
+                    )}
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Assigned Role</th>
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600 text-center">Status</th>
+                    {effectiveType === 'shipper' && (
+                      <th className="px-lg py-4 font-bold text-label-md text-slate-600 text-center">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
@@ -753,6 +1071,20 @@ function EmployeeManagementContent() {
                         return emp.shipper.map((s: any) => (typeof s === 'string' ? s : s.name)).filter(Boolean).join(', ');
                       }
                       return '-';
+                    })();
+
+                    const empShipper = (() => {
+                      if (emp.shipper && Array.isArray(emp.shipper) && emp.shipper.length > 0) {
+                        const rawS = emp.shipper[0];
+                        const sId = typeof rawS === 'object' ? rawS.id : rawS;
+                        const match = shippers.find(s => s.id === sId);
+                        return {
+                          id: sId,
+                          name: match?.name || (typeof rawS === 'object' ? rawS.name : `Shipper #${sId}`),
+                          plan: (match as any)?.shipper_plan || (typeof rawS === 'object' ? (rawS as any).shipper_plan : null)
+                        };
+                      }
+                      return null;
                     })();
 
                     return (
@@ -769,6 +1101,18 @@ function EmployeeManagementContent() {
                         </td>
                         <td className="px-lg py-4 font-semibold text-on-surface">{emp.fullName || '-'}</td>
                         <td className="px-lg py-4 font-bold text-slate-900">{businessNamesStr}</td>
+                        {effectiveType === 'shipper' && (
+                          <td className="px-lg py-4">
+                            {empShipper ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span className="material-symbols-outlined text-[14px]">price_change</span>
+                                {empShipper.plan?.name || 'Standard Commercial Plan'}
+                              </span>
+                            ) : (
+                              <span className="text-outline italic text-xs">No Shipper Assigned</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-lg py-4 font-semibold text-on-surface-variant">
                           {(() => {
                             const sRoles = Array.isArray(emp.shipper_roles) && emp.shipper_roles.length > 0
@@ -806,6 +1150,31 @@ function EmployeeManagementContent() {
                             </span>
                           )}
                         </td>
+                        {effectiveType === 'shipper' && (
+                          <td className="px-lg py-4 text-center">
+                            {empShipper ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenChangePlanForShipper(
+                                    empShipper.id,
+                                    empShipper.name,
+                                    empShipper.plan?.id,
+                                    empShipper.plan?.name
+                                  );
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 active:scale-95 transition-all shadow-xs cursor-pointer"
+                                title="Change tariff rate plan for this shipper business"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">edit_note</span>
+                                Change Plan
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -1030,7 +1399,24 @@ function EmployeeManagementContent() {
                             <tr key={row.tempId} className="hover:bg-slate-50 transition-colors">
                               <td className="p-2.5 text-slate-400">{idx + 1}</td>
                               <td className="p-2.5 font-bold text-slate-900">{row.name}</td>
-                              <td className="p-2.5 text-primary">{row.planName}</td>
+                              <td className="p-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={row.customPlanData ? "text-emerald-700 font-bold flex items-center gap-1" : "text-primary font-bold"}>
+                                    {row.customPlanData && <span className="material-symbols-outlined text-[15px] text-emerald-600">star</span>}
+                                    {row.planName}
+                                  </span>
+                                  {row.customPlanData && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCustomPlanModal(row.name, row.customPlanData, row.tempId)}
+                                      className="text-[11px] text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded cursor-pointer font-bold inline-flex items-center gap-0.5 shadow-xs"
+                                      title="Edit Custom Rates"
+                                    >
+                                      <span className="material-symbols-outlined text-[12px]">tune</span> Edit Rates
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
                               <td className="p-2.5 text-center">
                                 <button
                                   type="button"
@@ -1268,28 +1654,77 @@ function EmployeeManagementContent() {
 
               <div className="z-50">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
-                  City
+                  City / Location
                 </label>
-                <CitySelect
+                <PakistanLocationSelect
                   value={newBusinessCity}
-                  onChange={(id, cityName) => setNewBusinessCity(cityName || (typeof id === 'string' ? id : String(id)))}
-                  placeholder="Search and select city (e.g. Lahore, Karachi, Islamabad...)"
+                  onChange={(val, loc: any) => setNewBusinessCity(loc ? (loc.cityName || loc.tehsil) : String(val))}
+                  placeholder="Search and select city / tehsil (e.g. Lahore, Karachi, Islamabad...)"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
-                  Assign Tariff Plan <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                    Assign Tariff Plan <span className="text-red-500">*</span>
+                  </label>
+                  {selectedPlanId === 'custom' && configuredCustomPlan && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCustomPlanModal(newBusinessName, configuredCustomPlan)}
+                      className="text-[11px] font-bold text-primary hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">tune</span> Edit Custom Rates
+                    </button>
+                  )}
+                </div>
                 <select
                   value={selectedPlanId}
-                  onChange={e => setSelectedPlanId(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'custom') {
+                      setSelectedPlanId('custom');
+                      handleOpenCustomPlanModal(newBusinessName, configuredCustomPlan);
+                    } else {
+                      setSelectedPlanId(Number(val));
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none cursor-pointer"
                 >
-                  {availablePlans.map(plan => (
-                    <option key={plan.id} value={plan.id}>{plan.name}</option>
-                  ))}
+                  <optgroup label="Standard Tariff Plans">
+                    {availablePlans.map(plan => (
+                      <option key={plan.id} value={plan.id}>{plan.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Custom Tariff Plans">
+                    <option value="custom">
+                      {configuredCustomPlan ? `★ ${configuredCustomPlan.name} (Configured)` : '+ Custom Tariff Plan (Configure Rates...)'}
+                    </option>
+                  </optgroup>
                 </select>
+
+                {selectedPlanId === 'custom' && (
+                  <div className="mt-2.5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-emerald-600 text-[18px]">verified</span>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-900">
+                          {configuredCustomPlan ? configuredCustomPlan.name : 'Custom Plan Selected'}
+                        </p>
+                        <p className="text-[10px] text-emerald-700">
+                          Custom rates configured. Will save and associate when Shipper Admin is submitted.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCustomPlanModal(newBusinessName, configuredCustomPlan)}
+                      className="px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0"
+                    >
+                      Edit Rates
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
@@ -1306,6 +1741,206 @@ function EmployeeManagementContent() {
                 >
                   <span className="material-symbols-outlined text-[16px]">add_circle</span> Add to Grid
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: Custom Tariff Plan Configuration for Shipper */}
+      {isCustomPlanModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs" onClick={() => setIsCustomPlanModalOpen(false)} />
+          
+          <div className="relative z-10 bg-white rounded-3xl shadow-2xl w-[860px] max-w-[96vw] max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-900 text-white rounded-t-3xl shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <span className="material-symbols-outlined text-[22px]">tune</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base flex items-center gap-2">
+                    Configure Custom Tariff Plan
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Custom rate card & COD terms for <span className="font-bold text-amber-300">{editingBusinessRowTempId ? businessGridRows.find(r => r.tempId === editingBusinessRowTempId)?.name : (newBusinessName || 'Shipper Business')}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsCustomPlanModalOpen(false)} 
+                className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <form onSubmit={handleSaveCustomPlanModal} className="flex-1 overflow-y-auto p-6 space-y-5">
+              
+              {/* Plan Name & Context Banner */}
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-3">
+                <span className="material-symbols-outlined text-amber-600 text-[20px] mt-0.5 shrink-0">info</span>
+                <div className="text-xs text-amber-900 leading-relaxed">
+                  <span className="font-bold">Pending Record Association: </span>
+                  This custom tariff plan will be associated with the shipper business. When you press <span className="font-bold">Create User</span> on the Shipper Admin form, both records will be saved and linked in the database.
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                  Custom Tariff Plan Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Acme VIP Custom Plan"
+                  value={customPlanDraft.name}
+                  onChange={e => setCustomPlanDraft(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
+                />
+              </div>
+
+              {/* Cash Handling / COD Fees */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                    COD Fee Type
+                  </label>
+                  <select
+                    value={customPlanDraft.cashHandlingType}
+                    onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingType: e.target.value as any }))}
+                    className="w-full bg-white border border-outline-variant rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none cursor-pointer"
+                  >
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="fixed">Fixed Amount (PKR)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                    COD Fee Value ({customPlanDraft.cashHandlingType === 'percentage' ? '%' : 'PKR'})
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={customPlanDraft.cashHandlingValue}
+                    onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingValue: Number(e.target.value) }))}
+                    className="w-full bg-white border border-outline-variant rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                    Min COD Fee (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={customPlanDraft.cashHandlingMinFee}
+                    onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingMinFee: Number(e.target.value) }))}
+                    className="w-full bg-white border border-outline-variant rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Weight Tier & Zone Pricing Grid */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary text-[18px]">table_chart</span>
+                    Regional Zone Rates & Weight Tiers (PKR)
+                  </label>
+                  <span className="text-[11px] text-slate-400">All prices in PKR</span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">Zone / Region</th>
+                        {customPlanDraft.weightTiers.map(t => (
+                          <th key={t.id} className="p-3 text-center">{t.label}</th>
+                        ))}
+                        <th className="p-3 text-center">Return (RTO)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                      {customPlanDraft.zones.map((zone, zIdx) => (
+                        <tr key={zone.zoneName} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-primary/70 inline-block" />
+                            {zone.zoneName}
+                          </td>
+                          {customPlanDraft.weightTiers.map(t => (
+                            <td key={t.id} className="p-2 text-center">
+                              <div className="inline-flex items-center gap-1">
+                                <span className="text-slate-400 text-[11px]">Rs.</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={zone.tierRates?.[t.id] ?? 0}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    setCustomPlanDraft(prev => {
+                                      const copy = JSON.parse(JSON.stringify(prev));
+                                      if (!copy.zones[zIdx].tierRates) copy.zones[zIdx].tierRates = {};
+                                      copy.zones[zIdx].tierRates[t.id] = val;
+                                      return copy;
+                                    });
+                                  }}
+                                  className="w-20 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-primary rounded-lg p-1.5 text-center font-bold text-xs outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              </div>
+                            </td>
+                          ))}
+                          <td className="p-2 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <span className="text-slate-400 text-[11px]">Rs.</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={zone.returnCharges ?? 50}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  setCustomPlanDraft(prev => {
+                                    const copy = JSON.parse(JSON.stringify(prev));
+                                    copy.zones[zIdx].returnCharges = val;
+                                    return copy;
+                                  });
+                                }}
+                                className="w-20 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-primary rounded-lg p-1.5 text-center font-bold text-xs outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 italic">
+                  * Press Save Plan Details to apply custom rates to this shipper.
+                </span>
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomPlanModalOpen(false)}
+                    className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">check_circle</span> Save Plan Details
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1352,6 +1987,111 @@ function EmployeeManagementContent() {
                 <button type="button" onClick={() => setIsOfficeModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer">Cancel</button>
                 <button type="submit" className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer">
                   {isAddOfficeMode ? 'Create & Assign' : 'Save Selection'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CENTERED POPUP MODAL: Change Tariff Plan for Shipper Business */}
+      {isChangePlanModalOpen && targetShipperForPlanChange && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            onClick={() => !isSavingShipperPlan && setIsChangePlanModalOpen(false)}
+          />
+          <div className="relative z-10 bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <span className="material-symbols-outlined text-[24px]">price_change</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Change Tariff Plan</h3>
+                  <p className="text-xs text-slate-500 font-medium">Update assigned price plan for shipper business</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePlanModalOpen(false)}
+                disabled={isSavingShipperPlan}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveShipperPlanChange} className="p-6 space-y-4">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs space-y-1">
+                <div className="text-slate-500 font-medium">Shipper Business:</div>
+                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-primary">store</span>
+                  {targetShipperForPlanChange.name}
+                </div>
+                <div className="text-slate-500 font-medium mt-2">Currently Assigned:</div>
+                <div className="font-semibold text-indigo-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">sell</span>
+                  {targetShipperForPlanChange.currentPlanName || 'Standard Commercial Plan'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Select New Tariff Plan <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newAssignedPlanId}
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') {
+                      handleOpenCustomPlanModal(targetShipperForPlanChange?.name);
+                      return;
+                    }
+                    setNewAssignedPlanId(Number(e.target.value));
+                  }}
+                  disabled={isSavingShipperPlan}
+                  className="w-full bg-white border border-outline-variant rounded-xl p-3 text-sm font-semibold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all cursor-pointer"
+                  required
+                >
+                  {availablePlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} {plan.id === targetShipperForPlanChange.currentPlanId ? '(Current)' : ''}
+                    </option>
+                  ))}
+                  <option value="custom" className="font-bold text-primary">
+                    + Custom Tariff Plan (Configure Rates...)
+                  </option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  All rate cards, weight tiers, and cash handling percentages of the selected plan will apply to this shipper immediately.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsChangePlanModalOpen(false)}
+                  disabled={isSavingShipperPlan}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingShipperPlan}
+                  className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingShipperPlan ? (
+                    <>
+                      <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">save</span>
+                      Update Plan
+                    </>
+                  )}
                 </button>
               </div>
             </form>

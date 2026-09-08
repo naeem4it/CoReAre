@@ -29,6 +29,16 @@ export interface DynamicTariffPlan {
   shippers: { id: number; name: string }[];
 }
 
+export interface CustomPlanData {
+  name: string;
+  cashHandlingType: 'percentage' | 'fixed';
+  cashHandlingValue: number;
+  cashHandlingMinFee?: number;
+  rtoChargeValue?: number;
+  weightTiers: WeightTier[];
+  zones: ZoneRates[];
+}
+
 const DEFAULT_WEIGHT_TIERS: WeightTier[] = [
   { id: 'tier_half_kg', label: '0.01 to 0.5 kg' },
   { id: 'tier_one_kg', label: '0.51 to 1.0 kg' },
@@ -55,9 +65,25 @@ const DEFAULT_STANDARD_PLAN: DynamicTariffPlan = {
 
 export default function TariffPlansPage() {
   const { user, activeBusinessId } = useAuth();
-  const [plans, setPlans] = React.useState<DynamicTariffPlan[]>([DEFAULT_STANDARD_PLAN]);
+  const [plans, setPlans] = React.useState<DynamicTariffPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = React.useState<number>(1);
   const [shippersList, setShippersList] = React.useState<any[]>([]);
+  const [selectedShipperFilter, setSelectedShipperFilter] = React.useState<number | 'all'>('all');
+  const [shipperAssignPlanId, setShipperAssignPlanId] = React.useState<number>(1);
+  const [isAssigningPlan, setIsAssigningPlan] = React.useState(false);
+
+  // Custom Plan Modal state for filtered shipper
+  const [isCustomPlanModalOpen, setIsCustomPlanModalOpen] = React.useState(false);
+  const [customPlanDraft, setCustomPlanDraft] = React.useState<CustomPlanData>({
+    name: '',
+    cashHandlingType: 'percentage',
+    cashHandlingValue: 1.5,
+    cashHandlingMinFee: 30,
+    rtoChargeValue: 50,
+    weightTiers: JSON.parse(JSON.stringify(DEFAULT_WEIGHT_TIERS)),
+    zones: JSON.parse(JSON.stringify(DEFAULT_ZONES)),
+  });
+  const [isSavingCustomPlan, setIsSavingCustomPlan] = React.useState(false);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -74,12 +100,12 @@ export default function TariffPlansPage() {
 
   const isShipper = Array.isArray(user?.shipper) ? user.shipper.length > 0 : !!user?.shipper;
 
-  // Fetch plans and shippers from backend API
+  // Fetch plans and shippers strictly from database
   const fetchMetadata = async () => {
     try {
       const [shippersRes, plansRes] = await Promise.all([
-        apiClient.get('/shippers').catch(() => null),
-        apiClient.get('/shipper-plans?populate=*').catch(() => null),
+        apiClient.get('/shippers/with-plans').catch(() => apiClient.get('/shippers?populate=*')).catch(() => null),
+        apiClient.get('/shipper-plan/list').catch(() => apiClient.get('/shipper-plans')).catch(() => null),
       ]);
 
       if (shippersRes?.data?.data) {
@@ -102,9 +128,12 @@ export default function TariffPlansPage() {
         }));
         setPlans(loadedPlans);
         setSelectedPlanId(loadedPlans[0].id);
+      } else {
+        setPlans([]);
       }
     } catch (err) {
-      console.warn('Could not fetch metadata:', err);
+      console.error('Failed to fetch tariff metadata from database:', err);
+      setPlans([]);
     }
   };
 
@@ -289,6 +318,156 @@ export default function TariffPlansPage() {
     }
   };
 
+  // Assign or change tariff plan for a specific shipper
+  const handleAssignPlanToShipper = async () => {
+    if (selectedShipperFilter === 'all') return;
+    const shipper = shippersList.find(s => s.id === selectedShipperFilter);
+    if (!shipper) return;
+
+    try {
+      setIsAssigningPlan(true);
+      await apiClient.put(`/shippers/${shipper.id}/assign-plan`, {
+        shipper_plan: shipperAssignPlanId
+      });
+      
+      const matchedPlan = plans.find(p => p.id === shipperAssignPlanId);
+      
+      // Update local shipper in shippersList
+      setShippersList(prev => prev.map(s => {
+        if (s.id === shipper.id) {
+          return {
+            ...s,
+            shipper_plan: matchedPlan || { id: shipperAssignPlanId, name: `Plan #${shipperAssignPlanId}` }
+          };
+        }
+        return s;
+      }));
+
+      // Update shipper list on the plans
+      setPlans(prev => prev.map(p => {
+        const filteredShippers = (p.shippers || []).filter(s => s.id !== shipper.id);
+        if (p.id === shipperAssignPlanId) {
+          return {
+            ...p,
+            shippers: [...filteredShippers, { id: shipper.id, name: shipper.name || `Shipper #${shipper.id}` }]
+          };
+        }
+        return {
+          ...p,
+          shippers: filteredShippers
+        };
+      }));
+
+      setSelectedPlanId(shipperAssignPlanId);
+      alert(`Successfully updated Tariff Plan to "${matchedPlan?.name || 'Selected Plan'}" for "${shipper.name || 'Shipper'}"!`);
+    } catch (err: any) {
+      console.error('Failed to assign tariff plan to shipper:', err);
+      alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update tariff plan for shipper.');
+    } finally {
+      setIsAssigningPlan(false);
+    }
+  };
+
+  // Open Custom Tariff Plan configuration popup for filtered shipper
+  const handleOpenCustomPlanForFilteredShipper = () => {
+    if (selectedShipperFilter === 'all') {
+      alert('Please select a specific shipper first to configure a custom tariff plan.');
+      return;
+    }
+    const shipper = shippersList.find(s => s.id === selectedShipperFilter);
+    const shipperName = shipper?.name || shipper?.attributes?.name || `Shipper #${selectedShipperFilter}`;
+    
+    // Base it on the active plan or standard plan
+    const basePlan = activePlan || plans[0] || DEFAULT_STANDARD_PLAN;
+    
+    setCustomPlanDraft({
+      name: `${shipperName} Custom Plan`,
+      cashHandlingType: basePlan.cashHandlingType || 'percentage',
+      cashHandlingValue: basePlan.cashHandlingValue || 1.5,
+      cashHandlingMinFee: basePlan.cashHandlingMinFee || 30,
+      rtoChargeValue: basePlan.zones?.[0]?.returnCharges ?? 50,
+      weightTiers: JSON.parse(JSON.stringify(basePlan.weightTiers?.length ? basePlan.weightTiers : DEFAULT_WEIGHT_TIERS)),
+      zones: JSON.parse(JSON.stringify(basePlan.zones?.length ? basePlan.zones : DEFAULT_ZONES)),
+    });
+    setIsCustomPlanModalOpen(true);
+  };
+
+  // Save Custom Plan specifically for this shipper
+  const handleSaveCustomPlanForShipper = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedShipperFilter === 'all') return;
+    const shipper = shippersList.find(s => s.id === selectedShipperFilter);
+    if (!shipper) return;
+
+    if (!customPlanDraft.name.trim()) {
+      alert('Please enter a plan name.');
+      return;
+    }
+
+    try {
+      setIsSavingCustomPlan(true);
+
+      const payload = {
+        data: {
+          name: customPlanDraft.name.trim(),
+          cash_handling_type: customPlanDraft.cashHandlingType,
+          cash_handling_value: Number(customPlanDraft.cashHandlingValue),
+          cash_handling_min_fee: Number(customPlanDraft.cashHandlingMinFee || 0),
+          weight_tiers: customPlanDraft.weightTiers,
+          zones: customPlanDraft.zones,
+          shippers: [shipper.id],
+        }
+      };
+
+      // 1. Create custom plan in Strapi
+      const createRes = await apiClient.post('/shipper-plans', payload);
+      const createdPlanData = createRes.data?.data;
+      const createdPlanId = createdPlanData?.id || Date.now();
+
+      // 2. Assign plan to shipper
+      await apiClient.put(`/shippers/${shipper.id}/assign-plan`, {
+        shipper_plan: createdPlanId
+      });
+
+      const newPlanObj: DynamicTariffPlan = {
+        id: createdPlanId,
+        name: customPlanDraft.name.trim(),
+        cashHandlingType: customPlanDraft.cashHandlingType,
+        cashHandlingValue: Number(customPlanDraft.cashHandlingValue),
+        cashHandlingMinFee: Number(customPlanDraft.cashHandlingMinFee || 0),
+        weightTiers: customPlanDraft.weightTiers,
+        zones: customPlanDraft.zones,
+        shippers: [{ id: shipper.id, name: shipper.name || `Shipper #${shipper.id}` }]
+      };
+
+      // Update plans list
+      setPlans(prev => [...prev.filter(p => p.id !== createdPlanId), newPlanObj]);
+
+      // Update shippersList
+      setShippersList(prev => prev.map(s => {
+        if (s.id === shipper.id) {
+          return {
+            ...s,
+            shipper_plan: newPlanObj
+          };
+        }
+        return s;
+      }));
+
+      // Set active and assigned plan
+      setSelectedPlanId(createdPlanId);
+      setShipperAssignPlanId(createdPlanId);
+      setIsCustomPlanModalOpen(false);
+
+      alert(`Custom tariff plan "${newPlanObj.name}" created and assigned to "${shipper.name || 'Shipper'}" successfully!`);
+    } catch (err: any) {
+      console.error('Failed to create custom tariff plan for shipper:', err);
+      alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to save custom tariff plan for shipper.');
+    } finally {
+      setIsSavingCustomPlan(false);
+    }
+  };
+
 
   return (
     <PortalLayout>
@@ -323,6 +502,76 @@ export default function TariffPlansPage() {
             </span>
           )}
         </div>
+
+        {/* Courier Admin: Shipper Filter & Fast Plan Assignment */}
+        {!isShipper && (
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider shrink-0">
+                <Building2 className="w-4 h-4 text-primary" />
+                Filter by Shipper:
+              </div>
+              <select
+                value={selectedShipperFilter}
+                onChange={(e) => {
+                  const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                  setSelectedShipperFilter(val);
+                  if (val !== 'all') {
+                    const sh = shippersList.find(s => s.id === val);
+                    const planId = sh?.shipper_plan?.id || (typeof sh?.shipper_plan === 'number' ? sh.shipper_plan : null);
+                    const foundPlan = (planId && plans.find(p => p.id === planId)) || plans.find(p => p.shippers?.some(s => s.id === val)) || plans[0];
+                    if (foundPlan) {
+                      setSelectedPlanId(foundPlan.id);
+                      setShipperAssignPlanId(foundPlan.id);
+                    }
+                  }
+                }}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary w-full sm:w-72 cursor-pointer"
+              >
+                <option value="all">All Shippers (Global Tariff Overview)</option>
+                {shippersList.map(sh => (
+                  <option key={sh.id} value={sh.id}>
+                    {sh.name || `Shipper #${sh.id}`} {sh.shipper_plan?.name ? `(${sh.shipper_plan.name})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* When specific shipper is filtered, allow changing plan right here */}
+            {selectedShipperFilter !== 'all' && (
+              <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-2 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-700">Change Assigned Plan:</span>
+                <select
+                  value={shipperAssignPlanId}
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') {
+                      handleOpenCustomPlanForFilteredShipper();
+                      return;
+                    }
+                    const newPlanId = Number(e.target.value);
+                    setShipperAssignPlanId(newPlanId);
+                    setSelectedPlanId(newPlanId);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  {plans.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                  <option value="custom" className="font-bold text-primary">
+                    + Custom Plan (Configure Rates...)
+                  </option>
+                </select>
+                <button
+                  onClick={handleAssignPlanToShipper}
+                  disabled={isAssigningPlan}
+                  className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isAssigningPlan ? 'Saving...' : 'Save Plan for Shipper'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Admin Plan Selector Tabs */}
         {!isShipper && (
@@ -698,6 +947,214 @@ export default function TariffPlansPage() {
                   </button>
                 </div>
 
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* CENTERED POPUP MODAL: Configure Custom Tariff Plan for Shipper */}
+        {isCustomPlanModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+              onClick={() => !isSavingCustomPlan && setIsCustomPlanModalOpen(false)}
+            />
+            <div className="relative bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+              
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/80">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+                    <span className="material-symbols-outlined text-[26px]">tune</span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-slate-900">
+                      Configure Custom Tariff Plan
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Tailor custom rates, weight tiers, and cash handling fees for {
+                        shippersList.find(s => s.id === selectedShipperFilter)?.name || 'this shipper'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomPlanModalOpen(false)}
+                  disabled={isSavingCustomPlan}
+                  className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Form */}
+              <form onSubmit={handleSaveCustomPlanForShipper} className="p-6 overflow-y-auto space-y-6">
+                {/* Plan Name */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 block">
+                    Custom Plan Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. Acme VIP Custom Plan"
+                    value={customPlanDraft.name}
+                    onChange={e => setCustomPlanDraft(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                {/* Cash Handling / COD Fees */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                      COD Fee Type
+                    </label>
+                    <select
+                      value={customPlanDraft.cashHandlingType}
+                      onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingType: e.target.value as any }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none cursor-pointer"
+                    >
+                      <option value="percentage">Percentage (%) of COD</option>
+                      <option value="fixed">Fixed Amount (PKR)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                      COD Fee Value ({customPlanDraft.cashHandlingType === 'percentage' ? '%' : 'PKR'})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={customPlanDraft.cashHandlingValue}
+                      onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingValue: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                      Min COD Fee (PKR)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={customPlanDraft.cashHandlingMinFee}
+                      onChange={e => setCustomPlanDraft(prev => ({ ...prev, cashHandlingMinFee: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Weight Tier & Zone Pricing Grid */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-primary text-[18px]">table_chart</span>
+                      Regional Zone Rates & Weight Tiers (PKR)
+                    </label>
+                    <span className="text-[11px] text-slate-400">All prices in PKR</span>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Zone / Region</th>
+                          {customPlanDraft.weightTiers.map(t => (
+                            <th key={t.id} className="p-3 text-center">{t.label}</th>
+                          ))}
+                          <th className="p-3 text-center">Return (RTO)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                        {customPlanDraft.zones.map((zone, zIdx) => (
+                          <tr key={zone.zoneName} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-primary/70 inline-block" />
+                              {zone.zoneName}
+                            </td>
+                            {customPlanDraft.weightTiers.map(t => (
+                              <td key={t.id} className="p-2 text-center">
+                                <div className="inline-flex items-center gap-1">
+                                  <span className="text-slate-400 text-[11px]">Rs.</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={zone.tierRates?.[t.id] ?? 0}
+                                    onChange={e => {
+                                      const val = Number(e.target.value);
+                                      setCustomPlanDraft(prev => {
+                                        const copy = JSON.parse(JSON.stringify(prev));
+                                        if (!copy.zones[zIdx].tierRates) copy.zones[zIdx].tierRates = {};
+                                        copy.zones[zIdx].tierRates[t.id] = val;
+                                        return copy;
+                                      });
+                                    }}
+                                    className="w-20 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-primary rounded-lg p-1.5 text-center font-bold text-xs outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                </div>
+                              </td>
+                            ))}
+                            <td className="p-2 text-center">
+                              <div className="inline-flex items-center gap-1">
+                                <span className="text-slate-400 text-[11px]">Rs.</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={zone.returnCharges ?? 50}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    setCustomPlanDraft(prev => {
+                                      const copy = JSON.parse(JSON.stringify(prev));
+                                      copy.zones[zIdx].returnCharges = val;
+                                      return copy;
+                                    });
+                                  }}
+                                  className="w-20 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-primary rounded-lg p-1.5 text-center font-bold text-xs outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 italic">
+                    * Click Save & Assign Custom Plan to create and assign this tariff plan immediately.
+                  </span>
+                  <div className="flex gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomPlanModalOpen(false)}
+                      disabled={isSavingCustomPlan}
+                      className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingCustomPlan}
+                      className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingCustomPlan ? (
+                        <>
+                          <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" /> Save & Assign Custom Plan
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </form>
             </div>
           </div>

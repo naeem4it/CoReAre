@@ -29,6 +29,21 @@
     "charge_value": {
       "type": "decimal"
     },
+    "weight_tiers": {
+      "type": "json"
+    },
+    "zones": {
+      "type": "json"
+    },
+    "cash_handling_type": {
+      "type": "string"
+    },
+    "cash_handling_value": {
+      "type": "decimal"
+    },
+    "cash_handling_min_fee": {
+      "type": "decimal"
+    },
     "rto_charge_type": {
       "type": "enumeration",
       "enum": [

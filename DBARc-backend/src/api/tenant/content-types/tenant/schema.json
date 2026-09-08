@@ -84,6 +84,15 @@
       "relation": "manyToOne",
       "target": "api::tenant-plan.tenant-plan",
       "inversedBy": "tenants"
+    },
+    "self_service_cities": {
+      "type": "json"
+    },
+    "tpl_partners": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::tpl-partner.tpl-partner",
+      "mappedBy": "tenant"
     }
   }
 }

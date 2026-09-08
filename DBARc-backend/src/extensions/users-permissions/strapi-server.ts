@@ -622,11 +622,18 @@ export default (plugin: any) => {
         }
       } else if (shipper) {
         // Allow courier/tenant admin to specify shippers if it belongs to their tenant
-        const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
-        const validShippers = await strapi.db.query('api::shipper.shipper').findMany({
-          where: { id: { $in: requestedShippers }, tenant: tenantId }
-        });
-        targetShipperIds = validShippers.map((s: any) => s.id);
+        const rawShipperList = Array.isArray(shipper) ? shipper : [shipper];
+        const requestedShippers = rawShipperList.map((s: any) => (typeof s === 'object' && s !== null ? Number(s.id) : Number(s))).filter(n => typeof n === 'number' && !isNaN(n) && n > 0);
+        if (requestedShippers.length > 0) {
+          const whereClause: any = { id: { $in: requestedShippers } };
+          if (tenantId && !isNaN(Number(tenantId))) {
+            whereClause.tenant = Number(tenantId);
+          }
+          const validShippers = await strapi.db.query('api::shipper.shipper').findMany({
+            where: whereClause
+          });
+          targetShipperIds = validShippers.map((s: any) => s.id);
+        }
       }
 
       if (!tenantId) {
@@ -806,20 +813,92 @@ export default (plugin: any) => {
           }
         }
       } else {
+        let targetShipperIds: number[] = [];
+        if (shipper !== undefined) {
+          if (shipper === null || shipper === '') {
+            targetShipperIds = [];
+          } else {
+            const rawItems = Array.isArray(shipper) ? shipper : [shipper];
+            for (const item of rawItems) {
+              if (item && typeof item === 'object') {
+                let resolvedPlanId: number | null = null;
+                if (item.planId && !isNaN(Number(item.planId))) {
+                  resolvedPlanId = Number(item.planId);
+                }
+
+                if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                  const existingShipper = await strapi.db.query('api::shipper.shipper').findOne({
+                    where: { id: item.id }
+                  });
+                  if (existingShipper) {
+                    targetShipperIds.push(existingShipper.id);
+                    const updateShipperData: any = {};
+                    if (item.name && item.name !== existingShipper.name) {
+                      updateShipperData.name = item.name;
+                    }
+                    if (resolvedPlanId) {
+                      updateShipperData.shipper_plan = resolvedPlanId;
+                    }
+                    if (Object.keys(updateShipperData).length > 0) {
+                      await strapi.db.query('api::shipper.shipper').update({
+                        where: { id: existingShipper.id },
+                        data: updateShipperData
+                      });
+                    }
+                    continue;
+                  }
+                }
+
+                // If not existing, create new shipper record
+                if (item.name) {
+                  const newShipper = await strapi.db.query('api::shipper.shipper').create({
+                    data: {
+                      name: item.name,
+                      tenant: tenantId || null,
+                      status: 'active',
+                      shipper_plan: resolvedPlanId || null,
+                      publishedAt: new Date(),
+                    }
+                  });
+                  targetShipperIds.push(newShipper.id);
+
+                  if (item.address || item.city) {
+                    await strapi.db.query('api::office.office').create({
+                      data: {
+                        name: `${item.name} Main Office`,
+                        address: item.address || '',
+                        city: item.city || null,
+                        type: 'shipper',
+                        shipper: newShipper.id,
+                        tenant: tenantId || null,
+                        publishedAt: new Date(),
+                      }
+                    });
+                  }
+                }
+              } else if (typeof item === 'number' && !isNaN(item) && item > 0) {
+                targetShipperIds.push(item);
+              } else if (typeof item === 'string' && !isNaN(Number(item)) && Number(item) > 0) {
+                targetShipperIds.push(Number(item));
+              }
+            }
+          }
+        }
+
         if (authContext.shipperIds && authContext.shipperIds.length > 0) {
-          // Enforce shipper admin's shipper association for their employees
           if (shipper !== undefined) {
-            const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
-            updateData.shipper = requestedShippers.filter(id => authContext.shipperIds.includes(id));
+            updateData.shipper = targetShipperIds.filter(id => authContext.shipperIds.includes(id));
           }
         } else if (shipper !== undefined) {
-          // Allow tenant/courier admin to update shipper for users within their tenant
-          if (shipper === null || shipper === '') {
+          if (targetShipperIds.length === 0) {
             updateData.shipper = [];
           } else {
-            const requestedShippers = Array.isArray(shipper) ? shipper.map(Number) : [Number(shipper)];
+            const whereClause: any = { id: { $in: targetShipperIds } };
+            if (tenantId && !isNaN(tenantId)) {
+              whereClause.tenant = tenantId;
+            }
             const validShippers = await strapi.db.query('api::shipper.shipper').findMany({
-              where: { id: { $in: requestedShippers }, tenant: tenantId }
+              where: whereClause
             });
             updateData.shipper = validShippers.map((s: any) => s.id);
           }

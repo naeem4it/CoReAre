@@ -210,7 +210,7 @@ export default {
           });
           const result: any = await response.json();
           if (!result.error && Array.isArray(result.data)) {
-            const citiesToInsert = result.data.map((c: string) => ({ name: c, Code: c.substring(0, 3).toUpperCase() }));
+            const citiesToInsert = result.data.map((c: string) => ({ CityName: c, Active: true }));
             for (const city of citiesToInsert) {
               await strapi.db.query('api::city.city').create({
                 data: city
@@ -225,6 +225,39 @@ export default {
         }
       } else {
         console.log(`Cities already seeded. Count: ${citiesCount}`);
+      }
+
+      // Ensure default regions/zones for all tenants
+      for (const t of tenants) {
+        const regionCount = await strapi.db.query('api::region.region').count({
+          where: { tenant: t.id }
+        });
+        if (regionCount === 0) {
+          const defaultZones = [
+            { name: 'Within City', type: 'local', cities: [] },
+            { name: 'Zone A', type: 'metro', cities: ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi'] },
+            { name: 'Zone B', type: 'regional', cities: ['Faisalabad', 'Multan', 'Peshawar', 'Gujranwala', 'Sialkot', 'Hyderabad', 'Gujrat', 'Sahiwal', 'Sheikhupura', 'Jhelum'] },
+            { name: 'Zone C', type: 'secondary', cities: ['Quetta', 'Sukkur', 'Bahawalpur', 'Sargodha', 'Abbottabad', 'Mardan', 'Larkana', 'Okara', 'Rahim Yar Khan', 'Muzaffargarh', 'Dera Ghazi Khan', 'Nawabshah (Shaheed Benazirabad)', 'Chiniot'] },
+            { name: 'Zone D', type: 'remote', cities: ['Gwadar', 'Gilgit', 'Skardu', 'Turbat', 'Khuzdar', 'Chaman', 'Bannu', 'Dera Ismail Khan', 'Mirpur (AJK)', 'Muzaffarabad', 'Kotli', 'Rawalakot', 'Haripur', 'Swabi', 'Nowshera', 'Mansehra'] }
+          ];
+
+          for (const zone of defaultZones) {
+            const matchedCities = await strapi.db.query('api::city.city').findMany({
+              where: { CityName: { $in: zone.cities } }
+            });
+
+            await strapi.db.query('api::region.region').create({
+              data: {
+                name: zone.name,
+                type: zone.type,
+                active: true,
+                tenant: t.id,
+                cities: matchedCities.map((c: any) => c.id)
+              }
+            });
+          }
+          console.log(`Seeded default zones for Tenant: ${t.name}`);
+        }
       }
 
     } catch (err) {

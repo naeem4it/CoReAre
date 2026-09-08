@@ -9,8 +9,8 @@ const preprocessNumber = (val: unknown) => {
 };
 
 export const shipmentSchema = z.object({
-  sourceCity: z.union([z.number(), z.literal('')]).optional(),
-  destinationCity: z.union([z.number(), z.literal('')]).optional(),
+  sourceCity: z.union([z.number(), z.string()]).optional(),
+  destinationCity: z.union([z.number(), z.string()]).optional(),
   originRegion: z.string().optional(),
   destinationRegion: z.string().optional(),
   weight: z.preprocess(
