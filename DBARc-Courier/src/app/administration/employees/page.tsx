@@ -26,6 +26,7 @@ interface User {
   shipper?: { id: number; name: string; planName?: string }[] | null;
   shipper_roles?: string[];
   offices?: { id: number; name: string }[] | null;
+  tenant?: any;
 }
 
 const SHIPPER_SUB_ROLES = ['Employee'];
@@ -244,8 +245,8 @@ function EmployeeManagementContent() {
       }));
       setRoles(mappedRoles);
 
-      // 2. Fetch users
-      const usersRes = await apiClient.get('/users?populate=role_definition,shipper,offices');
+      // 2. Fetch users with roles, tenant, shippers, and offices
+      const usersRes = await apiClient.get('/users?populate=role_definition,shipper,offices,role,tenant');
       const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
       setEmployees(rawUsers);
 
@@ -307,49 +308,74 @@ function EmployeeManagementContent() {
     fetchEmployeesAndRoles();
   }, []);
 
-  // Filter and Search logic
+  // Filter and Search logic strictly separating Shipper Admin vs Courier Admin & Staff
   const filteredEmployees = React.useMemo(() => {
     return employees.filter((emp) => {
-      const isCourierRole = emp.role_definition?.some((r) => COURIER_ROLE_NAMES.includes(r.role_name)) ||
-                            COURIER_ROLE_NAMES.includes((emp as any).role?.name) ||
-                            (emp as any).role?.name === 'Admin' ||
-                            (emp as any).role?.name === 'Super Admin';
+      // 1. Super Admin is a platform-level role, strictly NOT to be shown in courier admin employee directory!
+      const isSuperAdmin = Boolean(
+        (emp as any).role?.name === 'Super Admin' ||
+        (emp as any).role?.type === 'super-admin' ||
+        (emp.username || '').toLowerCase() === 'superadmin' ||
+        (emp.email || '').toLowerCase() === 'naeem4it@gmail.com' ||
+        emp.role_definition?.some((r: any) => (r.role_name || '').toLowerCase() === 'super admin')
+      );
+      if (isSuperAdmin) return false;
+
+      // 2. Determine if user is a Shipper Admin (has shipper admin role AND linked to a shipper business)
+      const hasShipperAdminRole = Boolean(
+        (Array.isArray(emp.shipper_roles) && emp.shipper_roles.some((r: string) => r.toLowerCase().includes('shipper admin'))) ||
+        (emp as any).role?.name === 'Shipper Admin' ||
+        (emp as any).role_type === 'shipper' ||
+        (emp.email || '').toLowerCase().includes('shipper')
+      );
+      const hasShipperBusiness = Boolean(
+        emp.shipper && (Array.isArray(emp.shipper) ? emp.shipper.length > 0 : !!emp.shipper)
+      );
+      const isShipperAdmin = hasShipperAdminRole && hasShipperBusiness;
+
+      // 3. Determine if user is a Shipper Employee
+      const isShipperEmployee = Boolean(
+        Array.isArray(emp.shipper_roles) && 
+        emp.shipper_roles.some((r: string) => r.toLowerCase() === 'employee')
+      );
+
+      // 4. Courier User: Tenant Admin / Courier Admin, or courier operational staff (Front desk, Booker, Rider, Operations)
+      const isCourierUser = !isShipperAdmin && !isShipperEmployee;
 
       if (isLoggedShipper) {
-        // Logged-in Shipper view: Exclude Shipper Admin self profile and show sub-employees
-        const isShipperAdminSelf = emp.shipper_roles?.includes('shipper admin') || emp.username === loggedInUser?.username || emp.email === loggedInUser?.email;
-        if (isShipperAdminSelf) return false;
-        // Never show courier staff or courier admins to a shipper!
-        if (isCourierRole) return false;
-        // Never show other shipper admins in store team directory
-        if (emp.shipper_roles?.includes('shipper admin')) return false;
+        // Logged-in Shipper view: only show their own store employees, never show courier staff or other shipper admins
+        if (isCourierUser || isShipperAdmin) return false;
+        if (loggedInUser?.shipper?.id && emp.shipper && (emp.shipper as any)?.id !== loggedInUser.shipper.id) {
+          return false;
+        }
       } else if (effectiveType === 'shipper') {
-        // Courier Admin view on Shippers Directory: ONLY show Shippers. NEVER show Courier Admins!
-        if (isCourierRole) return false;
+        // Courier Admin view on Shippers Directory:
+        // STRICTLY display users with the shipper admin role linked to a shipper business
+        if (!isShipperAdmin) return false;
       } else {
-        // Courier Employee Directory: ONLY show Courier Employees.
-        if (!isCourierRole) return false;
-      }
-
-      // If logged in as shipper, only show employees of the same shipper
-      if (isLoggedShipper && loggedInUser?.shipper?.id && emp.shipper && (emp.shipper as any)?.id !== loggedInUser.shipper.id) {
-        return false;
+        // Courier Employee Directory:
+        // Display all courier-side users: Tenant Admin / Courier Admin, and courier operational roles
+        if (!isCourierUser) return false;
       }
 
       // Filter by Active vs Quit status (blocked maps to quit/terminated)
       const matchesStatus = statusFilter === 'active' ? !emp.blocked : !!emp.blocked;
       if (!matchesStatus) return false;
 
-      // Filter by search query across Username, Full Name, and Role name
+      // Filter by search query across Username, Full Name, Role name, and Shipper business
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
       const roleName = emp.role_definition?.map((r) => r.role_name).join(' ') || '';
       const shipperRoles = emp.shipper_roles?.join(' ') || '';
+      const businessNames = Array.isArray(emp.shipper) 
+        ? emp.shipper.map((s: any) => s.name || s).join(' ') 
+        : ((emp.shipper as any)?.name || '');
       return (
         emp.username.toLowerCase().includes(query) ||
         (emp.fullName || '').toLowerCase().includes(query) ||
         roleName.toLowerCase().includes(query) ||
-        shipperRoles.toLowerCase().includes(query)
+        shipperRoles.toLowerCase().includes(query) ||
+        businessNames.toLowerCase().includes(query)
       );
     });
   }, [employees, statusFilter, searchQuery, effectiveType, typeParam, isLoggedShipper, loggedInUser]);
@@ -1052,7 +1078,9 @@ function EmployeeManagementContent() {
                   <tr>
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Username</th>
                     <th className="px-lg py-4 font-bold text-label-md text-slate-600">Full Name</th>
-                    <th className="px-lg py-4 font-bold text-label-md text-slate-600">Business Name</th>
+                    <th className="px-lg py-4 font-bold text-label-md text-slate-600">
+                      {effectiveType === 'shipper' ? 'Business Name' : 'Office / Station'}
+                    </th>
                     {effectiveType === 'shipper' && (
                       <th className="px-lg py-4 font-bold text-label-md text-slate-600">Tariff Plan</th>
                     )}
@@ -1071,6 +1099,13 @@ function EmployeeManagementContent() {
                         return emp.shipper.map((s: any) => (typeof s === 'string' ? s : s.name)).filter(Boolean).join(', ');
                       }
                       return '-';
+                    })();
+
+                    const officeNamesStr = (() => {
+                      if (emp.offices && Array.isArray(emp.offices) && emp.offices.length > 0) {
+                        return emp.offices.map((o: any) => o.name || `Office #${o.id}`).filter(Boolean).join(', ');
+                      }
+                      return 'Head Office / Hub';
                     })();
 
                     const empShipper = (() => {
@@ -1100,7 +1135,9 @@ function EmployeeManagementContent() {
                           <div className="text-xs text-outline font-medium">{emp.email}</div>
                         </td>
                         <td className="px-lg py-4 font-semibold text-on-surface">{emp.fullName || '-'}</td>
-                        <td className="px-lg py-4 font-bold text-slate-900">{businessNamesStr}</td>
+                        <td className="px-lg py-4 font-bold text-slate-900">
+                          {effectiveType === 'shipper' ? businessNamesStr : officeNamesStr}
+                        </td>
                         {effectiveType === 'shipper' && (
                           <td className="px-lg py-4">
                             {empShipper ? (
@@ -1115,6 +1152,14 @@ function EmployeeManagementContent() {
                         )}
                         <td className="px-lg py-4 font-semibold text-on-surface-variant">
                           {(() => {
+                            if (effectiveType === 'shipper') {
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  Shipper Admin
+                                </span>
+                              );
+                            }
+
                             const sRoles = Array.isArray(emp.shipper_roles) && emp.shipper_roles.length > 0
                               ? emp.shipper_roles
                               : ((emp as any).shipper_roles ? [(emp as any).shipper_roles] : []);
@@ -1125,17 +1170,34 @@ function EmployeeManagementContent() {
                               ? [(emp.role_definition as any).role_name || emp.role_definition]
                               : [];
 
+                            const roleObjName = (emp as any).role?.name;
+                            const isTenantAdmin = roleObjName === 'Tenant Admin' || 
+                                                  roleObjName === 'Courier Admin' ||
+                                                  emp.email?.toLowerCase().includes('courier') ||
+                                                  emp.username?.toLowerCase().includes('courier') ||
+                                                  emp.tenant;
+
                             const allDisplayRoles = [...sRoles, ...empRoles].filter(Boolean);
+                            if (allDisplayRoles.length === 0 && isTenantAdmin) {
+                              allDisplayRoles.push('Courier Admin');
+                            }
+
                             return allDisplayRoles.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {allDisplayRoles.map((rName, i) => (
-                                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                                  <span key={i} className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
+                                    rName.toLowerCase().includes('admin')
+                                      ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                      : 'bg-slate-100 text-slate-800 border-slate-200'
+                                  }`}>
                                     {rName}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-outline italic text-xs">Standard Authenticated</span>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                Courier Staff
+                              </span>
                             );
                           })()}
                         </td>

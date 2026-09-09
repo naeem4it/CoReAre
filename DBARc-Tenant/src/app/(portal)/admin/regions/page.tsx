@@ -409,6 +409,7 @@ export default function DefaultRegionsPage() {
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         title={editingRegion ? 'Edit Zone Configuration' : 'Create New Zone'}
+        size="xl"
       >
         <div className="space-y-4">
           <Input 

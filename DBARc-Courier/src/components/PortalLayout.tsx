@@ -99,6 +99,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     return false;
   }, [user]);
 
+  const isCourierAdmin = React.useMemo(() => {
+    if (!user || isShipperUser) return false;
+    const roleName = (user.role?.name || user.role_type || user.role?.type || (typeof user.role === 'string' ? user.role : '')).toString().toLowerCase();
+    if (roleName.includes('admin') || roleName.includes('tenant') || roleName.includes('courier')) return true;
+    if (user.role_definition?.some((r: any) => ['admin', 'super admin', 'courier admin'].some(c => (r.role_name || '').toLowerCase().includes(c)))) return true;
+    if (user.email?.toLowerCase().includes('courier') || user.username?.toLowerCase().includes('courier')) return true;
+    const isRestrictedWorker = user.role_definition?.some((r: any) => ['rider', 'front desk'].includes((r.role_name || '').toLowerCase()));
+    return !isRestrictedWorker;
+  }, [user, isShipperUser]);
+
   const userRoles = React.useMemo(() => {
     if (!user) return [];
     if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) {
@@ -347,6 +357,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean }) {
   const pathname = usePathname();
   const { user, isShipper, isShipperAdmin, isShipperEmployee } = useAuth();
+  const isCourierAdmin = !isShipper && !isShipperAdmin && !isShipperEmployee;
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -449,17 +460,19 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             <span className="font-label-md text-label-md">Zone Setup</span>
           </Link>
 
-          <Link
-            href="/administration/employees?type=shipper"
-            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-              pathname === '/administration/employees' && !pathname.includes('type=courier')
-                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[20px]">local_shipping</span>
-            <span className="font-label-md text-label-md">Shippers Directory</span>
-          </Link>
+          {isCourierAdmin && (
+            <Link
+              href="/administration/employees?type=shipper"
+              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                pathname === '/administration/employees' && !pathname.includes('type=courier')
+                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">local_shipping</span>
+              <span className="font-label-md text-label-md">Shippers Directory</span>
+            </Link>
+          )}
 
           <Link
             href="/administration/employees?type=courier"
