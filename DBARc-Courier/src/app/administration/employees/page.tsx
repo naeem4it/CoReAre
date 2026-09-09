@@ -32,6 +32,22 @@ interface User {
 const SHIPPER_SUB_ROLES = ['Employee'];
 const COURIER_ROLE_NAMES = ['Super Admin', 'Admin', 'Front desk', 'shipment Booker', 'Rider'];
 
+export interface DynamicTariffPlan {
+  id: number;
+  name: string;
+  cashHandlingType?: 'percentage' | 'fixed';
+  cashHandlingValue?: number;
+  cashHandlingMinFee?: number;
+  rtoChargeValue?: number;
+  weightTiers?: Array<{ id: string; label: string }>;
+  zones?: Array<{
+    zoneName: string;
+    tierRates: { [tierId: string]: number };
+    returnCharges: number;
+    insurance: string | number;
+  }>;
+}
+
 export interface CustomPlanData {
   name: string;
   cashHandlingType: 'percentage' | 'fixed';
@@ -168,7 +184,12 @@ function EmployeeManagementContent() {
   const [assignedOfficeIds, setAssignedOfficeIds] = React.useState<number[]>([]);
 
   // Available Tariff Plans (loaded strictly from database)
-  const [availablePlans, setAvailablePlans] = React.useState<Array<{ id: number; name: string }>>([]);
+  const [availablePlans, setAvailablePlans] = React.useState<DynamicTariffPlan[]>([]);
+
+  // View Tariff Plan Modal State
+  const [isViewPlanModalOpen, setIsViewPlanModalOpen] = React.useState(false);
+  const [viewingPlan, setViewingPlan] = React.useState<DynamicTariffPlan | null>(null);
+  const [viewingShipperName, setViewingShipperName] = React.useState<string>('');
 
   // Clean empty Initial Shipper Business Grid State
   const [businessGridRows, setBusinessGridRows] = React.useState<Array<{
@@ -269,9 +290,15 @@ function EmployeeManagementContent() {
         const plansRes = await apiClient.get('/shipper-plan/list').catch(() => apiClient.get('/shipper-plans'));
         const rawPlans = plansRes.data?.data || [];
         if (rawPlans.length > 0) {
-          const mappedPlans = rawPlans.map((p: any) => ({
+          const mappedPlans: DynamicTariffPlan[] = rawPlans.map((p: any) => ({
             id: p.id,
-            name: p.name || p.attributes?.name || `Plan #${p.id}`
+            name: p.name || p.attributes?.name || `Plan #${p.id}`,
+            cashHandlingType: p.cash_handling_type || 'percentage',
+            cashHandlingValue: Number(p.cash_handling_value) || 1.5,
+            cashHandlingMinFee: Number(p.cash_handling_min_fee) || 30,
+            rtoChargeValue: Number(p.rto_charge_value) || 50,
+            weightTiers: Array.isArray(p.weight_tiers) && p.weight_tiers.length > 0 ? p.weight_tiers : DEFAULT_CUSTOM_WEIGHT_TIERS,
+            zones: Array.isArray(p.zones) && p.zones.length > 0 ? p.zones : DEFAULT_CUSTOM_ZONES,
           }));
           setAvailablePlans(mappedPlans);
         } else {
@@ -321,23 +348,20 @@ function EmployeeManagementContent() {
       );
       if (isSuperAdmin) return false;
 
-      // 2. Determine if user is a Shipper Admin (has shipper admin role AND linked to a shipper business)
+      // 2. Determine if user is a Shipper Employee
+      const isShipperEmployee = Boolean(
+        Array.isArray(emp.shipper_roles) && 
+        emp.shipper_roles.some((r: string) => r.toLowerCase() === 'employee')
+      );
+
+      // 3. Determine if user is a Shipper Admin (has shipper admin role)
       const hasShipperAdminRole = Boolean(
         (Array.isArray(emp.shipper_roles) && emp.shipper_roles.some((r: string) => r.toLowerCase().includes('shipper admin'))) ||
         (emp as any).role?.name === 'Shipper Admin' ||
         (emp as any).role_type === 'shipper' ||
         (emp.email || '').toLowerCase().includes('shipper')
       );
-      const hasShipperBusiness = Boolean(
-        emp.shipper && (Array.isArray(emp.shipper) ? emp.shipper.length > 0 : !!emp.shipper)
-      );
-      const isShipperAdmin = hasShipperAdminRole && hasShipperBusiness;
-
-      // 3. Determine if user is a Shipper Employee
-      const isShipperEmployee = Boolean(
-        Array.isArray(emp.shipper_roles) && 
-        emp.shipper_roles.some((r: string) => r.toLowerCase() === 'employee')
-      );
+      const isShipperAdmin = hasShipperAdminRole && !isShipperEmployee;
 
       // 4. Courier User: Tenant Admin / Courier Admin, or courier operational staff (Front desk, Booker, Rider, Operations)
       const isCourierUser = !isShipperAdmin && !isShipperEmployee;
@@ -365,10 +389,12 @@ function EmployeeManagementContent() {
       // Filter by search query across Username, Full Name, Role name, and Shipper business
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
-      const roleName = emp.role_definition?.map((r) => r.role_name).join(' ') || '';
-      const shipperRoles = emp.shipper_roles?.join(' ') || '';
+      const roleName = emp.role_definition?.map((r: any) => (typeof r === 'string' ? r : (r?.role_name || r?.name || ''))).join(' ') || '';
+      const shipperRoles = Array.isArray(emp.shipper_roles) 
+        ? emp.shipper_roles.map((r: any) => (typeof r === 'string' ? r : (r?.role_name || r?.name || ''))).join(' ') 
+        : String(emp.shipper_roles || '');
       const businessNames = Array.isArray(emp.shipper) 
-        ? emp.shipper.map((s: any) => s.name || s).join(' ') 
+        ? emp.shipper.map((s: any) => (typeof s === 'string' ? s : (s?.name || ''))).join(' ') 
         : ((emp.shipper as any)?.name || '');
       return (
         emp.username.toLowerCase().includes(query) ||
@@ -564,6 +590,48 @@ function EmployeeManagementContent() {
     });
     setNewAssignedPlanId(currentPlanId || availablePlans[0]?.id || 1);
     setIsChangePlanModalOpen(true);
+  };
+
+  // Open View Tariff Plan modal for a shipper business or plan
+  const handleOpenViewPlan = async (planId?: number, planName?: string, shipperName?: string) => {
+    setViewingShipperName(shipperName || '');
+    let matched = availablePlans.find(p => p.id === planId);
+    if (!matched && planId) {
+      try {
+        const res = await apiClient.get(`/shipper-plans/${planId}`).catch(() => null);
+        const item = res?.data?.data;
+        if (item) {
+          matched = {
+            id: item.id,
+            name: item.name || item.attributes?.name || planName || `Plan #${item.id}`,
+            cashHandlingType: item.cash_handling_type || 'percentage',
+            cashHandlingValue: Number(item.cash_handling_value) || 1.5,
+            cashHandlingMinFee: Number(item.cash_handling_min_fee) || 30,
+            rtoChargeValue: Number(item.rto_charge_value) || 50,
+            weightTiers: Array.isArray(item.weight_tiers) && item.weight_tiers.length > 0 ? item.weight_tiers : DEFAULT_CUSTOM_WEIGHT_TIERS,
+            zones: Array.isArray(item.zones) && item.zones.length > 0 ? item.zones : DEFAULT_CUSTOM_ZONES,
+          };
+        }
+      } catch (e) {
+        console.warn('Failed to load plan details:', e);
+      }
+    }
+
+    if (!matched) {
+      matched = {
+        id: planId || 1,
+        name: planName || 'Standard Commercial Plan',
+        cashHandlingType: 'percentage',
+        cashHandlingValue: 1.5,
+        cashHandlingMinFee: 30,
+        rtoChargeValue: 50,
+        weightTiers: DEFAULT_CUSTOM_WEIGHT_TIERS,
+        zones: DEFAULT_CUSTOM_ZONES,
+      };
+    }
+
+    setViewingPlan(matched);
+    setIsViewPlanModalOpen(true);
   };
 
   // Save new plan assignment for shipper
@@ -787,12 +855,19 @@ function EmployeeManagementContent() {
 
     const isShipperFlow = formEmployeeType === 'shipper' || effectiveType === 'shipper';
 
-    // Requirement: At least one business is mandatory for Shipper Admin creation
-    if (isShipperFlow && !isLoggedShipper) {
-      if (businessGridRows.length === 0) {
-        setFormError('At least one business is mandatory for Shipper Admin creation. Please click "Add Business" above.');
-        return;
-      }
+    // Auto-create default business store if none was manually added
+    let activeBusinessRows = [...businessGridRows];
+    if (isShipperFlow && !isLoggedShipper && activeBusinessRows.length === 0) {
+      const defaultName = formFullName.trim() ? `${formFullName.trim()} Store` : `${formUsername.trim()} Store`;
+      activeBusinessRows = [{
+        tempId: Date.now().toString(),
+        name: defaultName,
+        address: '',
+        city: '',
+        planId: availablePlans[0]?.id || 1,
+        planName: availablePlans[0]?.name || 'Standard Tariff Plan (Default)',
+        isSelected: false,
+      }];
     }
 
     if (!isEditMode && formConfirmationType === 'no_confirmation') {
@@ -829,8 +904,8 @@ function EmployeeManagementContent() {
         
         // Save any custom tariff plans to database first, so both records save and associate
         const shipperObjects = [];
-        for (let idx = 0; idx < businessGridRows.length; idx++) {
-          const b = businessGridRows[idx];
+        for (let idx = 0; idx < activeBusinessRows.length; idx++) {
+          const b = activeBusinessRows[idx];
           let assignedPlanId = typeof b.planId === 'number' ? b.planId : 1;
 
           if (b.customPlanData) {
@@ -1032,26 +1107,47 @@ function EmployeeManagementContent() {
               </button>
             )}
             {effectiveType === 'shipper' && !isLoggedShipper && (
-              <button
-                onClick={() => {
-                  if (!selectedUserShipper) {
-                    alert('Please select a shipper record from the directory first.');
-                    return;
-                  }
-                  handleOpenChangePlanForShipper(
-                    selectedUserShipper.id,
-                    selectedUserShipper.name,
-                    selectedUserShipper.shipper_plan?.id,
-                    selectedUserShipper.shipper_plan?.name
-                  );
-                }}
-                disabled={!selectedUser || !selectedUserShipper}
-                className="bg-indigo-50 border border-indigo-200 text-indigo-700 h-10 px-4 rounded-xl hover:bg-indigo-100/60 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                title="Change tariff plan for the selected shipper"
-              >
-                <span className="material-symbols-outlined text-[18px]">price_change</span>
-                Change Tariff Plan
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    if (!selectedUserShipper) {
+                      alert('Please select a shipper record from the directory first.');
+                      return;
+                    }
+                    handleOpenViewPlan(
+                      selectedUserShipper.shipper_plan?.id,
+                      selectedUserShipper.shipper_plan?.name,
+                      selectedUserShipper.name
+                    );
+                  }}
+                  disabled={!selectedUser || !selectedUserShipper}
+                  className="bg-slate-50 border border-slate-300 text-slate-700 h-10 px-4 rounded-xl hover:bg-slate-100 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title="View assigned tariff plan rate card for the selected shipper"
+                >
+                  <span className="material-symbols-outlined text-[18px]">visibility</span>
+                  View Plan
+                </button>
+                <button
+                  onClick={() => {
+                    if (!selectedUserShipper) {
+                      alert('Please select a shipper record from the directory first.');
+                      return;
+                    }
+                    handleOpenChangePlanForShipper(
+                      selectedUserShipper.id,
+                      selectedUserShipper.name,
+                      selectedUserShipper.shipper_plan?.id,
+                      selectedUserShipper.shipper_plan?.name
+                    );
+                  }}
+                  disabled={!selectedUser || !selectedUserShipper}
+                  className="bg-indigo-50 border border-indigo-200 text-indigo-700 h-10 px-4 rounded-xl hover:bg-indigo-100/60 active:scale-95 transition-all font-semibold text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title="Change tariff plan for the selected shipper"
+                >
+                  <span className="material-symbols-outlined text-[18px]">price_change</span>
+                  Change Tariff Plan
+                </button>
+              </>
             )}
             <button
               onClick={handleResendInvite}
@@ -1141,10 +1237,19 @@ function EmployeeManagementContent() {
                         {effectiveType === 'shipper' && (
                           <td className="px-lg py-4">
                             {empShipper ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenViewPlan(empShipper.plan?.id, empShipper.plan?.name, empShipper.name);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all cursor-pointer shadow-2xs group"
+                                title="Click to view full rate card and weight tiers"
+                              >
                                 <span className="material-symbols-outlined text-[14px]">price_change</span>
-                                {empShipper.plan?.name || 'Standard Commercial Plan'}
-                              </span>
+                                <span>{empShipper.plan?.name || 'Standard Commercial Plan'}</span>
+                                <span className="material-symbols-outlined text-[14px] opacity-60 group-hover:opacity-100 text-indigo-600">visibility</span>
+                              </button>
                             ) : (
                               <span className="text-outline italic text-xs">No Shipper Assigned</span>
                             )}
@@ -1160,39 +1265,58 @@ function EmployeeManagementContent() {
                               );
                             }
 
-                            const sRoles = Array.isArray(emp.shipper_roles) && emp.shipper_roles.length > 0
-                              ? emp.shipper_roles
-                              : ((emp as any).shipper_roles ? [(emp as any).shipper_roles] : []);
+                            const sRoles: string[] = (Array.isArray(emp.shipper_roles) ? emp.shipper_roles : [emp.shipper_roles])
+                              .filter(Boolean)
+                              .map((r: any) => (typeof r === 'string' ? r : (r?.role_name || r?.name || String(r))));
 
-                            const empRoles = Array.isArray(emp.role_definition)
-                              ? emp.role_definition.map((r: any) => r.role_name || r)
-                              : emp.role_definition
-                              ? [(emp.role_definition as any).role_name || emp.role_definition]
-                              : [];
+                            const empRoles: string[] = (Array.isArray(emp.role_definition) ? emp.role_definition : [emp.role_definition])
+                              .filter(Boolean)
+                              .map((r: any) => {
+                                if (typeof r === 'string') return r;
+                                if (r?.role_name) return String(r.role_name);
+                                if (r?.name) return String(r.name);
+                                if (typeof r === 'number') {
+                                  const match = roles.find((item) => item.id === r);
+                                  return match?.role_name || `Role #${r}`;
+                                }
+                                if (r?.id) {
+                                  const match = roles.find((item) => item.id === r.id);
+                                  return match?.role_name || `Role #${r.id}`;
+                                }
+                                return String(r || '');
+                              });
 
-                            const roleObjName = (emp as any).role?.name;
+                            const roleObjName = typeof (emp as any).role === 'string' 
+                              ? (emp as any).role 
+                              : ((emp as any).role?.name || '');
                             const isTenantAdmin = roleObjName === 'Tenant Admin' || 
                                                   roleObjName === 'Courier Admin' ||
                                                   emp.email?.toLowerCase().includes('courier') ||
                                                   emp.username?.toLowerCase().includes('courier') ||
-                                                  emp.tenant;
+                                                  Boolean(emp.tenant);
 
-                            const allDisplayRoles = [...sRoles, ...empRoles].filter(Boolean);
+                            const allDisplayRoles: string[] = [...sRoles, ...empRoles]
+                              .map((r) => String(r || '').trim())
+                              .filter((r) => r.length > 0);
+
                             if (allDisplayRoles.length === 0 && isTenantAdmin) {
                               allDisplayRoles.push('Courier Admin');
                             }
 
                             return allDisplayRoles.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
-                                {allDisplayRoles.map((rName, i) => (
-                                  <span key={i} className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
-                                    rName.toLowerCase().includes('admin')
-                                      ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                      : 'bg-slate-100 text-slate-800 border-slate-200'
-                                  }`}>
-                                    {rName}
-                                  </span>
-                                ))}
+                                {allDisplayRoles.map((rName, i) => {
+                                  const str = String(rName);
+                                  return (
+                                    <span key={i} className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
+                                      str.toLowerCase().includes('admin')
+                                        ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                        : 'bg-slate-100 text-slate-800 border-slate-200'
+                                    }`}>
+                                      {str}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
@@ -1215,23 +1339,37 @@ function EmployeeManagementContent() {
                         {effectiveType === 'shipper' && (
                           <td className="px-lg py-4 text-center">
                             {empShipper ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenChangePlanForShipper(
-                                    empShipper.id,
-                                    empShipper.name,
-                                    empShipper.plan?.id,
-                                    empShipper.plan?.name
-                                  );
-                                }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 active:scale-95 transition-all shadow-xs cursor-pointer"
-                                title="Change tariff rate plan for this shipper business"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">edit_note</span>
-                                Change Plan
-                              </button>
+                              <div className="inline-flex items-center gap-1.5 justify-center">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenViewPlan(empShipper.plan?.id, empShipper.plan?.name, empShipper.name);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 active:scale-95 transition-all shadow-2xs cursor-pointer"
+                                  title="View tariff rate card for this shipper"
+                                >
+                                  <span className="material-symbols-outlined text-[14px] text-slate-500">visibility</span>
+                                  View Plan
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenChangePlanForShipper(
+                                      empShipper.id,
+                                      empShipper.name,
+                                      empShipper.plan?.id,
+                                      empShipper.plan?.name
+                                    );
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 active:scale-95 transition-all shadow-2xs cursor-pointer"
+                                  title="Change tariff rate plan for this shipper business"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">edit_note</span>
+                                  Change Plan
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-slate-400 text-xs">-</span>
                             )}
@@ -2063,7 +2201,7 @@ function EmployeeManagementContent() {
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
             onClick={() => !isSavingShipperPlan && setIsChangePlanModalOpen(false)}
           />
-          <div className="relative z-10 bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative z-10 bg-white rounded-3xl shadow-2xl border border-slate-200 w-[520px] max-w-[95vw] shrink-0 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/70">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
@@ -2092,16 +2230,46 @@ function EmployeeManagementContent() {
                   {targetShipperForPlanChange.name}
                 </div>
                 <div className="text-slate-500 font-medium mt-2">Currently Assigned:</div>
-                <div className="font-semibold text-indigo-700 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]">sell</span>
-                  {targetShipperForPlanChange.currentPlanName || 'Standard Commercial Plan'}
+                <div className="font-semibold text-indigo-700 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">sell</span>
+                    {targetShipperForPlanChange.currentPlanName || 'Standard Commercial Plan'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenViewPlan(
+                      targetShipperForPlanChange.currentPlanId,
+                      targetShipperForPlanChange.currentPlanName,
+                      targetShipperForPlanChange.name
+                    )}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer bg-white px-2 py-0.5 rounded-md border border-indigo-200 shadow-2xs"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">visibility</span>
+                    View Assigned Rates
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Select New Tariff Plan <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Select New Tariff Plan <span className="text-red-500">*</span>
+                  </label>
+                  {newAssignedPlanId && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenViewPlan(
+                        newAssignedPlanId,
+                        availablePlans.find(p => p.id === newAssignedPlanId)?.name,
+                        targetShipperForPlanChange.name
+                      )}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">visibility</span>
+                      Preview Selected Plan
+                    </button>
+                  )}
+                </div>
                 <select
                   value={newAssignedPlanId}
                   onChange={(e) => {
@@ -2157,6 +2325,151 @@ function EmployeeManagementContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: View Tariff Plan Details */}
+      {isViewPlanModalOpen && viewingPlan && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsViewPlanModalOpen(false)}
+          />
+          <div className="relative z-10 bg-white rounded-3xl shadow-2xl border border-slate-200 w-[780px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-900 text-white rounded-t-3xl shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                  <span className="material-symbols-outlined text-[24px]">price_change</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white flex items-center gap-2">
+                    {viewingPlan.name}
+                    <span className="text-[11px] font-semibold bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full border border-indigo-400/30">
+                      ID: #{viewingPlan.id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {viewingShipperName ? `Tariff rate card assigned to "${viewingShipperName}"` : 'Tariff rate card details & weight tiers'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsViewPlanModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Key Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shrink-0">
+                    <span className="material-symbols-outlined text-[20px]">payments</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Cash Handling (COD)</div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {viewingPlan.cashHandlingValue ?? 1.5}{viewingPlan.cashHandlingType === 'fixed' ? ' Rs' : '%'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0">
+                    <span className="material-symbols-outlined text-[20px]">shield</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Min Cash Handling Fee</div>
+                    <div className="text-sm font-bold text-slate-900">
+                      Rs. {viewingPlan.cashHandlingMinFee ?? 30}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 shrink-0">
+                    <span className="material-symbols-outlined text-[20px]">assignment_return</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Return (RTO) Fee</div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {viewingPlan.rtoChargeValue ?? 50}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rate Card Matrix Table */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-primary">table_chart</span>
+                    Weight Tier & Regional Rates (PKR)
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">All prices exclusive of GST</span>
+                </div>
+
+                <div className="border border-outline-variant rounded-2xl overflow-hidden shadow-2xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 bg-slate-100">Zone</th>
+                          {(viewingPlan.weightTiers || DEFAULT_CUSTOM_WEIGHT_TIERS).map((tier) => (
+                            <th key={tier.id} className="px-4 py-3 text-center border-l border-slate-200">
+                              {tier.label}
+                            </th>
+                          ))}
+                          <th className="px-4 py-3 text-center border-l border-slate-200 text-rose-700">RTO Charges</th>
+                          <th className="px-4 py-3 text-center border-l border-slate-200">Insurance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200/80">
+                        {(viewingPlan.zones || DEFAULT_CUSTOM_ZONES).map((z, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-900 flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[15px] text-primary">pin_drop</span>
+                              {z.zoneName}
+                            </td>
+                            {(viewingPlan.weightTiers || DEFAULT_CUSTOM_WEIGHT_TIERS).map((tier) => (
+                              <td key={tier.id} className="px-4 py-3 text-center font-semibold text-slate-800 border-l border-slate-200">
+                                Rs. {(z.tierRates as any)?.[tier.id] ?? '-'}
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-center font-bold text-rose-700 border-l border-slate-200">
+                              {typeof z.returnCharges === 'number' ? `Rs. ${z.returnCharges}` : (z.returnCharges || '-')}
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-500 border-l border-slate-200">
+                              {z.insurance ?? '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between p-4 px-6 border-t border-slate-100 bg-slate-50 shrink-0">
+              <span className="text-xs text-slate-500">
+                Managed under Courier Tariff Management
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsViewPlanModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

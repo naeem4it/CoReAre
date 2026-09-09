@@ -93,7 +93,7 @@ export default function OperationsDeManifestationPage() {
           const parcel = res.data?.data?.[0];
           if (parcel) {
             await apiClient.put(`/parcels/${parcel.id}`, {
-              data: { status: 'Arrived At Destination', arrival_date: new Date().toISOString() }
+              data: { status: 'Arrived at warehouse', arrival_date: new Date().toISOString() }
             });
           }
         } catch (e) {

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
+import { useAuth } from '@/components/AuthProvider';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -26,6 +27,7 @@ import {
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000; // 48 Hours in Milliseconds
 
 export default function ShipperAdvisePage() {
+  const { isShipper, activeBusinessId } = useAuth();
   const [attempts, setAttempts] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   
@@ -63,7 +65,7 @@ export default function ShipperAdvisePage() {
     const timeLeft = FORTY_EIGHT_HOURS_MS - elapsed;
 
     if (timeLeft <= 0) {
-      return { isExpired: true, hoursLeft: 0, label: 'Expired (Auto-Return to Shipper)' };
+      return { isExpired: true, hoursLeft: 0, label: 'Expired (Auto-Ready for Return)' };
     }
 
     const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60));
@@ -73,22 +75,29 @@ export default function ShipperAdvisePage() {
   const fetchAttempts = async () => {
     try {
       setLoading(true);
+      const queryFilters: any = {
+        status: { $in: ['Delivery Failed', 'Failed Attempt', 'Ready for Return', 'Ready To Return', 'Return to Shipper'] }
+      };
+
+      if (isShipper && activeBusinessId) {
+        queryFilters.shipper = { id: { $eq: activeBusinessId } };
+      }
+
       const response = await apiClient.get('/delivery-attempts', {
         params: {
           populate: ['parcel', 'rider'],
           sort: ['createdAt:desc']
         }
-      });
-      const data = response.data?.data || [];
+      }).catch(() => null);
+
+      const data = response?.data?.data || [];
       if (data.length > 0) {
         setAttempts(data);
       } else {
         // Fallback to real parcels that need shipper advice
         const parcelsRes = await apiClient.get('/parcels', {
           params: {
-            filters: {
-              status: { $in: ['Failed Attempt', 'Ready To Return', 'Return to Shipper'] }
-            },
+            filters: queryFilters,
             populate: '*',
             sort: ['createdAt:desc'],
             pagination: { pageSize: 50 }
@@ -102,7 +111,7 @@ export default function ShipperAdvisePage() {
           status: 'Attempt 1',
           failure_reason: p.comments || 'Delivery Attempt Failed',
           shipper_advice: null,
-          advice_status: p.status === 'Ready To Return' || p.status === 'Return to Shipper' ? 'Failed' : 'Awaiting advice',
+          advice_status: p.status === 'Ready for Return' || p.status === 'Ready To Return' || p.status === 'Return to Shipper' ? 'Failed' : 'Awaiting advice',
           createdAt: p.createdAt,
           parcel: p,
           rider: p.rider ? { name: p.rider.name || p.rider.user?.fullName || 'Courier Rider' } : null
@@ -177,7 +186,7 @@ export default function ShipperAdvisePage() {
       if (parcelId) {
         const parcelData: any = {};
         if (isReturn) {
-          parcelData.status = 'Ready To Return';
+          parcelData.status = 'Ready for Return';
         } else if (isReroute) {
           parcelData.recipient_address = newAddress;
         }
@@ -189,7 +198,7 @@ export default function ShipperAdvisePage() {
         }
       }
 
-      triggerToast(isReturn ? 'Initiated Return to Shipper.' : 'Delivery advice saved successfully.');
+      triggerToast(isReturn ? 'Initiated Ready for Return.' : 'Delivery advice saved successfully.');
       setSelectedAttempt(null);
       fetchAttempts();
     } catch (err: any) {
@@ -202,7 +211,7 @@ export default function ShipperAdvisePage() {
 
   // Process Return for 3rd attempt or 48h timeout
   const handleProcessReturnDirect = async (attempt: any, reasonText: string) => {
-    if (!confirm(`Proceed to mark this parcel as Ready to Return to Shipper (${reasonText})?`)) {
+    if (!confirm(`Proceed to mark this parcel as Ready for Return (${reasonText})?`)) {
       return;
     }
 
@@ -223,15 +232,35 @@ export default function ShipperAdvisePage() {
       const parcelId = attempt.parcel?.id || attempt.id;
       if (parcelId) {
         await apiClient.put(`/parcels/${parcelId}`, {
-          data: { status: 'Ready To Return' }
+          data: { status: 'Ready for Return' }
         });
       }
 
-      triggerToast('Parcel marked as Ready to Return.');
+      triggerToast('Parcel marked as Ready for Return.');
       fetchAttempts();
     } catch (err: any) {
       console.error('Failed to initiate return:', err);
       triggerToast('Failed to initiate return workflow.', 'error');
+    }
+  };
+
+  // Mark when shipper receives their returned parcel
+  const handleConfirmReturnReceived = async (attempt: any) => {
+    if (!confirm(`Confirm that parcel #${attempt.parcel?.tracking_number} has been received back by the Shipper?`)) {
+      return;
+    }
+    try {
+      const parcelId = attempt.parcel?.id || attempt.id;
+      if (parcelId) {
+        await apiClient.put(`/parcels/${parcelId}`, {
+          data: { status: 'Return to Shipper' }
+        });
+      }
+      triggerToast('Parcel status updated to Return to Shipper.');
+      fetchAttempts();
+    } catch (err: any) {
+      console.error('Failed to mark return to shipper:', err);
+      triggerToast('Failed to update status.', 'error');
     }
   };
 
@@ -484,8 +513,17 @@ export default function ShipperAdvisePage() {
                             >
                               Confirm Return
                             </button>
+                          ) : (attempt.parcel?.status === 'Ready for Return' || attempt.parcel?.status === 'Ready To Return') ? (
+                            <button
+                              onClick={() => handleConfirmReturnReceived(attempt)}
+                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm"
+                            >
+                              Handover to Shipper
+                            </button>
                           ) : (
-                            <span className="text-xs text-slate-400 font-semibold">Processed</span>
+                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              {attempt.parcel?.status || 'Processed'}
+                            </span>
                           )}
                         </td>
                       </tr>

@@ -153,7 +153,7 @@ export default function OperationsBulkArrivalsPage() {
 
     setIsSubmitting(true);
     try {
-      // 1. Mark parcels as Arrived in Strapi
+      // 1. Mark parcels as Arrived at the warehouse in Strapi
       let updatedCount = 0;
       for (const item of shipments) {
         try {
@@ -162,7 +162,7 @@ export default function OperationsBulkArrivalsPage() {
           if (found) {
             await apiClient.put(`/parcels/${found.id}`, {
               data: {
-                status: 'Arrived',
+                status: 'Arrived at the warehouse',
                 arrival_date: new Date().toISOString()
               }
             });

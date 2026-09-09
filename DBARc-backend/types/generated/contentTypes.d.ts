@@ -1281,16 +1281,23 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     status: Schema.Attribute.Enumeration<
       [
         'Total Booking',
+        'Picked up by rider',
+        'Arrived at the warehouse',
         'Not Arrived',
-        'Arrived',
         'In Transit',
-        'Arrived At Destination',
-        'Out For delivery',
+        'Arrived at warehouse',
+        'Out for Delivery',
         'Delivered',
+        'Delivery Failed',
+        'Ready for Return',
+        'Return to Shipper',
+        'Lost/Damage',
+        'Arrived',
+        'Out For delivery',
         'Failed Attempt',
         'Ready To Return',
         'Return Dispatched',
-        'Return to Shipper',
+        'Arrived At Destination',
       ]
     > &
       Schema.Attribute.DefaultTo<'Total Booking'>;

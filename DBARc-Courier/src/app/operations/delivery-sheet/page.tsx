@@ -29,7 +29,7 @@ interface DeliveryShipment {
   pieces: number;
   weight: number;
   amountCollect: number;
-  status: 'Delivered' | 'Ready To Return' | 'Failed Attempt' | 'Out For Delivery';
+  status: 'Delivered' | 'Ready To Return' | 'Failed Attempt' | 'Out For Delivery' | 'Out for Delivery' | string;
   remarks: string;
 }
 
@@ -118,7 +118,7 @@ export default function OperationsDeliverySheetPage() {
         pieces: 1,
         weight: parcel?.weight || 1.0,
         amountCollect: parcel?.cod_amount || 0,
-        status: 'Out For Delivery',
+        status: 'Out for Delivery',
         remarks: ''
       };
 
@@ -137,7 +137,7 @@ export default function OperationsDeliverySheetPage() {
         pieces: 1,
         weight: 1.0,
         amountCollect: 0,
-        status: 'Out For Delivery',
+        status: 'Out for Delivery',
         remarks: ''
       };
       setShipments(prev => [newItem, ...prev]);

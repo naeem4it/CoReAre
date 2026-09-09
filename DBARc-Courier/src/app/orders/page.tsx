@@ -27,6 +27,26 @@ import {
   ShoppingBag
 } from 'lucide-react';
 
+function extractCityFromAddress(address: string): string {
+  if (!address) return 'Pakistan';
+  const knownCities = [
+    'Islamabad', 'Rawalpindi', 'Lahore', 'Karachi', 'Faisalabad', 'Multan',
+    'Peshawar', 'Quetta', 'Sialkot', 'Gujranwala', 'Gujrat', 'Jhelum',
+    'Hyderabad', 'Bahawalpur', 'Sargodha', 'Sahiwal', 'Sheikhupura', 'Sukkur',
+    'Larkana', 'Mardan', 'Kasur', 'Rahim Yar Khan', 'Dera Ghazi Khan', 'Abbottabad'
+  ];
+  for (const c of knownCities) {
+    if (new RegExp(`\\b${c}\\b`, 'i').test(address)) {
+      return c;
+    }
+  }
+  const parts = address.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length > 1) {
+    return parts[parts.length - 1];
+  }
+  return address.trim() || 'Pakistan';
+}
+
 type OrderRow = {
   id: number | string;
   trackingNumber: string;
@@ -46,6 +66,7 @@ type OrderRow = {
   status: string;
   allowToOpen: string;
   parcelDetail: string;
+  is2PL: boolean;
   tplCourierId: string;
   tplTrackingNo: string;
   dateCreated: string;
@@ -90,6 +111,11 @@ export default function OrderList() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
 
+  // Tenant 2PL self-service cities & 3PL partner state
+  const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null);
+  const [selfServiceCities, setSelfServiceCities] = React.useState<string[]>([]);
+  const [courierTplPartners, setCourierTplPartners] = React.useState<any[]>([]);
+
   // Multi-Selection State
   const [selectedIds, setSelectedIds] = React.useState<(number | string)[]>([]);
 
@@ -115,6 +141,47 @@ export default function OrderList() {
     return activeBusinessId || null;
   }, [user, activeBusinessId]);
 
+  // Load configured 2PL self-service cities for courier tenant
+  React.useEffect(() => {
+    const loadTenantConfig = async () => {
+      try {
+        const res = await apiClient.get('/tenant/list?populate=*');
+        const items = res.data?.data || [];
+        const currentTenant = items.find((t: any) => String(t.id) === String(tenantId) || t.attributes?.documentId === String(tenantId)) || items[0];
+        const tenantData = currentTenant?.attributes || currentTenant;
+        if (tenantData?.self_service_cities && Array.isArray(tenantData.self_service_cities)) {
+          setSelfServiceCities(tenantData.self_service_cities);
+        } else if (tenantId) {
+          const saved = localStorage.getItem(`self_service_cities_${tenantId}`);
+          if (saved) {
+            try { setSelfServiceCities(JSON.parse(saved)); } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load tenant self service cities:', err);
+        if (tenantId) {
+          const saved = localStorage.getItem(`self_service_cities_${tenantId}`);
+          if (saved) {
+            try { setSelfServiceCities(JSON.parse(saved)); } catch {}
+          }
+        }
+      }
+
+      // Load 3PL partners
+      try {
+        const tplRes = await apiClient.get('/tpl-partners', {
+          params: { filters: tenantId ? { tenant: tenantId } : {}, populate: '*' }
+        });
+        const partners = (tplRes.data?.data || []).map((item: any) => ({ id: item.id, ...(item.attributes || item) }));
+        setCourierTplPartners(partners);
+      } catch (err) {
+        console.warn('Could not load tpl partners:', err);
+      }
+    };
+
+    loadTenantConfig();
+  }, [tenantId]);
+
   React.useEffect(() => {
     const fetchParcels = async () => {
       try {
@@ -135,14 +202,38 @@ export default function OrderList() {
           const mapped: OrderRow[] = parcels.map((item: any) => {
             const customerName = item.recipient_name || 'Customer';
             const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'CU';
-            const destination = item.destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Pakistan';
-            const origin = item.source_city?.name || 'Karachi';
+            const destination = item.destination_city?.CityName 
+              || item.destination_city?.name 
+              || extractCityFromAddress(item.recipient_address);
+            const origin = item.source_city?.CityName || item.source_city?.name || 'Lahore';
             const allowToOpen = item.allow_to_open || 'No';
             const parcelDetail = item.comments || item.description || item.product_description || 'Standard Parcel';
             const shipperPhone = item.shipper?.phone || item.pickup_location?.phone || '+92 300 0000000';
             const pieces = item.pieces || 1;
-            const tplCourierId = item.courier?.name || (item.is_3pl ? '3PL-PARTNER' : 'IN-HOUSE');
-            const tplTrackingNo = item.reference_number || (item.is_3pl ? `3PL-${item.tracking_number}` : `EXP-${item.tracking_number}`);
+
+            // Check if destination is in courier's configured 2PL self-service areas
+            const normDest = destination.toLowerCase().trim();
+            const normAddr = (item.recipient_address || '').toLowerCase().trim();
+            const in2PLArea = (selfServiceCities.length > 0)
+              ? selfServiceCities.some((c: string) => {
+                  const normC = c.toLowerCase().trim();
+                  return normC === normDest || normDest.includes(normC) || normAddr.includes(normC);
+                })
+              : (!item.is_3pl && (!item.courier || item.courier?.name === 'IN-HOUSE' || item.courier?.name === '2PL'));
+
+            const is2PL = in2PLArea && !(item.is_3pl && item.courier && item.courier?.name !== 'IN-HOUSE');
+
+            let tplCourierId = 'IN-HOUSE';
+            let tplTrackingNo = item.tracking_number;
+
+            if (!is2PL) {
+              tplCourierId = item.courier?.name 
+                || (courierTplPartners.find((p: any) => p.is_preferred)?.name)
+                || (courierTplPartners[0]?.name)
+                || 'Leopards Courier';
+              const cleanPrefix = tplCourierId.replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase() || 'LCS';
+              tplTrackingNo = item.reference_number || `${cleanPrefix}-${item.tracking_number.replace('DBA-', '')}`;
+            }
 
             return {
               id: item.id,
@@ -163,6 +254,7 @@ export default function OrderList() {
               status: item.status || 'booked',
               allowToOpen,
               parcelDetail,
+              is2PL,
               tplCourierId,
               tplTrackingNo,
               dateCreated: item.createdAt || new Date().toISOString(),
@@ -181,7 +273,7 @@ export default function OrderList() {
     };
 
     fetchParcels();
-  }, [isShipper, shipperId]);
+  }, [isShipper, shipperId, selfServiceCities, courierTplPartners]);
 
   const filteredData = data.filter((row) => {
     if (!searchQuery) return true;
@@ -439,8 +531,22 @@ export default function OrderList() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-slate-700 max-w-[200px] truncate">
-                        {row.address}
+                      <td className="px-4 py-4 text-slate-700 max-w-[220px]">
+                        <div className="flex flex-col gap-1">
+                          <span className="truncate text-xs text-slate-800">{row.address}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-flex items-center px-1.5 py-0.2 text-[9px] font-extrabold rounded uppercase tracking-wider ${
+                              row.is2PL
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              {row.is2PL ? '2PL (In-House)' : `3PL (${row.tplCourierId})`}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {row.destination}
+                            </span>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-slate-800 font-semibold">{row.shipperName}</td>
                       <td className="px-4 py-4">
@@ -531,8 +637,12 @@ export default function OrderList() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-extrabold uppercase bg-slate-100 border border-slate-900 px-2 py-0.5 rounded">
-                        {order.destination}
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+                        order.is2PL 
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-400' 
+                          : 'bg-amber-50 text-amber-900 border-amber-400'
+                      }`}>
+                        {order.is2PL ? '2PL' : `3PL (${order.tplCourierId})`}: {order.destination}
                       </span>
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
                         order.allowToOpen === 'Yes' 
@@ -544,20 +654,34 @@ export default function OrderList() {
                     </div>
                   </div>
 
-                  {/* Dual Barcode Section */}
-                  <div className="grid grid-cols-2 gap-3 py-2 bg-slate-50/80 border-b border-slate-300 rounded my-1.5 px-2">
-                    {/* Barcode 1: Office Tracking Barcode */}
-                    <div className="flex flex-col items-center border-r border-slate-300 pr-2">
-                      <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Office Tracking Barcode</span>
-                      <SlipBarcode text={order.trackingNumber} height={26} />
+                  {/* Barcode Section: 1 Barcode for 2PL locations, 2 Barcodes for 3PL locations */}
+                  {order.is2PL ? (
+                    /* 2PL In-House Courier Delivery: ONLY 1 BARCODE */
+                    <div className="flex flex-col items-center justify-center py-2.5 bg-slate-50/80 border-b border-slate-300 rounded my-1.5 px-4">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Office Tracking Barcode</span>
+                        <span className="text-[8px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-300">
+                          2PL IN-HOUSE
+                        </span>
+                      </div>
+                      <SlipBarcode text={order.trackingNumber} height={30} />
                     </div>
+                  ) : (
+                    /* 3PL Partner Courier Delivery: 2 BARCODES */
+                    <div className="grid grid-cols-2 gap-3 py-2 bg-slate-50/80 border-b border-slate-300 rounded my-1.5 px-2">
+                      {/* Barcode 1: Office Tracking Barcode */}
+                      <div className="flex flex-col items-center border-r border-slate-300 pr-2">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">1. Office Tracking Barcode</span>
+                        <SlipBarcode text={order.trackingNumber} height={26} />
+                      </div>
 
-                    {/* Barcode 2: 3PL Courier ID / Tracking No */}
-                    <div className="flex flex-col items-center pl-2">
-                      <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">3PL Partner Barcode ({order.tplCourierId})</span>
-                      <SlipBarcode text={order.tplTrackingNo} height={26} />
+                      {/* Barcode 2: 3PL Courier ID / Tracking No */}
+                      <div className="flex flex-col items-center pl-2">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">2. 3PL Partner Barcode ({order.tplCourierId})</span>
+                        <SlipBarcode text={order.tplTrackingNo} height={26} />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Shipper and Consignee Details */}
                   <div className="grid grid-cols-2 gap-4 text-[10px] py-1">
@@ -637,8 +761,15 @@ export default function OrderList() {
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                  {order.destination}
+                <span style={{ 
+                  fontSize: '10px', 
+                  fontWeight: 'bold', 
+                  textTransform: 'uppercase',
+                  border: '1px solid black',
+                  padding: '1px 5px',
+                  background: order.is2PL ? '#ecfdf5' : '#fffbeb'
+                }}>
+                  {order.is2PL ? '2PL' : `3PL (${order.tplCourierId})`}: {order.destination}
                 </span>
                 <span style={{ 
                   fontSize: '9px', 
@@ -652,18 +783,32 @@ export default function OrderList() {
               </div>
             </div>
 
-            {/* Dual Barcode Row */}
-            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', margin: '4px 0', borderBottom: '1px solid #94a3b8', paddingBottom: '3px' }}>
-              <div style={{ textAlign: 'center', flex: 1 }}>
-                <span style={{ fontSize: '8px', fontWeight: 'bold', display: 'block', textTransform: 'uppercase' }}>1. Office Tracking Barcode</span>
-                <SlipBarcode text={order.trackingNumber} height={24} />
+            {/* Barcode Section: 1 Barcode for 2PL locations, 2 Barcodes for 3PL locations */}
+            {order.is2PL ? (
+              /* 2PL In-House Delivery: 1 BARCODE */
+              <div style={{ textAlign: 'center', margin: '4px 0', borderBottom: '1px solid #94a3b8', paddingBottom: '3px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginBottom: '1px' }}>
+                  <span style={{ fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>Office Tracking Barcode</span>
+                  <span style={{ fontSize: '7px', fontWeight: 'bold', border: '1px solid #10b981', background: '#ecfdf5', color: '#065f46', padding: '0 3px' }}>
+                    2PL IN-HOUSE
+                  </span>
+                </div>
+                <SlipBarcode text={order.trackingNumber} height={28} />
               </div>
-              <div style={{ width: '1px', height: '32px', background: '#cbd5e1' }} />
-              <div style={{ textAlign: 'center', flex: 1 }}>
-                <span style={{ fontSize: '8px', fontWeight: 'bold', display: 'block', textTransform: 'uppercase' }}>2. 3PL Courier Barcode ({order.tplCourierId})</span>
-                <SlipBarcode text={order.tplTrackingNo} height={24} />
+            ) : (
+              /* 3PL Partner Courier Delivery: 2 BARCODES */
+              <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', margin: '4px 0', borderBottom: '1px solid #94a3b8', paddingBottom: '3px' }}>
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <span style={{ fontSize: '8px', fontWeight: 'bold', display: 'block', textTransform: 'uppercase' }}>1. Office Tracking Barcode</span>
+                  <SlipBarcode text={order.trackingNumber} height={24} />
+                </div>
+                <div style={{ width: '1px', height: '32px', background: '#cbd5e1' }} />
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <span style={{ fontSize: '8px', fontWeight: 'bold', display: 'block', textTransform: 'uppercase' }}>2. 3PL Courier Barcode ({order.tplCourierId})</span>
+                  <SlipBarcode text={order.tplTrackingNo} height={24} />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Shipper & Consignee Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '9px', lineHeight: '1.2' }}>

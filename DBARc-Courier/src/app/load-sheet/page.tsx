@@ -353,7 +353,7 @@ export default function LoadSheetPage() {
   };
 
   // -------------------------------------------------------------------------
-  // Dispatch Load Sheet (Sets Load Sheet to 'Dispatched' & Parcels to 'Not Arrived')
+  // Dispatch Load Sheet (Sets Load Sheet to 'Dispatched' & Parcels to 'Picked up by rider')
   // -------------------------------------------------------------------------
   const dispatchLoadSheetAction = async (sheet: any) => {
     try {
@@ -363,21 +363,21 @@ export default function LoadSheetPage() {
         data: { status: 'Dispatched' },
       });
 
-      // 2. Update all linked parcels to 'Not Arrived'
+      // 2. Update all linked parcels to 'Picked up by rider'
       const parcelsList = sheet.parcels || [];
       if (parcelsList.length > 0) {
         await Promise.all(
           parcelsList.map((p: any) => {
             const pDocId = p.documentId || p.id;
             return apiClient.put(`/parcels/${pDocId}`, {
-              data: { status: 'Not Arrived' },
+              data: { status: 'Picked up by rider' },
             }).catch(e => console.warn(`Could not update parcel ${pDocId}:`, e));
           })
         );
       }
 
       triggerToast(
-        `Load Sheet ${sheet.sheet_id} Dispatched! ${parcelsList.length} parcel(s) transitioned to 'Not Arrived'.`,
+        `Load Sheet ${sheet.sheet_id} Dispatched! ${parcelsList.length} parcel(s) marked as 'Picked up by rider'.`,
         'success'
       );
 

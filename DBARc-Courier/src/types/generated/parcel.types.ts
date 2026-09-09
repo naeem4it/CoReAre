@@ -4,11 +4,31 @@ import { CourierCity } from './courier-city.types';
 import { PickupLocation } from './pickup-location.types';
 import { LoadSheet } from './load-sheet.types';
 
+export type ParcelStatus = 
+  | 'Total Booking' 
+  | 'Picked up by rider' 
+  | 'Arrived at the warehouse' 
+  | 'Not Arrived' 
+  | 'In Transit' 
+  | 'Arrived at warehouse' 
+  | 'Out for Delivery' 
+  | 'Delivered' 
+  | 'Delivery Failed' 
+  | 'Ready for Return' 
+  | 'Return to Shipper' 
+  | 'Lost/Damage' 
+  | 'Arrived' 
+  | 'Out For delivery' 
+  | 'Failed Attempt' 
+  | 'Ready To Return' 
+  | 'Return Dispatched' 
+  | 'Arrived At Destination';
+
 export interface Parcel {
   id: number;
   documentId: string;
   tracking_number: string;
-  status?: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
+  status?: ParcelStatus;
   cod_amount?: number;
   weight: number;
   delivery_charges: number;
@@ -36,7 +56,7 @@ export interface Parcel {
 
 export interface CreateParcelRequest {
   tracking_number: string;
-  status?: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
+  status?: ParcelStatus;
   cod_amount?: number;
   weight: number;
   delivery_charges: number;

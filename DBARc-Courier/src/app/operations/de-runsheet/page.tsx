@@ -141,10 +141,28 @@ export default function DeRunsheetPage() {
     return { total, delivered, deliveredCod, deliveredPaid, undelivered, expectedCash };
   }, [selectedSheet]);
 
-  const cashDiff = React.useMemo(() => {
-    const given = Number(cashSurrendered) || 0;
-    return given - metrics.expectedCash;
-  }, [cashSurrendered, metrics.expectedCash]);
+  const cashDiff = (Number(cashSurrendered) || 0) - metrics.expectedCash;
+
+  const handleToggleParcelStatus = (parcelId: number, newStatus: 'Delivered' | 'Delivery Failed') => {
+    if (!selectedSheet) return;
+    let comment: string | undefined;
+    if (newStatus === 'Delivery Failed') {
+      const reason = prompt('Enter reason for delivery failure (e.g. Receiver refused, Customer not available, Incomplete address):', 'Customer not available');
+      if (reason === null) return;
+      comment = reason.trim();
+    }
+
+    setSelectedSheet(prev => {
+      if (!prev) return null;
+      const updated = prev.parcels.map(p => {
+        if (p.id === parcelId) {
+          return { ...p, status: newStatus, comments: comment };
+        }
+        return p;
+      });
+      return { ...prev, parcels: updated };
+    });
+  };
 
   // Handle Closeout Submission
   const handleReconcile = async () => {
@@ -160,16 +178,23 @@ export default function DeRunsheetPage() {
         }
       }).catch((e) => console.warn('Delivery sheet update notice:', e));
 
-      // 2. Mark delivered COD parcels payment status as Collected
+      // 2. Update parcel statuses & payment status in Strapi
       for (const p of selectedSheet.parcels) {
-        if (p.status === 'Delivered' && p.paymentType === 'COD') {
-          try {
-            await apiClient.put(`/parcels/${p.id}`, {
-              data: { payment_status: 'Collected' }
-            });
-          } catch (e) {
-            console.warn(`Could not update parcel ${p.trackingNumber}:`, e);
+        try {
+          const updateData: any = { status: p.status };
+          if (p.status === 'Delivered') {
+            updateData.delivered_date = new Date().toISOString();
+            if (p.paymentType === 'COD') {
+              updateData.payment_status = 'Collected';
+            }
+          } else if (p.status === 'Delivery Failed') {
+            if ((p as any).comments) {
+              updateData.comments = (p as any).comments;
+            }
           }
+          await apiClient.put(`/parcels/${p.id}`, { data: updateData });
+        } catch (e) {
+          console.warn(`Could not update parcel ${p.trackingNumber}:`, e);
         }
       }
 
@@ -370,6 +395,7 @@ export default function DeRunsheetPage() {
                       <th className="px-4 py-3">Consignee</th>
                       <th className="px-4 py-3">Destination</th>
                       <th className="px-4 py-3">Delivery Status</th>
+                      <th className="px-4 py-3">Action Outcome</th>
                       <th className="px-4 py-3">Payment Type</th>
                       <th className="px-4 py-3 text-right">Expected COD</th>
                     </tr>
@@ -383,13 +409,39 @@ export default function DeRunsheetPage() {
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             p.status === 'Delivered' 
-                              ? 'bg-emerald-100 text-emerald-800' 
-                              : p.status === 'Failed Attempt' 
-                                ? 'bg-red-100 text-red-800' 
-                                : 'bg-blue-100 text-blue-800'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : p.status === 'Delivery Failed' || p.status === 'Failed Attempt'
+                                ? 'bg-red-100 text-red-800 border border-red-200' 
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
                           }`}>
                             {p.status}
                           </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleParcelStatus(p.id, 'Delivered')}
+                              className={`px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                                p.status === 'Delivered'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200'
+                              }`}
+                            >
+                              ✓ Delivered
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleParcelStatus(p.id, 'Delivery Failed')}
+                              className={`px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                                p.status === 'Delivery Failed' || p.status === 'Failed Attempt'
+                                  ? 'bg-red-600 text-white shadow-xs'
+                                  : 'bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200'
+                              }`}
+                            >
+                              ✕ Failed
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3.5">
                           {p.paymentType === 'PAID' ? (

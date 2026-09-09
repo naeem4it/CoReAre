@@ -163,10 +163,10 @@ export default function OperationsArrivalsPage() {
         return;
       }
 
-      // 2. Mark as Arrived directly in Strapi
+      // 2. Mark as Arrived at the warehouse directly in Strapi
       await apiClient.put(`/parcels/${foundParcel.id}`, {
         data: {
-          status: 'Arrived',
+          status: 'Arrived at the warehouse',
           arrival_date: new Date().toISOString()
         }
       });
@@ -174,7 +174,7 @@ export default function OperationsArrivalsPage() {
       // 3. Audio & Visual success feedback
       playScannerBeep('success');
       triggerScanFlash('success');
-      triggerToast(`Parcel #${tracking} ARRIVED at Courier Facility!`, 'success');
+      triggerToast(`Parcel #${tracking} marked ARRIVED AT WAREHOUSE!`, 'success');
 
       // 4. Add to scanned list with real parcel details
       const newItem: ArrivalItem = {
@@ -185,7 +185,7 @@ export default function OperationsArrivalsPage() {
         pieces: foundParcel.pieces || Number(scanPieces) || 1,
         weight: foundParcel.weight || Number(scanWeight) || 0.5,
         codAmount: foundParcel.cod_amount || 0,
-        status: 'Arrived',
+        status: 'Arrived at the warehouse',
         arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       };
 

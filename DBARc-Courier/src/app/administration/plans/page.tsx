@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Plus, Search, Edit2, Trash2, Check, X, Shield, Building2, Layers, Percent, HelpCircle, Scale, Trash } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Check, X, Shield, Building2, Layers, Percent, HelpCircle, Scale, Trash, Sparkles } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -127,7 +127,10 @@ export default function TariffPlansPage() {
           })),
         }));
         setPlans(loadedPlans);
-        setSelectedPlanId(loadedPlans[0].id);
+        const firstStd = loadedPlans.find(p => !p.name?.trim().toLowerCase().includes('custom')) || loadedPlans[0];
+        if (firstStd) {
+          setSelectedPlanId(firstStd.id);
+        }
       } else {
         setPlans([]);
       }
@@ -141,6 +144,17 @@ export default function TariffPlansPage() {
     fetchMetadata();
   }, []);
 
+  // Check if a plan is a custom plan
+  const isCustomPlan = React.useCallback((p?: DynamicTariffPlan | null) => {
+    if (!p) return false;
+    return p.name?.trim().toLowerCase().includes('custom');
+  }, []);
+
+  // Standard/commercial plans that are available globally
+  const standardPlans = React.useMemo(() => {
+    return plans.filter(p => !isCustomPlan(p));
+  }, [plans, isCustomPlan]);
+
   // Selected active plan
   const activePlan = React.useMemo(() => {
     if (isShipper) {
@@ -148,10 +162,43 @@ export default function TariffPlansPage() {
         const assigned = plans.find(p => p.shippers.some(s => s.id === activeBusinessId));
         if (assigned) return assigned;
       }
-      return plans[0];
+      return standardPlans[0] || plans[0];
     }
-    return plans.find(p => p.id === selectedPlanId) || plans[0];
-  }, [plans, isShipper, activeBusinessId, selectedPlanId]);
+    if (selectedShipperFilter === 'all') {
+      const found = standardPlans.find(p => p.id === selectedPlanId);
+      return found || standardPlans[0] || plans[0];
+    }
+    return plans.find(p => p.id === selectedPlanId) || standardPlans[0] || plans[0];
+  }, [plans, isShipper, activeBusinessId, selectedPlanId, selectedShipperFilter, standardPlans]);
+
+  // Visible tabs based on shipper filter:
+  // - "All Shippers": ONLY standard commercial plans (no custom plans)
+  // - Filtered Shipper: Standard commercial plans + their dedicated Custom Plan tab (if configured)
+  const visibleTabs = React.useMemo(() => {
+    if (isShipper) {
+      if (activePlan) return [activePlan];
+      return standardPlans;
+    }
+
+    if (selectedShipperFilter === 'all') {
+      return standardPlans;
+    }
+
+    const currentShipper = shippersList.find(s => s.id === selectedShipperFilter);
+    const shipperPlanId = currentShipper?.shipper_plan?.id 
+      || (typeof currentShipper?.shipper_plan === 'number' ? currentShipper.shipper_plan : null);
+
+    const customPlanForShipper = plans.find(p => 
+      isCustomPlan(p) && 
+      ((shipperPlanId && p.id === shipperPlanId) || p.shippers?.some(s => s.id === selectedShipperFilter))
+    );
+
+    if (customPlanForShipper) {
+      return [...standardPlans, customPlanForShipper];
+    }
+
+    return standardPlans;
+  }, [isShipper, activePlan, selectedShipperFilter, standardPlans, shippersList, plans, isCustomPlan]);
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -306,7 +353,10 @@ export default function TariffPlansPage() {
       alert('You must have at least one tariff plan in the system.');
       return;
     }
-    if (confirm('Are you sure you want to delete this tariff plan?')) {
+    const targetPlan = plans.find(p => p.id === id);
+    const isCustom = isCustomPlan(targetPlan);
+
+    if (confirm(`Are you sure you want to delete this ${isCustom ? 'custom' : ''} tariff plan?`)) {
       try {
         await apiClient.delete(`/shipper-plans/${id}`).catch(() => null);
       } catch (e) {
@@ -314,7 +364,20 @@ export default function TariffPlansPage() {
       }
       const filtered = plans.filter(p => p.id !== id);
       setPlans(filtered);
-      setSelectedPlanId(filtered[0].id);
+      
+      const fallbackStd = filtered.find(p => !isCustomPlan(p)) || filtered[0];
+
+      if (isCustom && selectedShipperFilter !== 'all') {
+        const shipper = shippersList.find(s => s.id === selectedShipperFilter);
+        if (shipper && fallbackStd) {
+          apiClient.put(`/shippers/${shipper.id}/assign-plan`, { shipper_plan: fallbackStd.id }).catch(() => null);
+          setShippersList(prev => prev.map(s => s.id === shipper.id ? { ...s, shipper_plan: fallbackStd } : s));
+          setShipperAssignPlanId(fallbackStd.id);
+        }
+      }
+      if (fallbackStd) {
+        setSelectedPlanId(fallbackStd.id);
+      }
     }
   };
 
@@ -359,7 +422,7 @@ export default function TariffPlansPage() {
       }));
 
       setSelectedPlanId(shipperAssignPlanId);
-      alert(`Successfully updated Tariff Plan to "${matchedPlan?.name || 'Selected Plan'}" for "${shipper.name || 'Shipper'}"!`);
+      alert(`Successfully updated Tariff Plan to "${isCustomPlan(matchedPlan) ? 'Custom Plan' : (matchedPlan?.name || 'Selected Plan')}" for "${shipper.name || 'Shipper'}"!`);
     } catch (err: any) {
       console.error('Failed to assign tariff plan to shipper:', err);
       alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update tariff plan for shipper.');
@@ -375,13 +438,19 @@ export default function TariffPlansPage() {
       return;
     }
     const shipper = shippersList.find(s => s.id === selectedShipperFilter);
-    const shipperName = shipper?.name || shipper?.attributes?.name || `Shipper #${selectedShipperFilter}`;
+    const shipperPlanId = shipper?.shipper_plan?.id || (typeof shipper?.shipper_plan === 'number' ? shipper.shipper_plan : null);
+
+    // Look for existing custom plan for this shipper
+    const existingCustom = plans.find(p => 
+      isCustomPlan(p) && 
+      ((shipperPlanId && p.id === shipperPlanId) || p.shippers?.some(s => s.id === shipper?.id))
+    );
     
-    // Base it on the active plan or standard plan
-    const basePlan = activePlan || plans[0] || DEFAULT_STANDARD_PLAN;
+    // Base it on their existing custom plan, or active plan, or standard plan
+    const basePlan = existingCustom || activePlan || standardPlans[0] || plans[0] || DEFAULT_STANDARD_PLAN;
     
     setCustomPlanDraft({
-      name: `${shipperName} Custom Plan`,
+      name: 'Custom Plan',
       cashHandlingType: basePlan.cashHandlingType || 'percentage',
       cashHandlingValue: basePlan.cashHandlingValue || 1.5,
       cashHandlingMinFee: basePlan.cashHandlingMinFee || 30,
@@ -392,24 +461,25 @@ export default function TariffPlansPage() {
     setIsCustomPlanModalOpen(true);
   };
 
-  // Save Custom Plan specifically for this shipper
+  // Save Custom Plan specifically for this shipper - always saved as "Custom Plan"
   const handleSaveCustomPlanForShipper = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedShipperFilter === 'all') return;
     const shipper = shippersList.find(s => s.id === selectedShipperFilter);
     if (!shipper) return;
 
-    if (!customPlanDraft.name.trim()) {
-      alert('Please enter a plan name.');
-      return;
-    }
-
     try {
       setIsSavingCustomPlan(true);
 
+      const shipperPlanId = shipper?.shipper_plan?.id || (typeof shipper?.shipper_plan === 'number' ? shipper.shipper_plan : null);
+      const existingCustom = plans.find(p => 
+        isCustomPlan(p) && 
+        ((shipperPlanId && p.id === shipperPlanId) || p.shippers?.some(s => s.id === shipper.id))
+      );
+
       const payload = {
         data: {
-          name: customPlanDraft.name.trim(),
+          name: 'Custom Plan',
           cash_handling_type: customPlanDraft.cashHandlingType,
           cash_handling_value: Number(customPlanDraft.cashHandlingValue),
           cash_handling_min_fee: Number(customPlanDraft.cashHandlingMinFee || 0),
@@ -419,19 +489,27 @@ export default function TariffPlansPage() {
         }
       };
 
-      // 1. Create custom plan in Strapi
-      const createRes = await apiClient.post('/shipper-plans', payload);
-      const createdPlanData = createRes.data?.data;
-      const createdPlanId = createdPlanData?.id || Date.now();
+      let customPlanId: number;
+
+      if (existingCustom) {
+        // Update existing custom plan in Strapi
+        await apiClient.put(`/shipper-plans/${existingCustom.id}`, payload);
+        customPlanId = existingCustom.id;
+      } else {
+        // 1. Create new custom plan in Strapi
+        const createRes = await apiClient.post('/shipper-plans', payload);
+        const createdPlanData = createRes.data?.data;
+        customPlanId = createdPlanData?.id || Date.now();
+      }
 
       // 2. Assign plan to shipper
       await apiClient.put(`/shippers/${shipper.id}/assign-plan`, {
-        shipper_plan: createdPlanId
+        shipper_plan: customPlanId
       });
 
-      const newPlanObj: DynamicTariffPlan = {
-        id: createdPlanId,
-        name: customPlanDraft.name.trim(),
+      const updatedPlanObj: DynamicTariffPlan = {
+        id: customPlanId,
+        name: 'Custom Plan',
         cashHandlingType: customPlanDraft.cashHandlingType,
         cashHandlingValue: Number(customPlanDraft.cashHandlingValue),
         cashHandlingMinFee: Number(customPlanDraft.cashHandlingMinFee || 0),
@@ -441,27 +519,27 @@ export default function TariffPlansPage() {
       };
 
       // Update plans list
-      setPlans(prev => [...prev.filter(p => p.id !== createdPlanId), newPlanObj]);
+      setPlans(prev => [...prev.filter(p => p.id !== customPlanId), updatedPlanObj]);
 
       // Update shippersList
       setShippersList(prev => prev.map(s => {
         if (s.id === shipper.id) {
           return {
             ...s,
-            shipper_plan: newPlanObj
+            shipper_plan: updatedPlanObj
           };
         }
         return s;
       }));
 
       // Set active and assigned plan
-      setSelectedPlanId(createdPlanId);
-      setShipperAssignPlanId(createdPlanId);
+      setSelectedPlanId(customPlanId);
+      setShipperAssignPlanId(customPlanId);
       setIsCustomPlanModalOpen(false);
 
-      alert(`Custom tariff plan "${newPlanObj.name}" created and assigned to "${shipper.name || 'Shipper'}" successfully!`);
+      alert(`Custom tariff plan for "${shipper.name || 'Shipper'}" saved and assigned successfully!`);
     } catch (err: any) {
-      console.error('Failed to create custom tariff plan for shipper:', err);
+      console.error('Failed to create/update custom tariff plan for shipper:', err);
       alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to save custom tariff plan for shipper.');
     } finally {
       setIsSavingCustomPlan(false);
@@ -516,13 +594,25 @@ export default function TariffPlansPage() {
                 onChange={(e) => {
                   const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
                   setSelectedShipperFilter(val);
-                  if (val !== 'all') {
+                  if (val === 'all') {
+                    const firstStd = standardPlans[0] || plans[0];
+                    if (firstStd) {
+                      setSelectedPlanId(firstStd.id);
+                      setShipperAssignPlanId(firstStd.id);
+                    }
+                  } else {
                     const sh = shippersList.find(s => s.id === val);
                     const planId = sh?.shipper_plan?.id || (typeof sh?.shipper_plan === 'number' ? sh.shipper_plan : null);
-                    const foundPlan = (planId && plans.find(p => p.id === planId)) || plans.find(p => p.shippers?.some(s => s.id === val)) || plans[0];
+                    const foundPlan = (planId && plans.find(p => p.id === planId)) || plans.find(p => p.shippers?.some(s => s.id === val));
                     if (foundPlan) {
                       setSelectedPlanId(foundPlan.id);
                       setShipperAssignPlanId(foundPlan.id);
+                    } else {
+                      const firstStd = standardPlans[0] || plans[0];
+                      if (firstStd) {
+                        setSelectedPlanId(firstStd.id);
+                        setShipperAssignPlanId(firstStd.id);
+                      }
                     }
                   }
                 }}
@@ -531,7 +621,7 @@ export default function TariffPlansPage() {
                 <option value="all">All Shippers (Global Tariff Overview)</option>
                 {shippersList.map(sh => (
                   <option key={sh.id} value={sh.id}>
-                    {sh.name || `Shipper #${sh.id}`} {sh.shipper_plan?.name ? `(${sh.shipper_plan.name})` : ''}
+                    {sh.name || `Shipper #${sh.id}`} {sh.shipper_plan?.name ? `(${isCustomPlan(sh.shipper_plan) ? 'Custom Plan' : sh.shipper_plan.name})` : ''}
                   </option>
                 ))}
               </select>
@@ -544,7 +634,7 @@ export default function TariffPlansPage() {
                 <select
                   value={shipperAssignPlanId}
                   onChange={(e) => {
-                    if (e.target.value === 'custom') {
+                    if (e.target.value === 'new_custom') {
                       handleOpenCustomPlanForFilteredShipper();
                       return;
                     }
@@ -554,12 +644,30 @@ export default function TariffPlansPage() {
                   }}
                   className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                 >
-                  {plans.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                  <option value="custom" className="font-bold text-primary">
-                    + Custom Plan (Configure Rates...)
-                  </option>
+                  <optgroup label="Standard Commercial Plans">
+                    {standardPlans.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                  {(() => {
+                    const sh = shippersList.find(s => s.id === selectedShipperFilter);
+                    const planId = sh?.shipper_plan?.id || (typeof sh?.shipper_plan === 'number' ? sh.shipper_plan : null);
+                    const shCustom = plans.find(p => isCustomPlan(p) && ((planId && p.id === planId) || p.shippers?.some(s => s.id === selectedShipperFilter)));
+                    if (shCustom) {
+                      return (
+                        <optgroup label="Custom Plan">
+                          <option value={shCustom.id}>Custom Plan (Assigned)</option>
+                        </optgroup>
+                      );
+                    }
+                    return (
+                      <optgroup label="Custom Plan">
+                        <option value="new_custom" className="font-bold text-primary">
+                          + Configure Custom Plan...
+                        </option>
+                      </optgroup>
+                    );
+                  })()}
                 </select>
                 <button
                   onClick={handleAssignPlanToShipper}
@@ -568,6 +676,32 @@ export default function TariffPlansPage() {
                 >
                   {isAssigningPlan ? 'Saving...' : 'Save Plan for Shipper'}
                 </button>
+                {(() => {
+                  const sh = shippersList.find(s => s.id === selectedShipperFilter);
+                  const planId = sh?.shipper_plan?.id || (typeof sh?.shipper_plan === 'number' ? sh.shipper_plan : null);
+                  const shCustom = plans.find(p => isCustomPlan(p) && ((planId && p.id === planId) || p.shippers?.some(s => s.id === selectedShipperFilter)));
+                  if (shCustom) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleOpenCustomPlanForFilteredShipper}
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Edit Custom Rates
+                      </button>
+                    );
+                  } else {
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleOpenCustomPlanForFilteredShipper}
+                        className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Custom Plan
+                      </button>
+                    );
+                  }
+                })()}
               </div>
             )}
           </div>
@@ -578,34 +712,51 @@ export default function TariffPlansPage() {
           <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex-wrap gap-3">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Select Tariff Plan:</span>
-              {plans.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPlanId(p.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    selectedPlanId === p.id
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
+              {visibleTabs.map((p) => {
+                const isCustom = isCustomPlan(p);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setSelectedPlanId(p.id);
+                      if (selectedShipperFilter !== 'all') {
+                        setShipperAssignPlanId(p.id);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                      selectedPlanId === p.id
+                        ? isCustom
+                          ? 'bg-primary text-white border-primary shadow-sm'
+                          : 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {isCustom && <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                    {isCustom ? 'Custom Plan' : p.name}
+                  </button>
+                );
+              })}
             </div>
 
             {activePlan && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleOpenEdit(activePlan)}
+                  onClick={() => {
+                    if (isCustomPlan(activePlan)) {
+                      handleOpenCustomPlanForFilteredShipper();
+                    } else {
+                      handleOpenEdit(activePlan);
+                    }
+                  }}
                   className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200"
                 >
-                  <Edit2 className="w-3.5 h-3.5" /> Edit Active Tariff
+                  <Edit2 className="w-3.5 h-3.5" /> {isCustomPlan(activePlan) ? 'Edit Custom Rates' : 'Edit Active Tariff'}
                 </button>
                 <button
                   onClick={() => handleDeletePlan(activePlan.id)}
                   className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-red-200"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                  <Trash2 className="w-3.5 h-3.5" /> {isCustomPlan(activePlan) ? 'Delete Custom Plan' : 'Delete'}
                 </button>
               </div>
             )}
@@ -618,13 +769,26 @@ export default function TariffPlansPage() {
             
             {/* Tariff Matrix Title Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-900 pb-3 gap-2">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight underline underline-offset-8 decoration-slate-900">
-                Tariff & Price Plans
-              </h2>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight underline underline-offset-8 decoration-slate-900">
+                  Tariff & Price Plans
+                </h2>
+                {isCustomPlan(activePlan) && (
+                  <span className="bg-amber-100 text-amber-900 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-600" /> Custom Rates
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-slate-600 font-semibold flex items-center gap-2">
-                <span className="font-bold text-slate-900">{activePlan.name}</span>
+                <span className="font-bold text-slate-900">{isCustomPlan(activePlan) ? 'Custom Plan' : activePlan.name}</span>
                 <span className="text-slate-400">•</span>
-                <span>{activePlan.shippers.length} Shipper Accounts Assigned</span>
+                {isCustomPlan(activePlan) ? (
+                  <span className="text-primary font-bold">
+                    Exclusively Assigned to {activePlan.shippers?.[0]?.name || (selectedShipperFilter !== 'all' ? shippersList.find(s => s.id === selectedShipperFilter)?.name : 'Shipper')}
+                  </span>
+                ) : (
+                  <span>{activePlan.shippers?.length || 0} Shipper Accounts Assigned</span>
+                )}
               </div>
             </div>
 
@@ -993,16 +1157,17 @@ export default function TariffPlansPage() {
                 {/* Plan Name */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 block">
-                    Custom Plan Name <span className="text-red-500">*</span>
+                    Plan Name
                   </label>
                   <input
-                    required
                     type="text"
-                    placeholder="e.g. Acme VIP Custom Plan"
-                    value={customPlanDraft.name}
-                    onChange={e => setCustomPlanDraft(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
+                    value="Custom Plan"
+                    disabled
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl p-3 text-xs outline-none cursor-not-allowed"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                    Custom plans are standardized as &quot;Custom Plan&quot; and applied specifically to {shippersList.find(s => s.id === selectedShipperFilter)?.name || 'this shipper'}.
+                  </p>
                 </div>
 
                 {/* Cash Handling / COD Fees */}
