@@ -39,9 +39,9 @@ export const CoverageRules = () => {
   const currentPartner = tplPartners.find(p => String(p.id) === String(currentPartnerId));
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 min-h-[500px]">
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 min-h-[500px] w-full min-w-0">
       {/* Left: Regions List */}
-      <Card className="lg:w-1/3 flex flex-col overflow-hidden">
+      <Card className="w-full lg:w-1/3 flex flex-col overflow-hidden min-w-0">
         <div className="p-4 border-b bg-slate-50 font-bold text-slate-700 text-sm">
           Select Coverage Region
         </div>
@@ -70,8 +70,8 @@ export const CoverageRules = () => {
       </Card>
 
       {/* Right: Configuration Panel */}
-      <Card className="flex-1">
-        <CardContent className="p-8">
+      <Card className="flex-1 min-w-0 overflow-hidden">
+        <CardContent className="p-5 sm:p-8">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Coverage Engine: {selectedRegion}</h2>
             <p className="text-slate-500">Configure how parcels for {selectedRegion} should be routed.</p>

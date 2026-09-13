@@ -73,8 +73,10 @@ const playScannerBeep = (type: 'success' | 'error' = 'success') => {
 export default function OperationsArrivalsPage() {
   const { user } = useAuth();
   const [arrivalId, setArrivalId] = React.useState<string>(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [selectedOrigin, setSelectedOrigin] = React.useState<string>('hub-default');
   const [selectedRiderId, setSelectedRiderId] = React.useState<string>('');
   const [riders, setRiders] = React.useState<any[]>([]);
+  const [offices, setOffices] = React.useState<any[]>([]);
   
   // Barcode input states
   const [scanBarcode, setScanBarcode] = React.useState('');
@@ -111,22 +113,39 @@ export default function OperationsArrivalsPage() {
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Fetch active riders
+  // Fetch active origins (offices/hubs, riders, delivery routes)
   React.useEffect(() => {
-    const fetchRidersList = async () => {
+    const fetchOriginsList = async () => {
       try {
-        const res = await RiderService.getAll('?filters[status][$ne]=inactive');
-        const ridersList = res.data || [];
-        setRiders(ridersList);
-        if (ridersList.length > 0) {
-          setSelectedRiderId(String(ridersList[0].id));
+        const [ridersRes, officesRes] = await Promise.allSettled([
+          RiderService.getAll('?filters[status][$ne]=inactive&pagination[pageSize]=100'),
+          apiClient.get('/offices?populate=*&pagination[pageSize]=100')
+        ]);
+        
+        let loadedRiders: any[] = [];
+        if (ridersRes.status === 'fulfilled') {
+          loadedRiders = ridersRes.value.data || [];
+          setRiders(loadedRiders);
+        }
+        
+        let loadedOffices: any[] = [];
+        if (officesRes.status === 'fulfilled') {
+          loadedOffices = officesRes.value.data?.data || [];
+          setOffices(loadedOffices);
+        }
+
+        if (loadedOffices.length > 0) {
+          setSelectedOrigin(`office-${loadedOffices[0].id}`);
+        } else if (loadedRiders.length > 0) {
+          setSelectedOrigin(`rider-${loadedRiders[0].id}`);
+          setSelectedRiderId(String(loadedRiders[0].id));
         }
       } catch (err) {
-        console.warn('Could not load riders list:', err);
+        console.warn('Could not load origins list:', err);
       }
     };
 
-    fetchRidersList();
+    fetchOriginsList();
     barcodeInputRef.current?.focus();
   }, []);
 
@@ -163,10 +182,11 @@ export default function OperationsArrivalsPage() {
         return;
       }
 
-      // 2. Mark as Arrived at the warehouse directly in Strapi
-      await apiClient.put(`/parcels/${foundParcel.id}`, {
+      // 2. Mark as Arrived at the warehouse directly in Strapi (support Strapi 5 documentId)
+      const targetIdentifier = foundParcel.documentId || foundParcel.id;
+      await apiClient.put(`/parcels/${targetIdentifier}`, {
         data: {
-          status: 'Arrived at the warehouse',
+          status: 'Arrived',
           arrival_date: new Date().toISOString()
         }
       });
@@ -226,9 +246,14 @@ export default function OperationsArrivalsPage() {
     try {
       // Persist Arrival Batch Record
       try {
+        const riderIdNumber = selectedOrigin.startsWith('rider-')
+          ? Number(selectedOrigin.replace('rider-', ''))
+          : selectedRiderId
+          ? Number(selectedRiderId)
+          : null;
         await ArrivalService.createBatch({
           batch_id: arrivalId,
-          rider: selectedRiderId ? Number(selectedRiderId) : null,
+          rider: riderIdNumber,
           total_shipments: shipments.length,
           total_weight: totalWeight,
           total_pieces: totalPieces,
@@ -341,20 +366,38 @@ export default function OperationsArrivalsPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Origin / Delivering Van or Rider</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Origin / Delivering Hub, Van or Rider</label>
               <select
-                value={selectedRiderId}
-                onChange={(e) => setSelectedRiderId(e.target.value)}
+                value={selectedOrigin}
+                onChange={(e) => {
+                  setSelectedOrigin(e.target.value);
+                  if (e.target.value.startsWith('rider-')) {
+                    setSelectedRiderId(e.target.value.replace('rider-', ''));
+                  }
+                }}
                 className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
               >
-                {riders.length === 0 ? (
-                  <option value="">In-House Intake / Hub Facility</option>
-                ) : (
-                  riders.map((r: any) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} ({r.phone || 'No Phone'})
-                    </option>
-                  ))
+                <option value="hub-default">Central Hub / Warehouse Intake Facility</option>
+                {offices.length > 0 && (
+                  <optgroup label="Offices & Hub Facilities">
+                    {offices.map((o: any) => {
+                      const cityName = o.city?.CityName || o.city?.name || o.cityName || '';
+                      return (
+                        <option key={`office-${o.id}`} value={`office-${o.id}`}>
+                          🏢 {o.name || `Office #${o.id}`} {cityName ? `(${cityName})` : ''}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+                {riders.length > 0 && (
+                  <optgroup label="Delivery Vans & Riders">
+                    {riders.map((r: any) => (
+                      <option key={`rider-${r.id}`} value={`rider-${r.id}`}>
+                        🛵 {r.name} ({r.phone || 'Active Rider'})
+                      </option>
+                    ))}
+                  </optgroup>
                 )}
               </select>
             </div>

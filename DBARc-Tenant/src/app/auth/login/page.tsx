@@ -7,7 +7,7 @@ import { useAuthStore, UserRole } from '@/shared/model/auth.store';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
-import { Package, Lock, Mail, ArrowRight } from 'lucide-react';
+import { Package, Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +15,19 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [rememberMe, setRememberMe] = React.useState(false);
   const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tenantRememberedEmail');
+      if (saved) {
+        setEmail(saved);
+        setRememberMe(true);
+      }
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +70,12 @@ export default function LoginPage() {
       };
 
       setAuth(userData, accessToken, accessToken);
+
+      if (rememberMe) {
+        localStorage.setItem('tenantRememberedEmail', email);
+      } else {
+        localStorage.removeItem('tenantRememberedEmail');
+      }
 
       const redirects: Record<string, string> = {
         SUPER_ADMIN: '/admin',
@@ -134,19 +152,32 @@ export default function LoginPage() {
                 <Lock className="absolute left-3 top-9 h-4 w-4 text-slate-400 z-10" />
                 <Input
                   label="Password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
-                  className="pl-10 h-12"
+                  className="pl-10 pr-10 h-12"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-9 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer z-10 p-0.5"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
-                <input type="checkbox" className="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                <input 
+                  type="checkbox" 
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer" 
+                />
                 <span>Remember me</span>
               </label>
               <a href="#" className="text-primary-600 font-semibold hover:underline">

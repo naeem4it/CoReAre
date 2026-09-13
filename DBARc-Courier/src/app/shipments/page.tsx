@@ -21,6 +21,7 @@ import {
   MapPin, 
   ChevronLeft,
   ChevronRight,
+  Printer,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -296,6 +297,13 @@ export default function ShipmentsPage() {
             <p className="text-sm text-slate-500 font-medium">Monitor parcels, view live tracking status, and manage consignee details.</p>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/orders"
+              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-11 px-4 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
+            >
+              <Printer className="w-4 h-4 text-primary" />
+              Dispatch Slips (3-4/Page)
+            </Link>
             <Link
               href="/shipments/book"
               className="bg-primary hover:bg-primary/90 text-white h-11 px-5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"

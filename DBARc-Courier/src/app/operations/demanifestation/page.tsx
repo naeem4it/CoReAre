@@ -45,12 +45,18 @@ export default function OperationsDeManifestationPage() {
     try {
       const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(code)}&populate=*`);
       const parcel = res.data?.data?.[0];
+      const dest = typeof parcel?.destination_city === 'string'
+        ? parcel.destination_city
+        : (parcel?.destination_city?.city_name || parcel?.destination_city?.CityName || parcel?.destination_city?.name || 'Karachi');
+      const shp = typeof parcel?.shipper === 'string'
+        ? parcel.shipper
+        : (parcel?.shipper?.name || parcel?.shipper?.shipper_name || parcel?.pickup_location?.shipper?.name || 'Shipper Admin');
       const newItem: DeManifestItem = {
         id: Date.now().toString(),
         shipmentNumber: code,
-        shipper: parcel?.shipper?.name || parcel?.pickup_location?.shipper?.name || 'Unknown Shipper',
+        shipper: shp,
         consignee: parcel?.recipient_name || 'Unknown Consignee',
-        destination: parcel?.destination_city?.name || parcel?.destination_city || 'N/A',
+        destination: dest,
         pieces: parcel?.pieces || 1,
         weight: Number(parcel?.weight) || 1.0,
         status: 'Verified',
@@ -92,7 +98,8 @@ export default function OperationsDeManifestationPage() {
           const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
           const parcel = res.data?.data?.[0];
           if (parcel) {
-            await apiClient.put(`/parcels/${parcel.id}`, {
+            const pid = parcel.documentId || parcel.id;
+            await apiClient.put(`/parcels/${pid}`, {
               data: { status: 'Arrived at warehouse', arrival_date: new Date().toISOString() }
             });
           }
@@ -107,7 +114,8 @@ export default function OperationsDeManifestationPage() {
           const mRes = await apiClient.get(`/manifests?filters[manifest_number][$eq]=${manifestNumber}`);
           const mObj = mRes.data?.data?.[0];
           if (mObj) {
-            await apiClient.put(`/manifests/${mObj.id}`, { data: { status: 'Received' } });
+            const mid = mObj.documentId || mObj.id;
+            await apiClient.put(`/manifests/${mid}`, { data: { status: 'Received' } });
           }
         } catch (mErr) {
           console.warn('Manifest status update notice:', mErr);

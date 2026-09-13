@@ -163,8 +163,7 @@ export default function LoadSheetPage() {
     try {
       setLoadingParcels(true);
       const filters: any = {
-        load_sheet: { id: { $null: true } },
-        status: { $eq: 'Total Booking' },
+        status: { $in: ['Total Booking', 'Not Arrived', 'booked'] },
       };
 
       if (activeBusinessId) {
@@ -187,14 +186,16 @@ export default function LoadSheetPage() {
       const response = await apiClient.get('/parcels', {
         params: {
           filters,
-          populate: ['destination_city', 'source_city', 'shipper'],
+          populate: ['destination_city', 'source_city', 'shipper', 'load_sheet'],
           sort: ['createdAt:desc'],
-          pagination: { pageSize: 150 },
+          pagination: { pageSize: 250 },
         },
       });
 
       const list = response.data?.data || [];
-      setBookedParcels(list);
+      // Safe client-side check to exclude parcels already assigned to a load sheet
+      const unassignedList = list.filter((p: any) => !p.load_sheet);
+      setBookedParcels(unassignedList);
     } catch (err) {
       console.error('Failed to fetch booked parcels:', err);
       triggerToast('Failed to load booked orders.', 'error');

@@ -4,8 +4,8 @@ import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: {
-    default: "DBARc - Courier Logistics Portal",
-    template: "%s | DBARc Logistics",
+    default: "DBARc Express | Courier & Logistics Management",
+    template: "%s | DBARc Express",
   },
   description: "Enterprise Logistics & Courier Operations Portal",
 };

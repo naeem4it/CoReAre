@@ -97,10 +97,10 @@ export default function DeRunsheetPage() {
     const mappedParcels: RunsheetParcel[] = rawParcels.map((p: any) => {
       const pType: 'COD' | 'PAID' = p.payment_type === 'PAID' || Number(p.cod_amount) === 0 ? 'PAID' : 'COD';
       return {
-        id: p.id,
+        id: p.documentId || p.id,
         trackingNumber: p.tracking_number,
         consigneeName: p.recipient_name || 'Customer',
-        destination: p.destination_city?.name || p.recipient_address?.split(',').pop()?.trim() || 'Destination',
+        destination: p.destination_city?.city_name || p.destination_city?.CityName || p.destination_city?.name || p.recipient_address?.split(',').pop()?.trim() || 'Destination',
         status: p.status || 'Out For delivery',
         paymentType: pType,
         codAmount: Number(p.cod_amount) || 0,

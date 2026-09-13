@@ -73,12 +73,12 @@ const PAKISTAN_CITY_COORDINATES = [
 ];
 
 // Form validation schema using Zod for manual entry
-const preprocessNumber = (val: unknown) => {
+const preprocessNumberWithDefault = (val: unknown, fallback = 0) => {
   if (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
-    return undefined;
+    return fallback;
   }
   const n = Number(val);
-  return isNaN(n) ? val : n;
+  return isNaN(n) ? fallback : n;
 };
 
 const bookingSchema = z.object({
@@ -95,40 +95,34 @@ const bookingSchema = z.object({
   area: z.string().optional(),
   
   weight: z.preprocess(
-    preprocessNumber,
-    z.number({ message: 'Weight must be a valid number' }).min(0.1, 'Weight must be at least 0.1 kg')
+    (val) => preprocessNumberWithDefault(val, 0.5),
+    z.number().min(0.01, 'Weight must be at least 0.01 kg')
   ),
   pieces: z.preprocess(
-    preprocessNumber,
-    z.number({ message: 'Pieces must be a valid number' }).min(1, 'Must be at least 1 piece')
+    (val) => preprocessNumberWithDefault(val, 1),
+    z.number().min(1, 'Must be at least 1 piece')
   ),
   paymentType: z.enum(['COD', 'PAID']).default('COD'),
   codAmount: z.preprocess(
-    preprocessNumber,
-    z.number({ message: 'COD amount must be a valid number (enter 0 for prepaid)' }).min(0, 'COD amount cannot be negative')
+    (val) => preprocessNumberWithDefault(val, 0),
+    z.number().min(0, 'COD amount cannot be negative')
   ),
   productDescription: z.string().min(2, 'Product description is required'),
   serviceType: z.string().default('Overnight'),
   allowToOpen: z.string().default('No'),
   comments: z.string().optional(),
   
-  pickupDate: z.string().min(1, 'Pickup date is required'),
-  pickupTimeSlot: z.string().default('Morning (09 AM - 12 PM)'),
+  pickupDate: z.string().optional().or(z.literal('')),
+  pickupTimeSlot: z.string().optional().default('Morning (09 AM - 12 PM)'),
   pickupLocation: z.union([z.number(), z.string()]).optional(),
-  specialInstructions: z.string().optional(),
+  specialInstructions: z.string().optional().or(z.literal('')),
 
   // Replacement Fields (All Optional)
   referenceNo: z.string().optional().or(z.literal('')),
   collectReplacement: z.string().optional().default('No'),
   parcelDetail: z.string().optional().or(z.literal('')),
   collectRs: z.preprocess(
-    (val) => {
-      if (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
-        return 0;
-      }
-      const n = Number(val);
-      return isNaN(n) ? 0 : n;
-    },
+    (val) => preprocessNumberWithDefault(val, 0),
     z.number().min(0, 'Collect Rs must be positive').optional()
   ),
 });
@@ -1016,7 +1010,18 @@ function BookShipmentForm() {
       'productDescription'
     ];
     
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+    const sampleRow = [
+      'Ali Khan',
+      '+923001234567',
+      'House 123 Street 4 Block B',
+      'Lahore',
+      '1.0',
+      '1',
+      '2500',
+      'Cotton Clothes'
+    ];
+    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sampleRow.join(",") + "\n";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -1647,7 +1652,6 @@ function BookShipmentForm() {
                       name="pickupDate"
                       label="Pickup Date"
                       type="date"
-                      required
                     />
 
                     <SearchableDropdown<BookingFormValues>

@@ -858,7 +858,7 @@ export default function TariffPlansPage() {
                   <Percent className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-lg tracking-tight">Cash Handling Charges (Rs.)</h3>
+                  <h3 className="font-extrabold text-lg tracking-tight">Cash Handling Charges</h3>
                   <p className="text-xs text-amber-50 font-medium">Applied on collected Cash on Delivery (COD) amounts upon delivery confirmation.</p>
                 </div>
               </div>
@@ -931,7 +931,7 @@ export default function TariffPlansPage() {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">COD Charge Type</label>
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Cash Handling Charge Type</label>
                     <select
                       value={formCashHandlingType}
                       onChange={(e) => setFormCashHandlingType(e.target.value as any)}
@@ -943,7 +943,7 @@ export default function TariffPlansPage() {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">COD Charge Value</label>
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Cash Handling Charge Value</label>
                     <input
                       type="number"
                       step="0.1"

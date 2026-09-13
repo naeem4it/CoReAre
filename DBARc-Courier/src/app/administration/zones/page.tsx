@@ -22,7 +22,8 @@ import {
   HelpCircle,
   GripVertical,
   Globe,
-  ShieldCheck
+  ShieldCheck,
+  Save
 } from 'lucide-react';
 
 interface CityItem {
@@ -170,7 +171,9 @@ export default function ZoneSetupPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [citySearchQuery, setCitySearchQuery] = React.useState('');
   const [quickAddZoneId, setQuickAddZoneId] = React.useState<number | null>(null);
-  const [quickAddCityId, setQuickAddCityId] = React.useState<number | string>('');
+  const [quickAddSelectedCityIds, setQuickAddSelectedCityIds] = React.useState<number[]>([]);
+  const [quickAddSearch, setQuickAddSearch] = React.useState<string>('');
+  const [savingZoneId, setSavingZoneId] = React.useState<number | null>(null);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -376,7 +379,7 @@ export default function ZoneSetupPage() {
       if (editingRegion) {
         const match = currentRegions.find(r => r.id === editingRegion.id || r.name.toLowerCase() === editingRegion.name.toLowerCase());
         const editKey = match?.documentId || match?.id || editingRegion.documentId || editingRegion.id;
-        if (editKey && Number(editKey) > 0) {
+        if (editKey) {
           await apiClient.put(`/regions/${editKey}`, payload);
         } else {
           await apiClient.post('/regions', payload);
@@ -397,6 +400,41 @@ export default function ZoneSetupPage() {
     }
   };
 
+  // Explicit Save directly from Zone Card
+  const handleSaveZoneCard = async (region: RegionItem) => {
+    try {
+      setSavingZoneId(region.id);
+      const currentRegions = isUsingGlobalDefaults ? await ensureTenantSpecificZones() : regions;
+      const targetRegion = currentRegions.find(r => r.id === region.id || r.name.toLowerCase() === region.name.toLowerCase()) || region;
+
+      const updateKey = targetRegion.documentId || targetRegion.id;
+      const cityIds = targetRegion.cities.map(c => c.id).filter(id => id > 0);
+
+      const payload = {
+        data: {
+          name: targetRegion.name,
+          type: targetRegion.type,
+          active: targetRegion.active,
+          tenant: tenantId,
+          cities: cityIds
+        }
+      };
+
+      if (updateKey) {
+        await apiClient.put(`/regions/${updateKey}`, payload);
+      } else {
+        await apiClient.post('/regions', payload);
+      }
+
+      showNotification(`Saved zone "${targetRegion.name}" with ${targetRegion.cities.length} cities!`);
+    } catch (err) {
+      console.error('Failed to save zone card:', err);
+      showNotification('Failed to save zone changes.', 'error');
+    } finally {
+      setSavingZoneId(null);
+    }
+  };
+
   // Delete Zone
   const handleDeleteZone = async (regionId: number, regionName: string) => {
     if (!confirm(`Are you sure you want to delete zone "${regionName}"? All cities will become unassigned.`)) {
@@ -407,7 +445,7 @@ export default function ZoneSetupPage() {
       const currentRegions = isUsingGlobalDefaults ? await ensureTenantSpecificZones() : regions;
       const targetRegion = currentRegions.find(r => r.id === regionId || r.name.toLowerCase() === regionName.toLowerCase());
       const deleteKey = targetRegion?.documentId || targetRegion?.id || regionId;
-      if (deleteKey && Number(deleteKey) > 0) {
+      if (deleteKey) {
         await apiClient.delete(`/regions/${deleteKey}`);
       }
       setRegions(prev => prev.filter(r => r.id !== (targetRegion?.id || regionId)));
@@ -436,7 +474,7 @@ export default function ZoneSetupPage() {
       }));
 
       const updateKey = targetRegion.documentId || targetRegion.id;
-      if (updateKey && Number(updateKey) > 0) {
+      if (updateKey) {
         await apiClient.put(`/regions/${updateKey}`, {
           data: { cities: updatedCityIds }
         });
@@ -449,26 +487,28 @@ export default function ZoneSetupPage() {
     }
   };
 
-  // Quick Add City to Zone
-  const handleQuickAddCity = async (region: RegionItem) => {
-    if (!quickAddCityId) return;
-    const cityIdNum = Number(quickAddCityId);
-    let foundCity = allDbCities.find(c => c.id === cityIdNum);
-    if (!foundCity && typeof quickAddCityId === 'string') {
-      foundCity = { id: Math.floor(Math.random() * 100000) + 1000, name: quickAddCityId };
-    }
-    if (!foundCity) return;
+  // Quick Add Cities to Zone
+  const handleQuickAddCities = async (region: RegionItem) => {
+    if (quickAddSelectedCityIds.length === 0) return;
 
     try {
       const currentRegions = isUsingGlobalDefaults ? await ensureTenantSpecificZones() : regions;
       const targetRegion = currentRegions.find(r => r.id === region.id || r.name.toLowerCase() === region.name.toLowerCase()) || region;
 
-      if (targetRegion.cities.some(c => c.name.toLowerCase() === foundCity!.name.toLowerCase())) {
-        alert(`"${foundCity.name}" is already in ${region.name}.`);
+      const citiesToAdd: CityItem[] = [];
+      for (const id of quickAddSelectedCityIds) {
+        const found = allDbCities.find(c => c.id === id);
+        if (found && !targetRegion.cities.some(c => c.id === found.id || c.name.toLowerCase() === found.name.toLowerCase())) {
+          citiesToAdd.push(found);
+        }
+      }
+
+      if (citiesToAdd.length === 0) {
+        showNotification('Selected cities are already in this zone.', 'error');
         return;
       }
 
-      const updatedCities = [...targetRegion.cities, foundCity];
+      const updatedCities = [...targetRegion.cities, ...citiesToAdd];
       const updatedCityIds = updatedCities.map(c => c.id).filter(id => id > 0);
 
       setRegions(prev => prev.map(r => {
@@ -479,17 +519,18 @@ export default function ZoneSetupPage() {
       }));
 
       setQuickAddZoneId(null);
-      setQuickAddCityId('');
+      setQuickAddSelectedCityIds([]);
+      setQuickAddSearch('');
 
       const updateKey = targetRegion.documentId || targetRegion.id;
-      if (updateKey && Number(updateKey) > 0) {
+      if (updateKey) {
         await apiClient.put(`/regions/${updateKey}`, {
           data: { cities: updatedCityIds }
         });
       }
-      showNotification(`Added "${foundCity.name}" to ${region.name}`);
+      showNotification(`Added ${citiesToAdd.length} city(s) to ${region.name}!`);
     } catch (err) {
-      console.error('Failed to add city:', err);
+      console.error('Failed to add cities:', err);
       showNotification('Failed to update zone on server.', 'error');
       fetchData();
     }
@@ -554,12 +595,12 @@ export default function ZoneSetupPage() {
       const sourceKey = sourceRegion.documentId || sourceRegion.id;
       const targetKey = targetRegion.documentId || targetRegion.id;
 
-      if (sourceKey && Number(sourceKey) > 0) {
+      if (sourceKey) {
         promises.push(apiClient.put(`/regions/${sourceKey}`, {
           data: { cities: updatedSourceCities.map(c => c.id).filter(id => id > 0) }
         }));
       }
-      if (targetKey && Number(targetKey) > 0) {
+      if (targetKey) {
         promises.push(apiClient.put(`/regions/${targetKey}`, {
           data: { cities: updatedTargetCities.map(c => c.id).filter(id => id > 0) }
         }));
@@ -922,17 +963,32 @@ export default function ZoneSetupPage() {
                     </div>
 
                     {/* Zone Actions */}
-                    <div className="flex items-center gap-1.5 self-end sm:self-center">
+                    <div className="flex items-center gap-1.5 self-end sm:self-center flex-wrap">
+                      <button
+                        onClick={() => handleSaveZoneCard(region)}
+                        disabled={savingZoneId === region.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs transition-all disabled:opacity-50"
+                        title="Save zone and all assigned cities to server"
+                      >
+                        {savingZoneId === region.id ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Save className="w-3.5 h-3.5" />
+                        )}
+                        <span>Save</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setQuickAddZoneId(isQuickAddOpen ? null : region.id);
-                          setQuickAddCityId('');
+                          setQuickAddSelectedCityIds([]);
+                          setQuickAddSearch('');
                         }}
                         className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${isQuickAddOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                        title="Quickly add a city to this zone"
+                        title="Quickly add cities to this zone"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Add City
+                        Add City(s)
                       </button>
 
                       <button
@@ -962,35 +1018,107 @@ export default function ZoneSetupPage() {
 
                   {/* Inline Quick Add City Strip */}
                   {isQuickAddOpen && (
-                    <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-col sm:flex-row items-center gap-2 animate-in slide-in-from-top-2 duration-150">
-                      <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 shrink-0">
-                        Add city to {region.name}:
-                      </span>
-                      <select
-                        value={quickAddCityId}
-                        onChange={(e) => setQuickAddCityId(e.target.value)}
-                        className="text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
-                      >
-                        <option value="">Select a Pakistan city...</option>
-                        {unassignedCities.map(city => (
-                          <option key={city.id} value={city.id}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => handleQuickAddCity(region)}
-                        disabled={!quickAddCityId}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer shrink-0"
-                      >
-                        Add to Zone
-                      </button>
-                      <button
-                        onClick={() => setQuickAddZoneId(null)}
-                        className="p-1 text-slate-500 hover:text-slate-800 cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                    <div className="p-3.5 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-col gap-2.5 animate-in slide-in-from-top-2 duration-150">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                            Add City(s) to {region.name}:
+                          </span>
+                          <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full">
+                            {quickAddSelectedCityIds.length} Selected
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filteredIds = unassignedCities
+                                .filter(c => !quickAddSearch || c.name.toLowerCase().includes(quickAddSearch.toLowerCase()))
+                                .map(c => c.id);
+                              setQuickAddSelectedCityIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+                            }}
+                            className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:underline cursor-pointer"
+                          >
+                            Select All Matches
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setQuickAddSelectedCityIds([])}
+                            className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickAddCities(region)}
+                            disabled={quickAddSelectedCityIds.length === 0}
+                            className="ml-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs flex items-center gap-1.5"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Add to Zone
+                          </button>
+                          <button
+                            onClick={() => {
+                              setQuickAddZoneId(null);
+                              setQuickAddSelectedCityIds([]);
+                              setQuickAddSearch('');
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer rounded-lg hover:bg-slate-200/50"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Search Bar & City Chips Multi-Select */}
+                      <div className="flex flex-col gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                          <input
+                            type="text"
+                            value={quickAddSearch}
+                            onChange={(e) => setQuickAddSearch(e.target.value)}
+                            placeholder="Type to filter unassigned cities (e.g. Hyderabad, Sialkot, Larkana)..."
+                            className="w-full text-xs pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400"
+                          />
+                        </div>
+
+                        {/* Unassigned Cities Scrollable Checklist / Chips */}
+                        <div className="max-h-36 overflow-y-auto flex flex-wrap gap-1.5 p-2 bg-white/80 dark:bg-slate-800/80 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                          {unassignedCities
+                            .filter(c => !quickAddSearch || c.name.toLowerCase().includes(quickAddSearch.toLowerCase()))
+                            .map(city => {
+                              const isSelected = quickAddSelectedCityIds.includes(city.id);
+                              return (
+                                <button
+                                  key={city.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAddSelectedCityIds(prev => 
+                                      isSelected ? prev.filter(id => id !== city.id) : [...prev, city.id]
+                                    );
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all border ${
+                                    isSelected 
+                                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' 
+                                      : 'bg-slate-50 dark:bg-slate-700/60 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600'
+                                  }`}
+                                >
+                                  <span className={`w-3 h-3 rounded flex items-center justify-center text-[9px] ${isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-300 dark:border-slate-500'}`}>
+                                    {isSelected && '✓'}
+                                  </span>
+                                  <span>{city.name}</span>
+                                </button>
+                              );
+                            })}
+                          {unassignedCities.filter(c => !quickAddSearch || c.name.toLowerCase().includes(quickAddSearch.toLowerCase())).length === 0 && (
+                            <span className="text-xs text-slate-400 py-1 px-2 italic">
+                              No unassigned cities match "{quickAddSearch}"
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1056,7 +1184,7 @@ export default function ZoneSetupPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" onClick={() => !isSaving && setIsModalOpen(false)} />
-            <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200">
               
               <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div className="flex items-center gap-2">

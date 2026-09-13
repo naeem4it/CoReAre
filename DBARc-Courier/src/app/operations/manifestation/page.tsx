@@ -155,7 +155,8 @@ export default function OperationsManifestationPage() {
           const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
           const parcel = res.data?.data?.[0];
           if (parcel) {
-            await apiClient.put(`/parcels/${parcel.id}`, { 
+            const pid = parcel.documentId || parcel.id;
+            await apiClient.put(`/parcels/${pid}`, { 
               data: { 
                 status: 'In Transit',
                 ...(savedManifestId ? { manifest: savedManifestId } : {})

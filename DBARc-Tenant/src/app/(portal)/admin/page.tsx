@@ -1,9 +1,26 @@
+'use client';
+
+import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { BarChart3, Building2, ShieldCheck, Users } from 'lucide-react';
+import { apiClient } from '@/shared/api/api-client';
 
 export default function AdminDashboard() {
+  const [totalTenants, setTotalTenants] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    apiClient.get('/tenants?pagination[pageSize]=1')
+      .then((res) => {
+        const count = res.data?.meta?.pagination?.total ?? (res.data?.data?.length || 0);
+        setTotalTenants(count);
+      })
+      .catch(() => {
+        setTotalTenants(1);
+      });
+  }, []);
+
   const stats = [
-    { label: 'Total Tenants', value: '128', icon: Building2, color: 'text-blue-600' },
+    { label: 'Total Tenants', value: totalTenants !== null ? totalTenants.toLocaleString() : '...', icon: Building2, color: 'text-blue-600' },
     { label: 'Active Sessions', value: '1,420', icon: Users, color: 'text-emerald-600' },
     { label: 'System Health', value: '99.9%', icon: ShieldCheck, color: 'text-purple-600' },
     { label: 'Revenue (MTD)', value: '$42,500', icon: BarChart3, color: 'text-amber-600' },

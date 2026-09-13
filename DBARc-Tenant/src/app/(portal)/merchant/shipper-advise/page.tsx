@@ -25,15 +25,18 @@ import {
 
 interface DeliveryAttempt {
   id: number;
+  documentId?: string;
+  isParcelOnly?: boolean;
   attempt_time: string;
   status: string; // 'Attempt 1', 'Attempt 2', 'Attempt 3'
   failure_reason: string;
   rider_notes?: string;
-  shipper_advice?: string;
+  shipper_advice?: string | null;
   advice_status: 'Awaiting advice' | 'Re-attempt Requested' | 'Return to Shipper' | 'Failed' | 'Closed';
   createdAt: string;
   parcel?: {
     id: number;
+    documentId?: string;
     tracking_number: string;
     recipient_name: string;
     recipient_phone: string;
@@ -45,7 +48,7 @@ interface DeliveryAttempt {
   rider?: {
     name: string;
     phone?: string;
-  };
+  } | null;
 }
 
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
@@ -85,9 +88,38 @@ export default function ShipperAdvisePage() {
           populate: ['parcel', 'parcel.destination_city', 'rider'],
           sort: ['createdAt:desc'],
         },
-      });
-      const data = res.data?.data || [];
-      setAttempts(data);
+      }).catch(() => null);
+      const data = res?.data?.data || [];
+      if (data.length > 0) {
+        setAttempts(data);
+      } else {
+        // Fallback to querying real parcels that need shipper advice
+        const parcelsRes = await apiClient.get('/parcels', {
+          params: {
+            filters: {
+              status: { $in: ['Delivery Failed', 'Failed Attempt', 'Ready for Return', 'Ready To Return', 'Return to Shipper'] }
+            },
+            populate: ['destination_city', 'rider'],
+            sort: ['createdAt:desc'],
+            pagination: { pageSize: 50 },
+          }
+        }).catch(() => null);
+        const failedParcels = parcelsRes?.data?.data || [];
+        const mappedAttempts = failedParcels.map((p: any) => ({
+          id: p.id,
+          documentId: p.documentId,
+          isParcelOnly: true,
+          attempt_time: p.updatedAt || p.createdAt,
+          status: 'Attempt 1',
+          failure_reason: p.comments || 'Delivery Attempt Failed - Customer Not Responding',
+          shipper_advice: null,
+          advice_status: p.status === 'Ready for Return' || p.status === 'Ready To Return' || p.status === 'Return to Shipper' ? 'Failed' : 'Awaiting advice',
+          createdAt: p.createdAt,
+          parcel: p,
+          rider: p.rider ? { name: p.rider.name || 'Courier Rider', phone: p.rider.phone || '' } : null,
+        }));
+        setAttempts(mappedAttempts);
+      }
     } catch (err) {
       console.warn('Could not fetch delivery attempts from API:', err);
     } finally {
@@ -140,9 +172,9 @@ export default function ShipperAdvisePage() {
     return { expired: false, text: `${hours}h ${mins}m remaining` };
   };
 
-  const handleOpenAction = (attempt: DeliveryAttempt, type: 'reattempt' | 'rto') => {
+  const handleOpenAction = (attempt: any, type: 'reattempt' | 'rto' | 'return') => {
     setSelectedAttempt(attempt);
-    setActionType(type);
+    setActionType(type === 'return' ? 'rto' : type);
     setAdviceNotes('');
     setNewPhone(attempt.parcel?.recipient_phone || '');
     setPreferredDate(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
@@ -170,17 +202,25 @@ export default function ShipperAdvisePage() {
         ? `Re-attempt requested. Notes: ${adviceNotes.trim()} ${newPhone ? `| Alt Contact: ${newPhone}` : ''} ${preferredDate ? `| Preferred Date: ${preferredDate}` : ''}`
         : `Return Approved by Merchant. Notes: ${adviceNotes.trim() || 'Please return to merchant warehouse.'}`;
 
-      // 1. Update delivery attempt
-      await apiClient.put(`/delivery-attempts/${selectedAttempt.id}`, {
-        data: {
-          shipper_advice: adviceMessage,
-          advice_status: updatedStatus,
-        },
-      });
+      // 1. Update delivery attempt if real attempt
+      if (!selectedAttempt.isParcelOnly) {
+        try {
+          const attemptTarget = selectedAttempt.documentId || selectedAttempt.id;
+          await apiClient.put(`/delivery-attempts/${attemptTarget}`, {
+            data: {
+              shipper_advice: adviceMessage,
+              advice_status: updatedStatus,
+            },
+          });
+        } catch (attErr) {
+          console.warn('Could not update delivery attempt entity:', attErr);
+        }
+      }
 
-      // 2. Update parcel status
-      if (selectedAttempt.parcel?.id) {
-        await apiClient.put(`/parcels/${selectedAttempt.parcel.id}`, {
+      // 2. Update parcel status & comments
+      const parcelTarget = selectedAttempt.parcel?.documentId || selectedAttempt.parcel?.id || selectedAttempt.documentId || selectedAttempt.id;
+      if (parcelTarget) {
+        await apiClient.put(`/parcels/${parcelTarget}`, {
           data: {
             status: isReattempt ? 'Out For delivery' : 'Ready To Return',
             comments: adviceMessage,

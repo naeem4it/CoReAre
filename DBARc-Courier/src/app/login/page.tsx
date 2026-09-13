@@ -64,8 +64,15 @@ export default function LoginPage() {
         localStorage.removeItem('dbarc-token');
         localStorage.removeItem('user');
       }
+
+      // Restore remembered email if previously checked
+      const savedEmail = localStorage.getItem('rememberedEmail');
+      if (savedEmail) {
+        methods.setValue('identifier', savedEmail);
+        setRemember(true);
+      }
     }
-  }, [router]);
+  }, [router, methods]);
 
   const loginMutation = useMutation<LoginResponse, AxiosError<StrapiErrorResponse>, LoginRequest>({
     mutationFn: AuthService.login,
@@ -90,6 +97,12 @@ export default function LoginPage() {
         localStorage.removeItem('user');
         setError('Access Denied: Super Admin accounts cannot log into the Courier Portal. Please use the Super Admin Portal.');
         return;
+      }
+
+      if (remember) {
+        localStorage.setItem('rememberedEmail', methods.getValues('identifier'));
+      } else {
+        localStorage.removeItem('rememberedEmail');
       }
 
       localStorage.setItem('token', data.jwt);

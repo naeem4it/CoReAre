@@ -182,8 +182,8 @@ export default function ShipperAdvisePage() {
       }
 
       // 2. Update parcel status & details
-      const parcelId = selectedAttempt.parcel?.id || selectedAttempt.id;
-      if (parcelId) {
+      const parcelTarget = selectedAttempt.parcel?.documentId || selectedAttempt.parcel?.id || selectedAttempt.documentId || selectedAttempt.id;
+      if (parcelTarget) {
         const parcelData: any = {};
         if (isReturn) {
           parcelData.status = 'Ready for Return';
@@ -194,7 +194,7 @@ export default function ShipperAdvisePage() {
           parcelData.comments = finalAdvice;
         }
         if (Object.keys(parcelData).length > 0) {
-          await apiClient.put(`/parcels/${parcelId}`, { data: parcelData });
+          await apiClient.put(`/parcels/${parcelTarget}`, { data: parcelData });
         }
       }
 
@@ -218,7 +218,8 @@ export default function ShipperAdvisePage() {
     try {
       if (!attempt.isParcelOnly) {
         try {
-          await apiClient.put(`/delivery-attempts/${attempt.id}`, {
+          const attemptTarget = attempt.documentId || attempt.id;
+          await apiClient.put(`/delivery-attempts/${attemptTarget}`, {
             data: {
               shipper_advice: `Return to Shipper processed automatically (${reasonText})`,
               advice_status: 'Failed'
@@ -229,9 +230,9 @@ export default function ShipperAdvisePage() {
         }
       }
 
-      const parcelId = attempt.parcel?.id || attempt.id;
-      if (parcelId) {
-        await apiClient.put(`/parcels/${parcelId}`, {
+      const parcelTarget = attempt.parcel?.documentId || attempt.parcel?.id || attempt.documentId || attempt.id;
+      if (parcelTarget) {
+        await apiClient.put(`/parcels/${parcelTarget}`, {
           data: { status: 'Ready for Return' }
         });
       }
@@ -250,9 +251,9 @@ export default function ShipperAdvisePage() {
       return;
     }
     try {
-      const parcelId = attempt.parcel?.id || attempt.id;
-      if (parcelId) {
-        await apiClient.put(`/parcels/${parcelId}`, {
+      const parcelTarget = attempt.parcel?.documentId || attempt.parcel?.id || attempt.documentId || attempt.id;
+      if (parcelTarget) {
+        await apiClient.put(`/parcels/${parcelTarget}`, {
           data: { status: 'Return to Shipper' }
         });
       }

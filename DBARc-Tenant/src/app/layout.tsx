@@ -6,8 +6,11 @@ import { cn } from '@/shared/lib/utils';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'DBARc - Logistics SaaS',
-  description: 'Enterprise Multi-tenant Logistics Platform',
+  title: {
+    default: 'DBARc | Multi-Tenant Logistics & Merchant Portal',
+    template: '%s | DBARc Logistics',
+  },
+  description: 'Enterprise Multi-tenant Logistics & Merchant Portal',
 };
 
 export default function RootLayout({

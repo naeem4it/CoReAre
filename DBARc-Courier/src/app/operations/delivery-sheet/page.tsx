@@ -106,15 +106,22 @@ export default function OperationsDeliverySheetPage() {
       const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${barcode}&populate=*`);
       const parcel = res.data?.data?.[0];
 
+      const dest = typeof parcel?.destination_city === 'string'
+        ? parcel.destination_city
+        : (parcel?.destination_city?.city_name || parcel?.destination_city?.CityName || parcel?.destination_city?.name || 'LHE');
+      const shp = typeof parcel?.shipper === 'string'
+        ? parcel.shipper
+        : (parcel?.shipper?.name || parcel?.shipper?.shipper_name || parcel?.pickup_location?.shipper?.name || 'Assigned Merchant');
+
       const newItem: DeliveryShipment = {
         id: Date.now().toString(),
-        parcelId: parcel?.id,
+        parcelId: parcel?.documentId || parcel?.id,
         shipmentNumber: barcode,
         shipmentRef: `#${Math.floor(100000 + Math.random() * 900000)}`,
-        shipperName: parcel?.shipper?.name || 'Assigned Merchant',
+        shipperName: shp,
         consigneeName: parcel?.recipient_name || 'Recipient Consignee',
         consigneeAddress: parcel?.recipient_address || 'Delivery Address',
-        destination: parcel?.destination_city?.name || 'LHE',
+        destination: dest,
         pieces: 1,
         weight: parcel?.weight || 1.0,
         amountCollect: parcel?.cod_amount || 0,
@@ -167,7 +174,8 @@ export default function OperationsDeliverySheetPage() {
             const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${item.shipmentNumber}`);
             const p = parcelRes.data?.data?.[0];
             if (p) {
-              await apiClient.put(`/parcels/${p.id}`, {
+              const pid = p.documentId || p.id;
+              await apiClient.put(`/parcels/${pid}`, {
                 data: {
                   status: item.status,
                   comments: item.remarks || undefined,

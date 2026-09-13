@@ -62,6 +62,9 @@ export default function DashboardPage() {
     return cityFromShipper || addressFromShipper || cityFromTenant || officeName || 'Karachi';
   }, [user]);
 
+  // Selected status filter triggered by clicking tiles
+  const [selectedStatus, setSelectedStatus] = React.useState<string>('all');
+
   return (
     <PortalLayout>
       {/* Page Header & Date Range Controls */}
@@ -114,11 +117,21 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Stat Grid with Date Filtering */}
-      <CourierStats fromDate={fromDate} toDate={toDate} />
+      {/* Stat Grid with Date Filtering & Clickable Filter Tiles */}
+      <CourierStats 
+        fromDate={fromDate} 
+        toDate={toDate} 
+        selectedStatus={selectedStatus}
+        onSelectStatus={setSelectedStatus}
+      />
 
-      {/* Shipments Table with Date Filtering */}
-      <CourierShipmentsTable fromDate={fromDate} toDate={toDate} />
+      {/* Shipments Table with Date & Status Filtering */}
+      <CourierShipmentsTable 
+        fromDate={fromDate} 
+        toDate={toDate} 
+        selectedStatus={selectedStatus}
+        onSelectStatus={setSelectedStatus}
+      />
 
       {/* Operations Feed Grid */}
       <div className="mb-xl">

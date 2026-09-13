@@ -122,8 +122,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       : [];
   }, [user, isShipperUser]);
 
-  // Shipment booking menus hidden as requested
-  const showShipmentBooking = false;
+  // Quick Action FAB for shipment booking
+  const showShipmentBooking = true;
 
   if (!isAuthenticated) {
     return (

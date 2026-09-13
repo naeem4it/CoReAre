@@ -24,9 +24,16 @@ import { useAuth } from '@/components/AuthProvider';
 interface CourierShipmentsTableProps {
   fromDate?: string;
   toDate?: string;
+  selectedStatus?: string;
+  onSelectStatus?: (status: string) => void;
 }
 
-export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTableProps) => {
+export const CourierShipmentsTable = ({ 
+  fromDate, 
+  toDate, 
+  selectedStatus = 'all', 
+  onSelectStatus 
+}: CourierShipmentsTableProps) => {
   const router = useRouter();
   const { user, activeBusinessId } = useAuth();
   const [data, setData] = React.useState<ShipmentRow[]>([]);
@@ -138,12 +145,27 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
     fetchParcels();
   }, [isShipper, shipperId, fromDate, toDate]);
 
+  // Filter based on selectedStatus tile and search query
   React.useEffect(() => {
-    if (!searchQuery) {
-      setFilteredData(data);
-    } else {
+    let result = data;
+
+    if (selectedStatus && selectedStatus !== 'all') {
+      result = result.filter((row) => {
+        const s = (row.status || '').toLowerCase();
+        if (selectedStatus === 'not-arrived') return s === 'not arrived' || s === 'booked' || s === 'total booking';
+        if (selectedStatus === 'arrived') return s === 'arrived' || s === 'arrived at destination';
+        if (selectedStatus === 'out-for-delivery') return s.includes('out for delivery');
+        if (selectedStatus === 'delivered') return s === 'delivered';
+        if (selectedStatus === 'ready-to-return') return s.includes('ready') && s.includes('return');
+        if (selectedStatus === 'return-to-shipper') return s.includes('return') && !s.includes('ready');
+        if (selectedStatus === 'shipper-advice') return s.includes('failed');
+        return true;
+      });
+    }
+
+    if (searchQuery) {
       const lower = searchQuery.toLowerCase();
-      const filtered = data.filter(
+      result = result.filter(
         (row) =>
           row.trackingNumber.toLowerCase().includes(lower) ||
           row.customerName.toLowerCase().includes(lower) ||
@@ -151,9 +173,35 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
           row.destination.toLowerCase().includes(lower) ||
           row.status.toLowerCase().includes(lower)
       );
-      setFilteredData(filtered);
     }
-  }, [searchQuery, data]);
+    setFilteredData(result);
+  }, [searchQuery, data, selectedStatus]);
+
+  const handleExportCSV = () => {
+    if (filteredData.length === 0) {
+      alert('No shipment data to export.');
+      return;
+    }
+    const headers = ['Tracking ID', 'Customer', 'Origin', 'Destination', 'Status', 'Payment Type', 'COD Amount', 'Booking Time'];
+    const rows = filteredData.map(r => [
+      `"${r.trackingNumber}"`,
+      `"${r.customerName.replace(/"/g, '""')}"`,
+      `"${r.origin}"`,
+      `"${r.destination}"`,
+      `"${r.status}"`,
+      `"${r.paymentType}"`,
+      r.codAmount,
+      `"${r.eta}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `dbarc_shipments_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getStatusBadge = (status: ShipmentRow['status']) => {
     switch (status) {
@@ -194,8 +242,11 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
   return (
     <section className="mt-lg bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
       <div className="p-md border-b border-outline-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
-        <h2 className="font-headline-md text-headline-md text-on-surface">Active Operations Detail</h2>
-        <div className="flex items-center gap-sm w-full md:w-auto">
+        <div>
+          <h2 className="font-headline-md text-headline-md text-on-surface font-bold">Active Operations Detail</h2>
+          <p className="text-xs text-slate-500">Live parcel shipment stream with real-time operational status</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-sm w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <input
               className="w-full text-body-md border border-outline-variant rounded-lg py-1.5 pl-9 pr-3 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-container transition-all"
@@ -208,11 +259,42 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
               filter_list
             </span>
           </div>
-          <button className="bg-surface-container-high px-4 py-2 rounded-lg text-label-md font-label-md hover:bg-surface-container-highest transition-colors active:scale-95 cursor-pointer">
-            Export CSV
+
+          <button 
+            onClick={() => router.push('/orders')}
+            className="bg-primary/10 hover:bg-primary hover:text-white text-primary px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+            title="Open all orders and print dispatch slips"
+          >
+            <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+            <span>Orders & Slips</span>
+          </button>
+
+          <button 
+            onClick={handleExportCSV}
+            className="bg-surface-container-high px-4 py-2 rounded-lg text-label-md font-label-md hover:bg-surface-container-highest transition-colors active:scale-95 cursor-pointer flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-[16px]">download</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
+
+      {/* Active Filter Indicator Bar */}
+      {selectedStatus && selectedStatus !== 'all' && (
+        <div className="flex items-center gap-2 px-md py-2 bg-primary/5 border-b border-outline-variant text-xs text-slate-700">
+          <span className="font-bold">Active Tile Filter:</span>
+          <span className="px-2.5 py-0.5 bg-primary text-white rounded-full font-bold text-[11px] uppercase tracking-wider">
+            {selectedStatus.replace(/-/g, ' ')}
+          </span>
+          <span className="text-slate-400">({filteredData.length} records found)</span>
+          <button
+            onClick={() => onSelectStatus && onSelectStatus('all')}
+            className="ml-auto text-primary hover:underline font-bold text-xs cursor-pointer flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-[14px]">close</span> Clear Filter
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 text-on-surface-variant">
@@ -275,22 +357,35 @@ export const CourierShipmentsTable = ({ fromDate, toDate }: CourierShipmentsTabl
                     {row.eta}
                   </td>
                   <td className="px-md py-4">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/tracking?search=${row.trackingNumber.replace('#', '')}`);
-                      }}
-                      title="View tracking & shipment details"
-                      className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline group-hover:text-primary transition-colors cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined">visibility</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/tracking?search=${row.trackingNumber.replace('#', '')}`);
+                        }}
+                        title="View tracking & live timeline"
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-primary hover:text-white text-slate-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">visibility</span>
+                        <span>Track</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push('/orders');
+                        }}
+                        title="Open Orders & Slips"
+                        className="p-1 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-md py-12 text-center text-slate-500">
+                <td colSpan={7} className="px-md py-12 text-center text-slate-500">
                   No shipments found.
                 </td>
               </tr>

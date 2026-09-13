@@ -61,19 +61,16 @@ const bookingSchema = z.object({
     }).min(1, 'Must be at least 1 piece')
   ),
   codAmount: z.preprocess(
-    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? undefined : isNaN(Number(val)) ? val : Number(val)),
-    z.number({
-      required_error: 'COD amount should not be empty',
-      invalid_type_error: 'COD amount should not be empty',
-    }).min(0, 'COD amount cannot be negative')
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? 0 : isNaN(Number(val)) ? 0 : Number(val)),
+    z.number().min(0, 'COD amount cannot be negative')
   ),
   productDescription: z.string().min(2, 'Product description is required'),
   serviceType: z.string().default('Overnight'),
   allowToOpen: z.string().default('No'),
   comments: z.string().optional(),
   
-  pickupDate: z.string().min(1, 'Pickup date is required'),
-  pickupTimeSlot: z.string().default('Morning (09 AM - 12 PM)'),
+  pickupDate: z.string().optional().or(z.literal('')),
+  pickupTimeSlot: z.string().optional().default('Morning (09 AM - 12 PM)'),
   specialInstructions: z.string().optional(),
 
   // Replacement Fields
@@ -81,7 +78,7 @@ const bookingSchema = z.object({
   collectReplacement: z.string().default('No'),
   parcelDetail: z.string().optional(),
   collectRs: z.preprocess(
-    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? 0 : isNaN(Number(val)) ? val : Number(val)),
+    (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? 0 : isNaN(Number(val)) ? 0 : Number(val)),
     z.number().min(0, 'Collect Rs must be positive').optional()
   ),
 });
@@ -538,28 +535,26 @@ export default function BookShipmentPage() {
     const headers = [
       'consigneeName',
       'consigneePhone',
-      'consigneeEmail',
-      'consigneeAltPhone',
       'deliveryAddress',
       'destinationCity',
-      'area',
       'weight',
       'pieces',
       'codAmount',
-      'productDescription',
-      'serviceType',
-      'allowToOpen',
-      'comments',
-      'pickupDate',
-      'pickupTimeSlot',
-      'specialInstructions',
-      'referenceNo',
-      'collectReplacement',
-      'parcelDetail',
-      'collectRs'
+      'productDescription'
     ];
     
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+    const sampleRow = [
+      'Ali Khan',
+      '+923001234567',
+      'House 123 Street 4 Block B',
+      'Lahore',
+      '1.0',
+      '1',
+      '2500',
+      'Cotton Clothes'
+    ];
+    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sampleRow.join(",") + "\n";
       
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");

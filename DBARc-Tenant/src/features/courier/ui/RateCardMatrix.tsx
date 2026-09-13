@@ -23,10 +23,10 @@ export const RateCardMatrix = () => {
   };
 
   return (
-    <Card className="overflow-hidden border-slate-200">
-      <div className="p-6 bg-slate-50 border-b flex items-center justify-between">
+    <Card className="overflow-hidden border-slate-200 w-full min-w-0">
+      <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-primary-600 rounded-xl flex items-center justify-center text-white">
+          <div className="h-10 w-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shrink-0">
             <Calculator className="h-6 w-6" />
           </div>
           <div>
@@ -34,19 +34,19 @@ export const RateCardMatrix = () => {
             <p className="text-xs text-slate-500">Configure financial agreements for 3PL routing.</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={addRow} className="rounded-lg h-9">
-            <Plus className="h-4 w-4 mr-2" /> Add Route
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={addRow} className="rounded-lg h-9 text-xs">
+            <Plus className="h-4 w-4 mr-1.5" /> Add Route
           </Button>
-          <Button variant="primary" size="sm" className="rounded-lg h-9 shadow-lg shadow-primary-600/20">
-            <Save className="h-4 w-4 mr-2" /> Save Matrix
+          <Button variant="primary" size="sm" className="rounded-lg h-9 text-xs shadow-lg shadow-primary-600/20">
+            <Save className="h-4 w-4 mr-1.5" /> Save Matrix
           </Button>
         </div>
       </div>
       
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[650px] text-left text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50/50 text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b">
                 <th className="px-6 py-4">Origin</th>
