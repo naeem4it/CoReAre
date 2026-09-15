@@ -17,17 +17,20 @@ import {
 } from 'lucide-react';
 
 interface RunsheetParcel {
-  id: number;
+  id: string | number;
+  documentId?: string | undefined;
   trackingNumber: string;
   consigneeName: string;
   destination: string;
   status: string;
   paymentType: 'COD' | 'PAID';
   codAmount: number;
+  comments?: string | undefined;
 }
 
 interface DeliverySheetSummary {
   id: number;
+  documentId?: string | undefined;
   sheetNumber: string;
   riderName: string;
   date: string;
@@ -69,24 +72,66 @@ export default function DeRunsheetPage() {
     setIsLoading(true);
     try {
       const cleanNo = sheetNumber.trim().replace('#', '');
-      const res = await apiClient.get(`/delivery-sheets?filters[sheet_number][$eq]=${cleanNo}&populate[parcels][populate]=*&populate[rider]=*`);
-      const sheetData = res.data?.data?.[0];
 
+      // 1. Try finding delivery sheet by sheet_number
+      let res = await apiClient.get(`/delivery-sheets?filters[sheet_number][$eq]=${encodeURIComponent(cleanNo)}&populate[parcels]=true&populate[rider]=true`).catch(() => null);
+      let sheetData = res?.data?.data?.[0];
+
+      // 2. Try finding delivery sheet by parcel tracking number
       if (!sheetData) {
-        // Fallback by ID
-        const idRes = await apiClient.get(`/delivery-sheets/${cleanNo}?populate[parcels][populate]=*&populate[rider]=*`).catch(() => null);
+        res = await apiClient.get(`/delivery-sheets?filters[parcels][tracking_number][$eq]=${encodeURIComponent(cleanNo)}&populate[parcels]=true&populate[rider]=true`).catch(() => null);
+        sheetData = res?.data?.data?.[0];
+      }
+
+      // 3. Fallback by delivery sheet ID
+      if (!sheetData) {
+        const idRes = await apiClient.get(`/delivery-sheets/${encodeURIComponent(cleanNo)}?populate[parcels]=true&populate[rider]=true`).catch(() => null);
         if (idRes?.data?.data) {
-          populateSheet(idRes.data.data);
+          sheetData = idRes.data.data;
+        }
+      }
+
+      // 4. Fallback directly by parcel tracking number (e.g. DBA-KHI-596569)
+      if (!sheetData) {
+        const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(cleanNo)}&populate[destination_city]=true&populate[source_city]=true&populate[shipper]=true`).catch(() => null);
+        const parcel = parcelRes?.data?.data?.[0];
+        if (parcel) {
+          const pType: 'COD' | 'PAID' = parcel.payment_type === 'PAID' || Number(parcel.cod_amount) === 0 ? 'PAID' : 'COD';
+          const synthParcel: RunsheetParcel = {
+            id: parcel.documentId || String(parcel.id),
+            documentId: parcel.documentId,
+            trackingNumber: parcel.tracking_number,
+            consigneeName: parcel.recipient_name || 'Customer Consignee',
+            destination: parcel.destination_city?.CityName || parcel.destination_city?.name || parcel.recipient_address?.split(',').pop()?.trim() || 'Destination',
+            status: parcel.status || 'Out For delivery',
+            paymentType: pType,
+            codAmount: Number(parcel.cod_amount) || 0,
+          };
+          const synthSummary: DeliverySheetSummary = {
+            id: parcel.id,
+            documentId: parcel.documentId,
+            sheetNumber: `CN-${parcel.tracking_number}`,
+            riderName: 'On-Demand Courier / Rider',
+            date: new Date(parcel.createdAt || Date.now()).toLocaleDateString(),
+            status: parcel.status || 'Out For delivery',
+            parcels: [synthParcel],
+          };
+          setSelectedSheet(synthSummary);
+          const defaultCod = synthParcel.status === 'Delivered' && pType === 'COD' ? synthParcel.codAmount : 0;
+          setCashSurrendered(String(defaultCod));
+          triggerToast(`Consignment ${parcel.tracking_number} loaded for De-Runsheet closeout!`, 'success');
           return;
         }
-        triggerToast(`Runsheet #${sheetNumber} not found.`, 'error');
+
+        triggerToast(`Runsheet or Consignment #${sheetNumber} not found.`, 'error');
         setSelectedSheet(null);
         return;
       }
 
       populateSheet(sheetData);
     } catch (err: any) {
-      triggerToast(err?.message || 'Error fetching runsheet details.', 'error');
+      console.error('Error fetching runsheet:', err);
+      triggerToast(err?.response?.data?.error?.message || err?.message || 'Error fetching runsheet details.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -98,6 +143,7 @@ export default function DeRunsheetPage() {
       const pType: 'COD' | 'PAID' = p.payment_type === 'PAID' || Number(p.cod_amount) === 0 ? 'PAID' : 'COD';
       return {
         id: p.documentId || p.id,
+        documentId: p.documentId,
         trackingNumber: p.tracking_number,
         consigneeName: p.recipient_name || 'Customer',
         destination: p.destination_city?.city_name || p.destination_city?.CityName || p.destination_city?.name || p.recipient_address?.split(',').pop()?.trim() || 'Destination',
@@ -109,9 +155,10 @@ export default function DeRunsheetPage() {
 
     const summary: DeliverySheetSummary = {
       id: data.id,
+      documentId: data.documentId,
       sheetNumber: String(data.sheet_number || data.id),
       riderName: data.rider?.name || 'Assigned Rider',
-      date: data.date ? new Date(data.date).toLocaleDateString() : new Date(data.createdAt || Date.now()).toLocaleDateString(),
+      date: data.sheet_date || (data.date ? new Date(data.date).toLocaleDateString() : new Date(data.createdAt || Date.now()).toLocaleDateString()),
       status: data.status || 'Dispatched',
       parcels: mappedParcels,
     };
@@ -143,7 +190,7 @@ export default function DeRunsheetPage() {
 
   const cashDiff = (Number(cashSurrendered) || 0) - metrics.expectedCash;
 
-  const handleToggleParcelStatus = (parcelId: number, newStatus: 'Delivered' | 'Delivery Failed') => {
+  const handleToggleParcelStatus = (parcelId: string | number, newStatus: 'Delivered' | 'Delivery Failed') => {
     if (!selectedSheet) return;
     let comment: string | undefined;
     if (newStatus === 'Delivery Failed') {
@@ -154,9 +201,9 @@ export default function DeRunsheetPage() {
 
     setSelectedSheet(prev => {
       if (!prev) return null;
-      const updated = prev.parcels.map(p => {
-        if (p.id === parcelId) {
-          return { ...p, status: newStatus, comments: comment };
+      const updated: RunsheetParcel[] = prev.parcels.map(p => {
+        if (p.id === parcelId || p.documentId === parcelId) {
+          return { ...p, status: newStatus, comments: comment || undefined };
         }
         return p;
       });
@@ -170,29 +217,28 @@ export default function DeRunsheetPage() {
     setIsSubmitting(true);
     try {
       // 1. Update delivery sheet status
-      await apiClient.put(`/delivery-sheets/${selectedSheet.id}`, {
-        data: {
-          status: 'Closed',
-          cash_reconciled: Number(cashSurrendered) || 0,
-          reconciled_at: new Date().toISOString(),
-        }
-      }).catch((e) => console.warn('Delivery sheet update notice:', e));
+      if (!selectedSheet.sheetNumber.startsWith('CN-')) {
+        const targetSheetId = selectedSheet.documentId || selectedSheet.id;
+        await apiClient.put(`/delivery-sheets/${targetSheetId}`, {
+          data: {
+            status: 'Completed',
+          }
+        }).catch((e) => console.warn('Delivery sheet update notice:', e));
+      }
 
-      // 2. Update parcel statuses & payment status in Strapi
+      // 2. Update parcel statuses in Strapi
       for (const p of selectedSheet.parcels) {
         try {
           const updateData: any = { status: p.status };
           if (p.status === 'Delivered') {
             updateData.delivered_date = new Date().toISOString();
-            if (p.paymentType === 'COD') {
-              updateData.payment_status = 'Collected';
-            }
-          } else if (p.status === 'Delivery Failed') {
+          } else if (p.status === 'Delivery Failed' || p.status === 'Failed Attempt') {
             if ((p as any).comments) {
               updateData.comments = (p as any).comments;
             }
           }
-          await apiClient.put(`/parcels/${p.id}`, { data: updateData });
+          const targetParcelId = p.documentId || p.id;
+          await apiClient.put(`/parcels/${targetParcelId}`, { data: updateData });
         } catch (e) {
           console.warn(`Could not update parcel ${p.trackingNumber}:`, e);
         }
@@ -203,7 +249,8 @@ export default function DeRunsheetPage() {
       setSearchSheetNo('');
       fetchRecentSheets();
     } catch (err: any) {
-      triggerToast(err?.message || 'Failed to complete cashier closeout.', 'error');
+      console.error('Failed to complete closeout:', err);
+      triggerToast(err?.response?.data?.error?.message || err?.message || 'Failed to complete cashier closeout.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -257,7 +304,7 @@ export default function DeRunsheetPage() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Enter Runsheet Number (e.g. 5482910 or #5482910)..."
+                placeholder="Enter Runsheet Number (e.g. 1001) or Consignment Number (e.g. DBA-KHI-596569)..."
                 value={searchSheetNo}
                 onChange={(e) => setSearchSheetNo(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && loadSheetDetails(searchSheetNo)}

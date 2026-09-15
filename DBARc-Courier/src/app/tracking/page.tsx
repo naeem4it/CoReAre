@@ -71,6 +71,28 @@ function resolveCity(cityObj: any, address: string, fallback: string): string {
   return fallback;
 }
 
+// Calculates real delivery freight based on weight, distance (within-city vs inter-city) and service type
+function computeDeliveryCharges(item: any, isInterCity: boolean): number {
+  if (item.delivery_charges && Number(item.delivery_charges) > 0) {
+    return Number(item.delivery_charges);
+  }
+  const weight = Number(item.weight) || 0.5;
+  const isSecondDay = item.service_type === 'Second Day';
+  let baseRate = isInterCity ? 250 : 150;
+  let oneKgRate = isInterCity ? 300 : 200;
+  let addPerKg = isInterCity ? 200 : 150;
+
+  if (isSecondDay) {
+    baseRate = Math.round(baseRate * 0.85);
+    oneKgRate = Math.round(oneKgRate * 0.85);
+  }
+
+  if (weight <= 0.5) return baseRate;
+  if (weight <= 1.0) return oneKgRate;
+  const extraWeight = Math.ceil(weight - 1.0);
+  return oneKgRate + (extraWeight * addPerKg);
+}
+
 function TrackingPageContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams?.get('search') || '';
@@ -166,8 +188,12 @@ function TrackingPageContent() {
           const itemDescription = item.comments 
             || `${item.pieces || 1} Pc(s) ${item.shipment_type || 'Parcel'} (${item.service_type || 'Overnight'})`;
 
+          const docId = item.documentId || String(item.id);
+          const computedDeliveryCharges = computeDeliveryCharges(item, isInterCity);
+
           return {
             id: item.id,
+            documentId: docId,
             tracking_number: item.tracking_number,
             recipient_name: item.recipient_name || 'Customer Consignee',
             recipient_phone: item.recipient_phone || item.consignee_alt_phone || 'No phone recorded',
@@ -182,7 +208,7 @@ function TrackingPageContent() {
             destination: destCity,
             rider_name: handlerDisplay,
             cod_amount: Number(item.cod_amount) || 0,
-            delivery_charges: Number(item.delivery_charges) || 0,
+            delivery_charges: computedDeliveryCharges,
             weight: Number(item.weight) || 0.5,
             pieces: Number(item.pieces) || 1,
             service_type: item.service_type || 'Overnight',
@@ -194,6 +220,8 @@ function TrackingPageContent() {
             shipper_name: shipperName,
             load_sheet_no: item.load_sheet?.sheet_id || null,
             load_sheet_date: item.load_sheet?.date_created || null,
+            manifest_no: item.manifest?.manifest_number || null,
+            manifest_seal: item.manifest?.seal_no || null,
             is_self_booking: !item.shipper,
             is_inter_city: isInterCity,
             failure_reason: item.failure_reason || item.comments || '',
@@ -261,28 +289,34 @@ function TrackingPageContent() {
       if (editStatus === 'Delivered') {
         payload.delivered_date = new Date().toISOString();
       }
-      if (editStatus === 'Arrived at the warehouse') {
+      if (editStatus === 'Arrived at the warehouse' || editStatus === 'Arrived at warehouse') {
         payload.arrival_date = new Date().toISOString();
       }
 
-      await apiClient.put(`/parcels/${selectedOrder.id}`, {
+      const targetId = selectedOrder.documentId || selectedOrder.id;
+      await apiClient.put(`/parcels/${targetId}`, {
         data: payload
       });
 
       triggerToast(`Order ${selectedOrder.tracking_number} updated to "${editStatus}"`);
 
       // Update local state
+      const nowIso = new Date().toISOString();
       const updatedOrder = { 
         ...selectedOrder, 
         status: editStatus, 
-        failure_reason: statusComment,
-        updatedAt: new Date().toISOString()
+        failure_reason: statusComment || selectedOrder.failure_reason,
+        comments: statusComment || selectedOrder.comments,
+        updatedAt: nowIso,
+        delivered_date: editStatus === 'Delivered' ? nowIso : selectedOrder.delivered_date,
+        arrival_date: (editStatus === 'Arrived at the warehouse' || editStatus === 'Arrived at warehouse') ? nowIso : selectedOrder.arrival_date,
       };
       setSelectedOrder(updatedOrder);
-      setParcels(prev => prev.map(p => p.id === selectedOrder.id ? updatedOrder : p));
-    } catch (err) {
-      console.error('Failed to update status', err);
-      alert('Failed to update status. Please try again.');
+      setParcels(prev => prev.map(p => (p.id === selectedOrder.id || p.documentId === targetId) ? updatedOrder : p));
+    } catch (err: any) {
+      console.error('Failed to update status', err?.response?.data || err?.message || err);
+      const errMsg = err?.response?.data?.error?.message || 'Failed to update status. Please try again.';
+      alert(`Failed to update status: ${errMsg}`);
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -381,7 +415,9 @@ function TrackingPageContent() {
 
       events.push({
         title: 'In Transit (Linehaul Dispatch)',
-        description: `Dispatched on linehaul manifest from ${parcel.origin} towards ${parcel.destination}.`,
+        description: parcel.manifest_no 
+          ? `Dispatched on linehaul manifest #${parcel.manifest_no}${parcel.manifest_seal ? ` (Seal: ${parcel.manifest_seal})` : ''} from ${parcel.origin} towards ${parcel.destination}.`
+          : `Dispatched on linehaul manifest from ${parcel.origin} towards ${parcel.destination}.`,
         time: isInTransit ? `${updatedDate}, In Linehaul Transit` : 'Pending linehaul dispatch',
         status: 'In Transit',
         isCompleted: isInTransit,
@@ -600,18 +636,20 @@ function TrackingPageContent() {
         </div>
 
         {/* Quick Tracking Hero Search Bar */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-primary/95 text-white p-6 rounded-3xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex flex-col gap-1 max-w-xl">
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-primary text-white p-6 sm:p-7 rounded-2xl shadow-md flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6">
+          <div className="flex-1 min-w-0 flex flex-col gap-1.5">
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-primary-200 flex items-center gap-1.5">
-              <Barcode className="w-4 h-4" /> Instant Consignment Tracking
+              <Barcode className="w-4 h-4 text-primary-300 shrink-0" /> Instant Consignment Tracking
             </span>
-            <h3 className="text-lg font-bold text-white">Track Any Air Waybill (CN#) or Shipment</h3>
-            <p className="text-xs text-slate-300">
+            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight whitespace-nowrap">
+              Track Any Air Waybill (CN#) or Shipment
+            </h3>
+            <p className="text-xs text-slate-300 whitespace-nowrap">
               Enter any booking tracking number to immediately open the complete verification timeline.
             </p>
           </div>
 
-          <form onSubmit={handleDirectTrack} className="w-full md:w-auto flex-1 max-w-lg flex items-center gap-2">
+          <form onSubmit={handleDirectTrack} className="w-full md:w-auto md:min-w-[360px] md:max-w-md flex items-center gap-2 shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
               <input
@@ -619,12 +657,12 @@ function TrackingPageContent() {
                 placeholder="e.g. DBA-TP0QPRP, DBA-778899-PK..."
                 value={directSearch}
                 onChange={(e) => setDirectSearch(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 text-white placeholder-slate-400 rounded-xl py-2.5 pl-10 pr-3 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md"
+                className="w-full bg-white/15 border border-white/30 hover:border-white/50 focus:border-white text-white placeholder-slate-300 rounded-xl py-2.5 pl-10 pr-3 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-white/40 transition-all shadow-inner"
               />
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-white text-slate-900 font-bold text-xs rounded-xl hover:bg-slate-100 transition-all cursor-pointer shadow-sm shrink-0 flex items-center gap-1.5"
+              className="px-5 py-2.5 bg-white text-slate-900 font-bold text-xs rounded-xl hover:bg-slate-100 active:scale-95 transition-all cursor-pointer shadow-sm shrink-0 flex items-center gap-1.5 whitespace-nowrap"
             >
               <Navigation className="w-3.5 h-3.5 text-primary" /> Track
             </button>

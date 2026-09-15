@@ -149,8 +149,19 @@ export default function OperationsArrivalsPage() {
     barcodeInputRef.current?.focus();
   }, []);
 
-  // Continuous auto-focus on scanner input
-  const keepFocus = () => {
+  // Continuous auto-focus on scanner input (only when clicking blank area, never stealing focus from selects or inputs)
+  const keepFocus = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('select') ||
+      target.closest('input') ||
+      target.closest('button') ||
+      target.closest('textarea') ||
+      target.closest('a') ||
+      target.closest('[role="dialog"]')
+    ) {
+      return;
+    }
     barcodeInputRef.current?.focus();
   };
 
@@ -355,20 +366,24 @@ export default function OperationsArrivalsPage() {
         <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
           {/* Top Controls Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-slate-100">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Arrival Batch Code</label>
               <input
                 type="text"
                 value={arrivalId}
                 onChange={(e) => setArrivalId(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold font-mono text-slate-900 outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Origin / Delivering Hub, Van or Rider</label>
               <select
                 value={selectedOrigin}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 onChange={(e) => {
                   setSelectedOrigin(e.target.value);
                   if (e.target.value.startsWith('rider-')) {

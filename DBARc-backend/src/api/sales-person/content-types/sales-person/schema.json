@@ -1,0 +1,66 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sales_persons",
+  "info": {
+    "singularName": "sales-person",
+    "pluralName": "sales-persons",
+    "displayName": "Sales Person",
+    "description": "Sales persons and contractors associated with courier tenant"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "email"
+    },
+    "address": {
+      "type": "text"
+    },
+    "entity_type": {
+      "type": "enumeration",
+      "enum": [
+        "Our Employee",
+        "Contractor"
+      ],
+      "default": "Contractor"
+    },
+    "business_type": {
+      "type": "string"
+    },
+    "profit_type": {
+      "type": "enumeration",
+      "enum": [
+        "Fixed price",
+        "Percentage"
+      ],
+      "default": "Percentage"
+    },
+    "profit_value": {
+      "type": "decimal",
+      "default": 0
+    },
+    "employee": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    }
+  }
+}

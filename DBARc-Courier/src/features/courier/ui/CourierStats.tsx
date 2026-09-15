@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/shared/api/api-client';
+import { RiderService } from '@/services/api';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import { useAuth } from '@/components/AuthProvider';
@@ -139,8 +140,8 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
 
         // Fetch Enrolled Riders
         try {
-          const ridersRes = await apiClient.get('/riders?pagination[pageSize]=1').catch(() => null);
-          const rCount = ridersRes?.data?.meta?.pagination?.total ?? (ridersRes?.data?.data?.length || 0);
+          const ridersRes = await RiderService.getAll().catch(() => null);
+          const rCount = ridersRes?.data?.length || 0;
           setTotalRiders(rCount);
         } catch {
           setTotalRiders(0);

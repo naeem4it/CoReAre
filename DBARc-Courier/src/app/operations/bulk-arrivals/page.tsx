@@ -35,16 +35,13 @@ export default function OperationsBulkArrivalsPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
-  // Fetch real active riders from backend
+  // Fetch real active riders from backend (filtered by Rider role and courier tenant)
   React.useEffect(() => {
     const fetchRiders = async () => {
       try {
-        const res = await RiderService.getAll('?filters[status][$ne]=inactive');
+        const res = await RiderService.getAll();
         const ridersList = res.data || [];
         setRiders(ridersList);
-        if (ridersList.length > 0) {
-          setSelectedRiderId(String(ridersList[0].id));
-        }
       } catch (err) {
         console.warn('Could not load riders list:', err);
       }
@@ -53,7 +50,7 @@ export default function OperationsBulkArrivalsPage() {
   }, []);
 
   const handleDownloadFormat = () => {
-    const csvContent = "data:text/csv;charset=utf-8,CN,WEIGHT,PIECES\nDBA-100234,1.2,1\nDBA-100235,0.8,1\n";
+    const csvContent = "data:text/csv;charset=utf-8,CN,WEIGHT,PIECES\n";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);

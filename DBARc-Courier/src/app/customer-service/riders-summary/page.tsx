@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Download, UserCheck, Search } from 'lucide-react';
+import { Download, UserCheck, Search, RefreshCw } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
+import { RiderService, DeliverySheetService } from '@/services/api';
 
 interface RiderSummaryRow {
   sNo: number;
@@ -32,36 +33,87 @@ export default function CustomerServiceRidersSummaryPage() {
   const fetchRiderSummary = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      let url = '/parcels?populate[rider]=*&pagination[pageSize]=1000';
-      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
-      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+      const [ridersRes, sheetsRes, parcelsRes] = await Promise.allSettled([
+        RiderService.getAll(),
+        DeliverySheetService.getAll('?sort[0]=createdAt:desc&pagination[pageSize]=500'),
+        apiClient.get(`/parcels?pagination[pageSize]=1000${fromDate ? `&filters[createdAt][$gte]=${fromDate}` : ''}${toDate ? `&filters[createdAt][$lte]=${toDate}T23:59:59` : ''}`)
+      ]);
 
-      const res = await apiClient.get(url);
-      const parcels: any[] = res.data?.data || [];
+      const ridersList: any[] = ridersRes.status === 'fulfilled' ? ridersRes.value.data || [] : [];
+      const sheetsList: any[] = sheetsRes.status === 'fulfilled' ? sheetsRes.value.data || [] : [];
+      const parcelsList: any[] = parcelsRes.status === 'fulfilled' ? parcelsRes.value.data?.data || [] : [];
 
-      const groups: Record<string, { riderCode: string; riderName: string; parcels: any[] }> = {};
-      for (const p of parcels) {
-        const rider = p.rider;
-        if (!rider) continue;
-        const key = String(rider.id);
-        if (!groups[key]) {
-          groups[key] = {
-            riderCode: String(rider.id),
-            riderName: rider.name || rider.attributes?.name || `Rider #${rider.id}`,
-            parcels: [],
-          };
-        }
-        groups[key].parcels.push(p);
+      // Create a lookup of parcel by tracking number
+      const parcelMap = new Map<string, any>();
+      for (const p of parcelsList) {
+        if (p.tracking_number) parcelMap.set(p.tracking_number.toUpperCase(), p);
       }
 
-      const rows: RiderSummaryRow[] = Object.values(groups).map((g, i) => {
+      // Aggregate delivery sheet assignments per rider
+      const riderStats = new Map<string, {
+        riderCode: string;
+        riderName: string;
+        parcels: any[];
+      }>();
+
+      // Initialize all active courier tenant riders first
+      ridersList.forEach((r: any) => {
+        const key = String(r.id);
+        riderStats.set(key, {
+          riderCode: r.rider_code || String(r.id),
+          riderName: r.name || r.username || `Rider #${r.id}`,
+          parcels: [],
+        });
+      });
+
+      // Process delivery sheets
+      sheetsList.forEach((sheet: any) => {
+        const rName = sheet.rider_name || sheet.rider?.name;
+        let matchedKey: string | null = null;
+        for (const [key, val] of riderStats.entries()) {
+          if (
+            (rName && val.riderName.toLowerCase() === rName.toLowerCase()) ||
+            (sheet.rider?.id && String(sheet.rider.id) === key)
+          ) {
+            matchedKey = key;
+            break;
+          }
+        }
+
+        if (!matchedKey && rName) {
+          matchedKey = `custom-${rName}`;
+          riderStats.set(matchedKey, {
+            riderCode: sheet.route_code || 'R-01',
+            riderName: rName,
+            parcels: [],
+          });
+        }
+
+        if (matchedKey) {
+          const entry = riderStats.get(matchedKey)!;
+          const items: any[] = Array.isArray(sheet.parcels_data) ? sheet.parcels_data : [];
+          items.forEach((item: any) => {
+            const tracking = (item.shipmentNumber || item.tracking_number || '').toUpperCase();
+            const liveParcel = tracking ? parcelMap.get(tracking) : null;
+            entry.parcels.push({
+              status: liveParcel?.status || item.status || 'Out For Delivery',
+              cod_amount: liveParcel?.cod_amount || item.amountCollect || item.cod_amount || 0,
+            });
+          });
+        }
+      });
+
+      const rows: RiderSummaryRow[] = Array.from(riderStats.values()).map((g, i) => {
         const total = g.parcels.length;
         const delivered = g.parcels.filter(p => p.status === 'Delivered').length;
-        const returned = g.parcels.filter(p => ['Ready To Return', 'Returned'].includes(p.status)).length;
-        const ofd = g.parcels.filter(p => p.status === 'Out For Delivery').length;
+        const returned = g.parcels.filter(p => ['Ready To Return', 'Returned', 'Failed Attempt'].includes(p.status)).length;
+        const ofd = g.parcels.filter(p => ['Out For Delivery', 'Out for Delivery', 'In Transit'].includes(p.status)).length;
         const pending = Math.max(0, total - delivered - returned - ofd);
         const totalAmt = g.parcels.reduce((a, p) => a + (Number(p.cod_amount) || 0), 0);
         const deliveredAmt = g.parcels.filter(p => p.status === 'Delivered').reduce((a, p) => a + (Number(p.cod_amount) || 0), 0);
+        const ofdAmt = g.parcels.filter(p => ['Out For Delivery', 'Out for Delivery'].includes(p.status)).reduce((a, p) => a + (Number(p.cod_amount) || 0), 0);
+        const returnedAmt = g.parcels.filter(p => ['Ready To Return', 'Returned', 'Failed Attempt'].includes(p.status)).reduce((a, p) => a + (Number(p.cod_amount) || 0), 0);
+
         return {
           sNo: i + 1,
           riderCode: g.riderCode,
@@ -69,18 +121,18 @@ export default function CustomerServiceRidersSummaryPage() {
           totalAlignedCount: total,
           totalAlignedAmount: totalAmt,
           outForDeliveryCount: ofd,
-          outForDeliveryAmount: g.parcels.filter(p => p.status === 'Out For Delivery').reduce((a, p) => a + (Number(p.cod_amount) || 0), 0),
+          outForDeliveryAmount: ofdAmt,
           pendingCount: pending,
           pendingAmount: 0,
           returnedCount: returned,
-          returnedAmount: g.parcels.filter(p => ['Ready To Return', 'Returned'].includes(p.status)).reduce((a, p) => a + (Number(p.cod_amount) || 0), 0),
+          returnedAmount: returnedAmt,
           deliveredCount: delivered,
           deliveredAmount: deliveredAmt,
           ratio: total > 0 ? Math.round((delivered / total) * 100) : 0,
         };
       });
 
-      rows.sort((a, b) => b.deliveredCount - a.deliveredCount);
+      rows.sort((a, b) => b.totalAlignedCount - a.totalAlignedCount || b.deliveredCount - a.deliveredCount);
       setSummaryData(rows);
     } catch (err) {
       console.error('Failed to load rider summary:', err);

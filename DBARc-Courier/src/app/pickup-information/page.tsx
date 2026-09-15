@@ -4,6 +4,7 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { useForm } from 'react-hook-form';
 import { apiClient } from '@/shared/api/api-client';
+import { RiderService } from '@/services/api';
 
 interface PickupFormValues {
   clientName: string;
@@ -21,8 +22,8 @@ export default function PickupInformationPage() {
   const [riders, setRiders] = React.useState<any[]>([]);
 
   React.useEffect(() => {
-    apiClient.get('/riders').then(res => {
-      setRiders(res.data?.data || []);
+    RiderService.getAll().then(res => {
+      setRiders(res.data || []);
     }).catch(err => console.warn('Could not fetch riders:', err));
   }, []);
 

@@ -41,7 +41,7 @@ export default function CustomerServiceOrderReportPage() {
   const fetchReport = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      let url = '/parcels?populate[shipper]=*&populate[destination_city]=*&populate[origin_city]=*&pagination[pageSize]=500';
+      let url = '/parcels?populate[shipper]=*&populate[destination_city]=*&populate[source_city]=*&populate[pickup_location][populate]=*&pagination[pageSize]=500';
       if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
       if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
       if (selectedStatus !== 'All') url += `&filters[status][$eq]=${encodeURIComponent(selectedStatus)}`;
@@ -55,7 +55,7 @@ export default function CustomerServiceOrderReportPage() {
         flyCn: p.tracking_number || String(p.id),
         tplCn: p.poly_tracking || p.tpl_tracking || '-',
         tplName: p.tpl_name || p.carrier || '-',
-        origin: p.origin_city?.name || p.pickup_location?.city?.name || 'N/A',
+        origin: p.source_city?.name || p.source_city?.CityName || p.pickup_location?.city?.name || 'N/A',
         dest: p.destination_city?.name || p.destination_city || 'N/A',
         bookingDate: p.createdAt ? p.createdAt.split('T')[0] : '',
         arrivalDate: p.arrival_date ? p.arrival_date.split('T')[0] : '',

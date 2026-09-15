@@ -61,6 +61,40 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::tpl-partner.tpl-partner"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "email"
+    },
+    "address": {
+      "type": "text"
+    },
+    "entity_type": {
+      "type": "enumeration",
+      "enum": [
+        "Our Employee",
+        "Contractor"
+      ],
+      "default": "Contractor"
+    },
+    "profit_type": {
+      "type": "enumeration",
+      "enum": [
+        "Fixed price",
+        "Percentage"
+      ],
+      "default": "Percentage"
+    },
+    "profit_value": {
+      "type": "decimal",
+      "default": 0
+    },
+    "employee": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }

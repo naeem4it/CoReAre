@@ -1691,6 +1691,50 @@ export interface ApiRoleDefinitionRoleDefinition
   };
 }
 
+export interface ApiSalesPersonSalesPerson extends Struct.CollectionTypeSchema {
+  collectionName: 'sales_persons';
+  info: {
+    description: 'Sales persons and contractors associated with courier tenant';
+    displayName: 'Sales Person';
+    pluralName: 'sales-persons';
+    singularName: 'sales-person';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text;
+    business_type: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email;
+    employee: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    entity_type: Schema.Attribute.Enumeration<['Our Employee', 'Contractor']> &
+      Schema.Attribute.DefaultTo<'Contractor'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::sales-person.sales-person'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
+    profit_type: Schema.Attribute.Enumeration<['Fixed price', 'Percentage']> &
+      Schema.Attribute.DefaultTo<'Percentage'>;
+    profit_value: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.String & Schema.Attribute.DefaultTo<'active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiShipperPlanShipperPlan extends Struct.CollectionTypeSchema {
   collectionName: 'shipper_plans';
   info: {
@@ -1794,12 +1838,20 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
   };
   attributes: {
     account_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    address: Schema.Attribute.Text;
     api_key: Schema.Attribute.String & Schema.Attribute.Unique;
     business_type: Schema.Attribute.String;
     couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    email: Schema.Attribute.Email;
+    employee: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    entity_type: Schema.Attribute.Enumeration<['Our Employee', 'Contractor']> &
+      Schema.Attribute.DefaultTo<'Contractor'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1807,6 +1859,7 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String;
     pickup_locations: Schema.Attribute.Relation<
       'oneToMany',
       'api::pickup-location.pickup-location'
@@ -1815,6 +1868,9 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::tpl-partner.tpl-partner'
     >;
+    profit_type: Schema.Attribute.Enumeration<['Fixed price', 'Percentage']> &
+      Schema.Attribute.DefaultTo<'Percentage'>;
+    profit_value: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
     shipper_plan: Schema.Attribute.Relation<
       'manyToOne',
@@ -2669,6 +2725,7 @@ declare module '@strapi/strapi' {
       'api::rider-location-history.rider-location-history': ApiRiderLocationHistoryRiderLocationHistory;
       'api::rider.rider': ApiRiderRider;
       'api::role-definition.role-definition': ApiRoleDefinitionRoleDefinition;
+      'api::sales-person.sales-person': ApiSalesPersonSalesPerson;
       'api::shipper-plan.shipper-plan': ApiShipperPlanShipperPlan;
       'api::shipper-wallet.shipper-wallet': ApiShipperWalletShipperWallet;
       'api::shipper.shipper': ApiShipperShipper;

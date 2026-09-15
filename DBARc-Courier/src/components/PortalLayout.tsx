@@ -335,21 +335,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <span className="text-[10px] font-medium">Reports</span>
         </Link>
       </nav>
-
-      {/* FAB for Quick Actions */}
-      {showShipmentBooking && (
-        <Link
-          href="/shipments/book"
-          title="Book New Shipment (Quick Action)"
-          aria-label="Book New Shipment"
-          className="fixed bottom-24 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:bottom-8 z-40 cursor-pointer group"
-        >
-          <span className="material-symbols-outlined text-[32px]">add</span>
-          <span className="absolute right-16 bg-slate-900 text-white text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-md hidden sm:block">
-            Book New Shipment
-          </span>
-        </Link>
-      )}
     </div>
   );
 }
@@ -459,6 +444,34 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             <span className="material-symbols-outlined text-[20px]">map</span>
             <span className="font-label-md text-label-md">Zone Setup</span>
           </Link>
+
+          {isCourierAdmin && (
+            <Link
+              href="/administration/sales-person"
+              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                pathname === '/administration/sales-person' || pathname === '/administration/sales-persons'
+                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">badge</span>
+              <span className="font-label-md text-label-md">Sales Person</span>
+            </Link>
+          )}
+
+          {isCourierAdmin && (
+            <Link
+              href="/administration/shippers"
+              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                pathname === '/administration/shippers'
+                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">storefront</span>
+              <span className="font-label-md text-label-md">Shipper Setup</span>
+            </Link>
+          )}
 
           {isCourierAdmin && (
             <Link

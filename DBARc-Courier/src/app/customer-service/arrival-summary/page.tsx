@@ -4,6 +4,8 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { Download, RefreshCw, Search, BarChart3 } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
+import { SearchableSelect, SearchableOption } from '@/components/ui/SearchableSelect';
+import { FLAT_PAKISTAN_LOCATIONS } from '@/shared/data/pakistan-locations';
 
 interface ArrivalSummaryRow {
   sNo: number;
@@ -32,12 +34,52 @@ export default function CustomerServiceArrivalSummaryPage() {
   const [selectedSalesPerson, setSelectedSalesPerson] = React.useState('All');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [summaryData, setSummaryData] = React.useState<ArrivalSummaryRow[]>([]);
+  const [allShippers, setAllShippers] = React.useState<any[]>([]);
+  const [allSalesPersons, setAllSalesPersons] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
+
+  // Fetch all registered shippers and sales persons from database
+  React.useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const res = await apiClient.get('/shippers?populate=*&pagination[pageSize]=500');
+        const list = res.data?.data || [];
+        setAllShippers(list);
+      } catch (err) {
+        console.warn('Could not load shippers from database:', err);
+      }
+
+      try {
+        const spRes = await apiClient.get('/sales-persons?populate=*&pagination[pageSize]=500');
+        const spList = spRes.data?.data || [];
+        setAllSalesPersons(spList);
+      } catch {
+        // Fallback: check shippers with entity_type or profit_value
+        try {
+          const spResFallback = await apiClient.get('/shippers?filters[entity_type][$notNull]=true&pagination[pageSize]=500');
+          setAllSalesPersons(spResFallback.data?.data || []);
+        } catch (e2) {
+          console.warn('Could not load sales persons from database:', e2);
+        }
+      }
+    };
+    fetchDropdownData();
+  }, []);
 
   const fetchArrivalSummary = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      let url = '/parcels?populate[shipper]=*&populate[destination_city]=*&filters[status][$in][0]=Arrived&filters[status][$in][1]=Arrived At Destination&filters[status][$in][2]=Out For delivery&filters[status][$in][3]=Delivered&pagination[pageSize]=500';
+      const statusFilters = [
+        'Arrived',
+        'Arrived at warehouse',
+        'Arrived at the warehouse',
+        'Arrived At Destination',
+        'Out for Delivery',
+        'Out For delivery',
+        'Delivered'
+      ];
+      const statusQueryParams = statusFilters.map((s, idx) => `filters[status][$in][${idx}]=${encodeURIComponent(s)}`).join('&');
+      let url = `/parcels?populate[shipper]=true&populate[destination_city]=true&populate[source_city]=true&populate[pickup_location][populate]=*&${statusQueryParams}&pagination[pageSize]=500`;
       if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
       if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
 
@@ -48,8 +90,8 @@ export default function CustomerServiceArrivalSummaryPage() {
       const groups: Record<string, { brandName: string; city: string; cityCounts: Record<string, number>; salesPerson: string }> = {};
       for (const p of parcels) {
         const brand = p.shipper?.name || p.pickup_location?.shipper?.name || 'Unassigned';
-        const originCity = p.pickup_location?.city?.name || p.origin_city?.name || 'LHE';
-        const destCity = p.destination_city?.name || p.destination_city || 'Other';
+        const originCity = p.pickup_location?.city?.name || p.source_city?.name || p.source_city?.CityName || 'LHE';
+        const destCity = p.destination_city?.name || p.destination_city?.CityName || p.destination_city || 'Other';
 
         if (!groups[brand]) {
           groups[brand] = { brandName: brand, city: originCity, cityCounts: {}, salesPerson: '' };
@@ -91,13 +133,65 @@ export default function CustomerServiceArrivalSummaryPage() {
 
   React.useEffect(() => { fetchArrivalSummary(); }, [fetchArrivalSummary]);
 
-  const customerOptions = React.useMemo(() => {
-    return Array.from(new Set(summaryData.map(s => s.brandName).filter(Boolean)));
+  // Searchable City options populated from Pakistan geographic hierarchy and active data
+  const cityOptions: SearchableOption[] = React.useMemo(() => {
+    const citySet = new Set<string>();
+    // Add primary major cities first
+    const priorityCities = ['Lahore', 'Karachi', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta', 'Sialkot', 'Gujranwala', 'Hyderabad', 'Sukkur', 'Bahawalpur', 'Sargodha'];
+    priorityCities.forEach(c => citySet.add(c));
+
+    FLAT_PAKISTAN_LOCATIONS.forEach(loc => {
+      if (loc.cityName) citySet.add(loc.cityName);
+      if (loc.district) citySet.add(loc.district);
+    });
+
+    summaryData.forEach(s => {
+      if (s.city && s.city !== 'LHE') citySet.add(s.city);
+    });
+
+    return Array.from(citySet).map(c => ({ value: c, label: c }));
   }, [summaryData]);
 
-  const salesPersonOptions = React.useMemo(() => {
-    return Array.from(new Set(summaryData.map(s => s.salesPerson).filter(Boolean)));
-  }, [summaryData]);
+  // Searchable Customer (Shipper) options populated from actual database shippers
+  const customerOptions: SearchableOption[] = React.useMemo(() => {
+    const shipperMap = new Map<string, string>();
+    allShippers.forEach((s: any) => {
+      const name = s.name || s.attributes?.name;
+      if (name) {
+        shipperMap.set(name.toLowerCase(), name);
+      }
+    });
+
+    summaryData.forEach(s => {
+      if (s.brandName && s.brandName !== 'Unassigned') {
+        shipperMap.set(s.brandName.toLowerCase(), s.brandName);
+      }
+    });
+
+    return Array.from(shipperMap.values())
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => ({ value: name, label: name }));
+  }, [allShippers, summaryData]);
+
+  const salesPersonOptions: SearchableOption[] = React.useMemo(() => {
+    const spMap = new Map<string, string>();
+    allSalesPersons.forEach((sp: any) => {
+      const name = sp.name || sp.attributes?.name;
+      if (name) {
+        spMap.set(name.toLowerCase(), name);
+      }
+    });
+
+    summaryData.forEach(s => {
+      if (s.salesPerson) {
+        spMap.set(s.salesPerson.toLowerCase(), s.salesPerson);
+      }
+    });
+
+    return Array.from(spMap.values())
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => ({ value: name, label: name }));
+  }, [allSalesPersons, summaryData]);
 
   const filteredData = React.useMemo(() => {
     return summaryData.filter(row => {
@@ -186,43 +280,35 @@ export default function CustomerServiceArrivalSummaryPage() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">City</label>
-              <select
+              <SearchableSelect
                 value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
-              >
-                <option value="Lahore">Lahore</option>
-                <option value="Karachi">Karachi</option>
-                <option value="Islamabad">Islamabad</option>
-              </select>
+                onChange={(val) => setSelectedCity(val)}
+                options={cityOptions}
+                placeholder="Search or select city..."
+                allOptionLabel="All Cities"
+              />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Customer (Shipper)</label>
-              <select
+              <SearchableSelect
                 value={selectedCustomer}
-                onChange={(e) => setSelectedCustomer(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
-              >
-                <option value="All">All Customers</option>
-                {customerOptions.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedCustomer(val)}
+                options={customerOptions}
+                placeholder="Search or select shipper..."
+                allOptionLabel="All Customers"
+              />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sales Person</label>
-              <select
+              <SearchableSelect
                 value={selectedSalesPerson}
-                onChange={(e) => setSelectedSalesPerson(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold outline-none cursor-pointer"
-              >
-                <option value="All">All Sales Persons</option>
-                {salesPersonOptions.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedSalesPerson(val)}
+                options={salesPersonOptions}
+                placeholder="Search sales person..."
+                allOptionLabel="All Sales Persons"
+              />
             </div>
           </div>
 
