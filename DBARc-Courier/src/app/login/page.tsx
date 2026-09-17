@@ -16,7 +16,7 @@ import { TextBox } from '@/components/ui/form/text-box';
 import { useTenant } from '@/components/TenantProvider';
 
 const loginSchema = z.object({
-  identifier: z.string().email('Please enter a valid business email address'),
+  identifier: z.string().min(1, 'Please enter your username or business email'),
   password: z.string().min(1, 'Password is required'),
 });
 
