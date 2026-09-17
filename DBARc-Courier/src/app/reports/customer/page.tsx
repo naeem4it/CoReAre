@@ -143,7 +143,7 @@ export default function CustomerReportPage() {
               <label className="font-label-md text-label-md text-outline">STATUS TYPE</label>
               <select className="w-full h-10 px-sm border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary" value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
                 <option value="">All Statuses</option>
-                <option value="Total Booking">Total Booking</option>
+                <option value="Booked">Booked</option>
                 <option value="Picked up by rider">Picked up by rider</option>
                 <option value="Arrived at warehouse (Origin)">Arrived at warehouse (Origin)</option>
                 <option value="Not Arrived">Not Arrived</option>

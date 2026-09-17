@@ -6,7 +6,7 @@ export interface TPLStatusMapping {
   documentId: string;
   partner?: TPLPartner | null;
   external_status_code: string;
-  internal_status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
+  internal_status: 'Booked' | 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -15,7 +15,7 @@ export interface TPLStatusMapping {
 export interface CreateTPLStatusMappingRequest {
   partner?: TPLPartner | null;
   external_status_code: string;
-  internal_status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
+  internal_status: 'Booked' | 'Total Booking' | 'Not Arrived' | 'Arrived' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper';
 }
 
 export interface UpdateTPLStatusMappingRequest extends Partial<CreateTPLStatusMappingRequest> {}

@@ -29,14 +29,14 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
         return;
       }
 
-      const status = parcel.status || 'Total Booking';
+      const status = parcel.status || 'Booked';
       const createdAt = parcel.createdAt
         ? new Date(parcel.createdAt).toLocaleDateString() + ' ' + new Date(parcel.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : 'Recent';
       const origin = parcel.source_city?.name || 'Origin Hub';
       const destination = parcel.destination_city?.name || parcel.recipient_address || 'Destination Hub';
 
-      const isBooked = ['Total Booking', 'booked', 'Not Arrived', 'Arrived', 'Arrived At Destination', 'Out For delivery', 'Delivered'].includes(status);
+      const isBooked = ['Booked', 'Total Booking', 'booked', 'Not Arrived', 'Arrived', 'Arrived At Destination', 'Out For delivery', 'Delivered'].includes(status);
       const isArrived = ['Arrived', 'Arrived At Destination', 'Out For delivery', 'Delivered'].includes(status);
       const isOutForDelivery = ['Out For delivery', 'Delivered'].includes(status);
       const isDelivered = status === 'Delivered';
@@ -47,7 +47,7 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
           location: origin,
           date: createdAt,
           isCompleted: isBooked,
-          isCurrent: status === 'Total Booking' || status === 'booked' || status === 'Not Arrived',
+          isCurrent: status === 'Booked' || status === 'Total Booking' || status === 'booked' || status === 'Not Arrived',
         },
         {
           status: 'Arrived at Hub',

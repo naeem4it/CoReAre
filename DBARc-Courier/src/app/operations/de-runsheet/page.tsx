@@ -11,9 +11,12 @@ import {
   Save, 
   Package, 
   User, 
-  Calendar,
-  AlertCircle,
-  FileSpreadsheet
+  Calendar, 
+  AlertCircle, 
+  FileSpreadsheet,
+  ArrowRight,
+  Truck,
+  Clock
 } from 'lucide-react';
 import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
@@ -43,6 +46,9 @@ export default function DeRunsheetPage() {
   const [searchSheetNo, setSearchSheetNo] = React.useState('');
   const [selectedSheet, setSelectedSheet] = React.useState<DeliverySheetSummary | null>(null);
   const [pastSheets, setPastSheets] = React.useState<any[]>([]);
+  const [deliveredParcels, setDeliveredParcels] = React.useState<any[]>([]);
+  const [isLoadingDelivered, setIsLoadingDelivered] = React.useState(false);
+  const [deliveredFilter, setDeliveredFilter] = React.useState<'Delivered' | 'All'>('Delivered');
   const [isLoading, setIsLoading] = React.useState(false);
   const [cashSurrendered, setCashSurrendered] = React.useState<string>('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -63,9 +69,30 @@ export default function DeRunsheetPage() {
     }
   }, []);
 
+  // Fetch delivered / out for delivery parcels awaiting de-runsheet closeout
+  const fetchDeliveredParcels = React.useCallback(async () => {
+    setIsLoadingDelivered(true);
+    try {
+      const res = await apiClient.get('/parcels?filters[status][$in][0]=Delivered&filters[status][$in][1]=delivered&filters[status][$in][2]=Out%20For%20delivery&filters[status][$in][3]=Out%20for%20Delivery&sort[0]=updatedAt:desc&pagination[pageSize]=50&populate[destination_city]=true&populate[shipper]=true&populate[rider]=true');
+      setDeliveredParcels(res.data?.data || []);
+    } catch (err) {
+      console.warn('Could not load delivered parcels for de-runsheet:', err);
+    } finally {
+      setIsLoadingDelivered(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     fetchRecentSheets();
-  }, [fetchRecentSheets]);
+    fetchDeliveredParcels();
+  }, [fetchRecentSheets, fetchDeliveredParcels]);
+
+  const filteredDeliveredParcels = React.useMemo(() => {
+    if (deliveredFilter === 'Delivered') {
+      return deliveredParcels.filter(p => normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.DELIVERED);
+    }
+    return deliveredParcels;
+  }, [deliveredParcels, deliveredFilter]);
 
   // Load a specific delivery sheet
   const loadSheetDetails = async (sheetNumber: string) => {
@@ -249,6 +276,7 @@ export default function DeRunsheetPage() {
       setSelectedSheet(null);
       setSearchSheetNo('');
       fetchRecentSheets();
+      fetchDeliveredParcels();
     } catch (err: any) {
       console.error('Failed to complete closeout:', err);
       triggerToast(err?.response?.data?.error?.message || err?.message || 'Failed to complete cashier closeout.', 'error');
@@ -280,6 +308,14 @@ export default function DeRunsheetPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {selectedSheet && (
+              <button
+                onClick={() => setSelectedSheet(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" /> Back to Delivered List
+              </button>
+            )}
             <button
               onClick={() => window.print()}
               disabled={!selectedSheet}
@@ -344,6 +380,128 @@ export default function DeRunsheetPage() {
             </div>
           )}
         </div>
+
+        {/* Delivered Orders List (Awaiting Cashier Closeout & Reconciliation) */}
+        {!selectedSheet && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="px-6 py-4 bg-slate-900 text-white font-bold text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Package className="w-4 h-4 text-emerald-400" />
+                <span>Delivered Orders for De-Runsheet Reconciliation ({filteredDeliveredParcels.length})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs font-medium">
+                  <button
+                    onClick={() => setDeliveredFilter('Delivered')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      deliveredFilter === 'Delivered' ? 'bg-primary text-white font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Delivered Only
+                  </button>
+                  <button
+                    onClick={() => setDeliveredFilter('All')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      deliveredFilter === 'All' ? 'bg-primary text-white font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    All Out/Delivered
+                  </button>
+                </div>
+                <button
+                  onClick={fetchDeliveredParcels}
+                  disabled={isLoadingDelivered}
+                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Refresh delivered orders"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingDelivered ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3.5">Tracking #</th>
+                    <th className="px-4 py-3.5">Shipper</th>
+                    <th className="px-4 py-3.5">Consignee & Address</th>
+                    <th className="px-4 py-3.5 text-center">Dest</th>
+                    <th className="px-4 py-3.5 text-center">Status</th>
+                    <th className="px-4 py-3.5 text-right">COD Amount</th>
+                    <th className="px-4 py-3.5 text-center">Delivered Date</th>
+                    <th className="px-4 py-3.5 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                  {filteredDeliveredParcels.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <Package className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="font-bold text-slate-600">No orders awaiting reconciliation</p>
+                        <p className="text-[11px] text-slate-400 mt-1">When shipments are marked as Delivered, they will automatically appear here for cash closeout.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDeliveredParcels.map((p: any) => {
+                      const trk = p.tracking_number;
+                      const shp = p.shipper?.name || 'Shipper';
+                      const csg = p.recipient_name || 'Customer';
+                      const addr = p.recipient_address || '';
+                      const dest = p.destination_city?.CityName || p.destination_city?.city_name || p.destination_city?.name || '-';
+                      const cod = Number(p.cod_amount) || 0;
+                      const isDelivered = normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.DELIVERED;
+                      const dDate = p.delivered_date ? new Date(p.delivered_date).toLocaleDateString() : p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '-';
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3.5">
+                            <span className="font-bold font-mono text-slate-900">{trk}</span>
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-700">{shp}</td>
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-900">{csg}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-xs">{addr}</div>
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-bold text-slate-900">{dest}</td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              isDelivered
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-bold">
+                            {p.payment_type === 'PAID' || cod === 0 ? (
+                              <span className="text-slate-500 font-mono">PAID</span>
+                            ) : (
+                              <span className="text-emerald-600 font-mono">Rs. {cod.toLocaleString()}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-center text-slate-500 text-[11px]">{dDate}</td>
+                          <td className="px-4 py-3.5 text-center">
+                            <button
+                              onClick={() => {
+                                setSearchSheetNo(trk);
+                                loadSheetDetails(trk);
+                              }}
+                              className="bg-primary hover:bg-primary/90 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs active:scale-95"
+                            >
+                              <span>Reconcile</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Selected Sheet Summary & Cashier Audit */}
         {selectedSheet && (

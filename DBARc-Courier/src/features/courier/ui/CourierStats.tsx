@@ -110,7 +110,7 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
         }
 
         const totalShipments = parcels.length;
-        const notArrived = parcels.filter((p: any) => p.status === 'Total Booking' || p.status === 'Not Arrived' || p.status === 'booked').length;
+        const notArrived = parcels.filter((p: any) => p.status === 'Booked' || p.status === 'Total Booking' || p.status === 'Not Arrived' || p.status === 'booked').length;
         const arrived = parcels.filter((p: any) => ['Arrived', 'Arrived At Destination'].includes(p.status || '')).length;
         const outForDelivery = parcels.filter((p: any) => ['Out For delivery', 'Out for Delivery'].includes(p.status || '')).length;
         const delivered = parcels.filter((p: any) => p.status === 'Delivered').length;

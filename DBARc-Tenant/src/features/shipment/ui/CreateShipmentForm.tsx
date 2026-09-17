@@ -113,7 +113,7 @@ export const CreateShipmentForm = () => {
       await apiClient.post('/parcels', {
         data: {
           tracking_number: trackingId,
-          status: 'Total Booking',
+          status: 'booked',
           cod_amount: data.codAmount,
           weight: data.weight,
           delivery_charges: estimatedCharges,

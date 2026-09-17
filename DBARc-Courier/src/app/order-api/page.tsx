@@ -255,7 +255,7 @@ export default function OrderApiPage() {
   "data": {
     "id": 1042,
     "tracking_number": "DBA-9821-X9",
-    "status": "Total Booking",
+    "status": "Booked",
     "cod_amount": 3500,
     "tracking_url": "https://track.dbarc.com/DBA-9821-X9"
   }

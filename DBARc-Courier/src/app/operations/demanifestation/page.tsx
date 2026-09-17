@@ -100,42 +100,80 @@ export default function OperationsDeManifestationPage() {
     }
   };
 
-  // Scan & Verify parcel against the incoming manifest
+  // Scan & Verify parcel against the incoming manifest or direct intake
   const handleScanShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const code = scanBarcode.trim().toUpperCase();
     if (!code) return;
 
-    if (!manifestNumber.trim()) {
-      triggerToast('Please load an incoming Manifest # first.', 'error');
-      return;
-    }
+    try {
+      // 1. Check if parcel already in current list in memory
+      const existingIndex = manifestParcels.findIndex(p => p.shipmentNumber === code);
+      if (existingIndex !== -1) {
+        const item = manifestParcels[existingIndex];
+        const targetId = item.documentId || item.id;
+        // Persist status to destination arrival
+        await apiClient.put(`/parcels/${targetId}`, {
+          data: {
+            status: SHIPMENT_STATUSES.ARRIVED_DEST,
+            arrival_date: new Date().toISOString()
+          }
+        });
 
-    // Check if parcel is part of this manifest
-    const existingIndex = manifestParcels.findIndex(p => p.shipmentNumber === code);
-    if (existingIndex === -1) {
-      triggerToast(`Verification Failed: Shipment #${code} does NOT belong to incoming Manifest #${manifestNumber}!`, 'error');
+        setManifestParcels(prev => prev.map((p, idx) => 
+          idx === existingIndex 
+            ? { ...p, isVerified: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
+            : p
+        ));
+
+        triggerToast(`Shipment #${code} verified! Status updated to "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
+        setScanBarcode('');
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      // 2. Direct lookup from database
+      const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(code)}&populate=*`);
+      const parcel = res.data?.data?.[0];
+
+      if (!parcel) {
+        triggerToast(`Shipment #${code} not found in database!`, 'error');
+        setScanBarcode('');
+        return;
+      }
+
+      const targetId = parcel.documentId || parcel.id;
+      // Immediately set status to 'Arrived at warehouse (Dest)'
+      await apiClient.put(`/parcels/${targetId}`, {
+        data: {
+          status: SHIPMENT_STATUSES.ARRIVED_DEST,
+          arrival_date: new Date().toISOString()
+        }
+      });
+
+      const newItem: DeManifestItem = {
+        id: String(parcel.id),
+        documentId: parcel.documentId,
+        shipmentNumber: parcel.tracking_number,
+        shipper: parcel.shipper?.name || 'Shipper',
+        consignee: parcel.recipient_name || 'Customer',
+        destination: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
+        pieces: parcel.pieces || 1,
+        weight: Number(parcel.weight) || 1.0,
+        codAmount: Number(parcel.cod_amount) || 0,
+        status: SHIPMENT_STATUSES.ARRIVED_DEST,
+        isVerified: true,
+      };
+
+      setManifestParcels(prev => [newItem, ...prev]);
+      triggerToast(`Shipment #${code} verified & added to demanifest grid! Status: "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
       setScanBarcode('');
-      return;
-    }
-
-    const item = manifestParcels[existingIndex];
-    if (item.isVerified) {
-      triggerToast(`Shipment #${code} is already verified and received.`, 'success');
+      barcodeInputRef.current?.focus();
+    } catch (err: any) {
+      console.error('Scan demanifest error:', err);
+      triggerToast(`Error verifying #${code}: ${err.message}`, 'error');
       setScanBarcode('');
-      return;
     }
-
-    // Mark verified locally
-    setManifestParcels(prev => prev.map((p, idx) => 
-      idx === existingIndex 
-        ? { ...p, isVerified: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
-        : p
-    ));
-
-    triggerToast(`Shipment #${code} verified! Ready for destination intake.`, 'success');
-    setScanBarcode('');
-    barcodeInputRef.current?.focus();
   };
 
   // Finalize De-Manifestation
@@ -151,13 +189,19 @@ export default function OperationsDeManifestationPage() {
       // 1. Transition all verified parcels to "Arrived at warehouse (Dest)"
       for (const item of verifiedItems) {
         try {
-          const targetId = item.documentId || item.id;
-          await apiClient.put(`/parcels/${targetId}`, {
-            data: { 
-              status: SHIPMENT_STATUSES.ARRIVED_DEST,
-              arrival_date: new Date().toISOString()
-            }
-          });
+          let targetId = item.documentId;
+          if (!targetId || /^\d+$/.test(String(targetId))) {
+            const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+            targetId = parcelRes.data?.data?.[0]?.documentId;
+          }
+          if (targetId) {
+            await apiClient.put(`/parcels/${targetId}`, {
+              data: { 
+                status: SHIPMENT_STATUSES.ARRIVED_DEST,
+                arrival_date: new Date().toISOString()
+              }
+            });
+          }
         } catch (e) {
           console.warn(`Could not update ${item.shipmentNumber}:`, e);
         }

@@ -82,6 +82,7 @@ export const CourierShipmentsTable = () => {
       cell: (info) => {
         const status = info.getValue();
         const styles: Record<string, string> = {
+          'Booked': 'bg-blue-100 text-blue-700 border-blue-200',
           'Total_Booking': 'bg-blue-100 text-blue-700 border-blue-200',
           'Not_Arrived': 'bg-amber-100 text-amber-700 border-amber-200',
           'Arrived': 'bg-purple-100 text-purple-700 border-purple-200',
@@ -94,8 +95,8 @@ export const CourierShipmentsTable = () => {
           'Return_to_Shipper': 'bg-gray-100 text-gray-700 border-gray-200',
         };
         return (
-          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold border', styles[status] || styles['Total Booking'])}>
-            {status}
+          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold border', styles[status] || styles['Booked'] || styles['Total_Booking'])}>
+            {status === 'Total Booking' ? 'Booked' : status}
           </span>
         );
       },

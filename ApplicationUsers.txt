@@ -1,0 +1,12 @@
+Courier Admin (Tenant 1):
+Email: naeemcourier@test.com
+Password: Password123!
+Shipper Admin (Tenant 1):
+Email: naeemshiper@test.com
+Password: Password123!
+Other Users (Tenant 2):
+Email: cheechuadmin@leoparda.com
+Email: joojee@rider.com
+Strapi Super Admin Panel (http://localhost:1337/admin only):
+Email: naeem4it@gmail.com
+Password: Password123!

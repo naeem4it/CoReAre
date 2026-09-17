@@ -709,7 +709,7 @@ function BookShipmentForm() {
       const parcelRes = await apiClient.post('/parcels', {
         data: {
           tracking_number: trackingId,
-          status: 'Total Booking',
+          status: 'Booked',
           payment_type: data.paymentType || (data.codAmount > 0 ? 'COD' : 'PAID'),
           cod_amount: data.paymentType === 'PAID' ? 0 : (Number(data.codAmount) || 0),
           weight: Number(data.weight) || 0.5,
@@ -726,10 +726,7 @@ function BookShipmentForm() {
           comments: data.comments || data.productDescription || '',
           shipper: shipperId || null,
           origin_office: originOfficeId,
-          fulfillment_type: logisticsRouting?.fulfillmentType || '2PL',
-          tpl_partner: logisticsRouting?.partner?.id || null,
-          tpl_city_code: logisticsRouting?.partnerCityCode || null,
-          routing_scenario: logisticsRouting?.scenario || 1,
+          is_3pl: (logisticsRouting?.fulfillmentType as string) === '3PL' || (logisticsRouting?.fulfillmentType as string) === '3PL Partner',
         }
       });
 
@@ -1070,7 +1067,7 @@ function BookShipmentForm() {
 
         const parcelPayload: any = {
           tracking_number: trackingId,
-          status: 'Total Booking',
+          status: 'Booked',
           payment_type: (row.codAmount && Number(row.codAmount) > 0) ? 'COD' : 'PAID',
           cod_amount: Number(row.codAmount) || 0,
           weight: Number(row.weight) || 0.5,

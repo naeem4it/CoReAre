@@ -169,7 +169,7 @@ export const BulkUploadWidget = () => {
           await apiClient.post('/parcels', {
             data: {
               tracking_number: tracking,
-              status: 'Total Booking',
+              status: 'booked',
               recipient_name: row.recipient_name,
               recipient_phone: row.recipient_phone,
               recipient_address: row.recipient_address,

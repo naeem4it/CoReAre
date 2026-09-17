@@ -163,7 +163,7 @@ export default function LoadSheetPage() {
     try {
       setLoadingParcels(true);
       const filters: any = {
-        status: { $in: ['Total Booking', 'Not Arrived', 'booked'] },
+        status: { $in: ['Total Booking', 'Not Arrived', 'booked', 'Booked'] },
       };
 
       if (activeBusinessId) {
@@ -705,7 +705,7 @@ export default function LoadSheetPage() {
                   </button>
                   <span className="text-xs text-slate-400">|</span>
                   <span className="text-xs text-slate-500 font-medium">
-                    Orders with status <strong className="text-slate-800">"Total Booking"</strong> awaiting courier pickup
+                    Orders with status <strong className="text-slate-800">"Booked"</strong> awaiting courier pickup
                   </span>
                 </div>
 

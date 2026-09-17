@@ -83,6 +83,7 @@ export default function MerchantLoadSheetPage() {
           filters: {
             load_sheet: { id: { $null: true } },
             $or: [
+              { status: { $eq: 'Booked' } },
               { status: { $eq: 'booked' } },
               { status: { $eq: 'Total Booking' } },
               { status: { $eq: 'Not Arrived' } }

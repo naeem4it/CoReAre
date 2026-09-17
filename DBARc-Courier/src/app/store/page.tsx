@@ -146,7 +146,7 @@ export default function SampleShirtStorePage() {
           pieces: quantity,
           service_type: 'Overnight',
           shipment_type: 'Parcel',
-          status: 'Total Booking',
+          status: 'Booked',
           comments: `Oxford Casual Shirt | Size: ${selectedSize} | Color: ${selectedColor} | Qty: ${quantity}`,
         }
       };

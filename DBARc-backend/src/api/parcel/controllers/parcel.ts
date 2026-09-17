@@ -3,8 +3,46 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
   async create(ctx: any) {
     const { data } = ctx.request.body;
     
-    // Default to not 3PL
-    data.is_3pl = false;
+    // Default to not 3PL unless explicitly specified
+    if (data.is_3pl === undefined) {
+      data.is_3pl = false;
+    }
+
+    // When shipper/user adds an order, status must be 'Booked'
+    if (!data.status || data.status === 'Total Booking' || String(data.status).toLowerCase() === 'booked') {
+      data.status = 'Booked';
+    }
+
+    // Map and sanitize non-schema routing parameters
+    if (data.fulfillment_type) {
+      if (data.fulfillment_type === '3PL' || data.fulfillment_type === '3PL Partner') {
+        data.is_3pl = true;
+      }
+      delete data.fulfillment_type;
+    }
+    if ('tpl_partner' in data) delete data.tpl_partner;
+    if ('tpl_city_code' in data) delete data.tpl_city_code;
+    if ('routing_scenario' in data) delete data.routing_scenario;
+
+    // Safely resolve source_city if string city name was provided
+    if (data.source_city && typeof data.source_city === 'string' && isNaN(Number(data.source_city))) {
+      const foundCity = await strapi.db.query('api::city.city').findOne({
+        where: { CityName: { $eqi: data.source_city.trim() } }
+      });
+      data.source_city = foundCity ? foundCity.id : null;
+    } else if (data.source_city) {
+      data.source_city = Number(data.source_city) || null;
+    }
+
+    // Safely resolve destination_city if string city name was provided
+    if (data.destination_city && typeof data.destination_city === 'string' && isNaN(Number(data.destination_city))) {
+      const foundCity = await strapi.db.query('api::city.city').findOne({
+        where: { CityName: { $eqi: data.destination_city.trim() } }
+      });
+      data.destination_city = foundCity ? foundCity.id : null;
+    } else if (data.destination_city) {
+      data.destination_city = Number(data.destination_city) || null;
+    }
 
     // Auto populate shipper from pickup_location if available and shipper not explicitly passed
     if (!data.shipper && data.pickup_location) {
@@ -110,7 +148,7 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
     const notArrived = await strapi.db.query('api::parcel.parcel').count({
       where: {
         ...whereCondition,
-        status: { $in: ['Total Booking', 'Not Arrived'] }
+        status: { $in: ['booked', 'Booked', 'Total Booking', 'Not Arrived'] }
       }
     });
 

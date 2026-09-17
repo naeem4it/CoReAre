@@ -4,7 +4,8 @@
  */
 
 export const SHIPMENT_STATUSES = {
-  TOTAL_BOOKING: 'Total Booking',
+  BOOKED: 'Booked',
+  TOTAL_BOOKING: 'Booked', // backward-compatibility alias
   PICKED_UP_BY_RIDER: 'Picked up by rider',
   ARRIVED_ORIGIN: 'Arrived at warehouse (Origin)',
   NOT_ARRIVED: 'Not Arrived',
@@ -21,7 +22,7 @@ export const SHIPMENT_STATUSES = {
 export type ShipmentStatus = typeof SHIPMENT_STATUSES[keyof typeof SHIPMENT_STATUSES];
 
 export const ALL_12_SHIPMENT_STATUSES: ShipmentStatus[] = [
-  SHIPMENT_STATUSES.TOTAL_BOOKING,
+  SHIPMENT_STATUSES.BOOKED,
   SHIPMENT_STATUSES.PICKED_UP_BY_RIDER,
   SHIPMENT_STATUSES.ARRIVED_ORIGIN,
   SHIPMENT_STATUSES.NOT_ARRIVED,
@@ -39,12 +40,12 @@ export const ALL_12_SHIPMENT_STATUSES: ShipmentStatus[] = [
  * Normalizes legacy database status strings to one of the 12 canonical statuses.
  */
 export function normalizeShipmentStatus(status?: string | null): ShipmentStatus {
-  if (!status) return SHIPMENT_STATUSES.TOTAL_BOOKING;
+  if (!status) return SHIPMENT_STATUSES.BOOKED;
   const s = status.trim();
 
-  // 1. Total Booking
-  if (s === 'Total Booking' || s.toLowerCase() === 'booked') {
-    return SHIPMENT_STATUSES.TOTAL_BOOKING;
+  // 1. Booked
+  if (s.toLowerCase() === 'booked' || s.toLowerCase() === 'total booking') {
+    return SHIPMENT_STATUSES.BOOKED;
   }
 
   // 2. Picked up by rider
@@ -132,7 +133,7 @@ export function normalizeShipmentStatus(status?: string | null): ShipmentStatus 
     return SHIPMENT_STATUSES.LOST_DAMAGE;
   }
 
-  return SHIPMENT_STATUSES.TOTAL_BOOKING;
+  return SHIPMENT_STATUSES.BOOKED;
 }
 
 /**
@@ -140,8 +141,9 @@ export function normalizeShipmentStatus(status?: string | null): ShipmentStatus 
  */
 export function getDbStatusQueryValues(canonicalStatus: ShipmentStatus | string): string[] {
   switch (canonicalStatus) {
-    case SHIPMENT_STATUSES.TOTAL_BOOKING:
-      return ['Total Booking', 'booked'];
+    case SHIPMENT_STATUSES.BOOKED:
+    case 'Total Booking':
+      return ['Booked', 'booked', 'Total Booking'];
     case SHIPMENT_STATUSES.PICKED_UP_BY_RIDER:
       return ['Picked up by rider'];
     case SHIPMENT_STATUSES.ARRIVED_ORIGIN:

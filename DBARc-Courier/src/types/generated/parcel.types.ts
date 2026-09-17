@@ -5,6 +5,7 @@ import { PickupLocation } from './pickup-location.types';
 import { LoadSheet } from './load-sheet.types';
 
 export type ParcelStatus = 
+  | 'Booked' 
   | 'Total Booking' 
   | 'Picked up by rider' 
   | 'Arrived at the warehouse' 

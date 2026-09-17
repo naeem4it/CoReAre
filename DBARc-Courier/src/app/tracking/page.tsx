@@ -171,7 +171,7 @@ function TrackingPageContent() {
             handlerDisplay = item.rider?.name || item.rider?.user?.fullName || item.rider?.user?.username;
           } else if (item.load_sheet?.sheet_id) {
             handlerDisplay = `Load Sheet #${item.load_sheet.sheet_id}`;
-          } else if (item.status === 'Total Booking') {
+          } else if (item.status === 'Booked' || item.status === 'Total Booking') {
             handlerDisplay = 'Pending Rider Pickup';
           } else if (item.status === 'Arrived at the warehouse') {
             handlerDisplay = 'Origin Warehouse Hub';
@@ -198,7 +198,7 @@ function TrackingPageContent() {
             recipient_name: item.recipient_name || 'Customer Consignee',
             recipient_phone: item.recipient_phone || item.consignee_alt_phone || 'No phone recorded',
             recipient_address: item.recipient_address || 'Delivery address not specified',
-            status: item.status || 'Total Booking',
+            status: item.status || 'Booked',
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
             arrival_date: item.arrival_date,
@@ -332,12 +332,12 @@ function TrackingPageContent() {
     const isInterCity = parcel.is_inter_city;
     const events: TrackingEvent[] = [];
 
-    // 1. Total Booking
+    // 1. Booked
     events.push({
-      title: 'Total Booking Registered',
+      title: 'Booking Registered',
       description: `Shipment registered at ${parcel.origin} by ${parcel.shipper_name}. Consignee: ${parcel.recipient_name}.`,
       time: `${bookedDate}, ${bookedTime}`,
-      status: 'Total Booking',
+      status: 'Booked',
       isCompleted: true,
     });
 
@@ -532,6 +532,7 @@ function TrackingPageContent() {
         return 'bg-teal-100 text-teal-800 border-teal-300';
       case 'Lost/Damage':
         return 'bg-red-200 text-red-900 border-red-400';
+      case 'Booked':
       case 'Total Booking':
       case 'booked':
       default:
@@ -570,8 +571,8 @@ function TrackingPageContent() {
     // Normalize status match for 12 statuses
     let matchesStatus = true;
     if (statusFilter) {
-      if (statusFilter === 'Total Booking') {
-        matchesStatus = item.status === 'Total Booking' || item.status === 'booked';
+      if (statusFilter === 'Booked' || statusFilter === 'Total Booking') {
+        matchesStatus = item.status === 'Booked' || item.status === 'booked' || item.status === 'Total Booking';
       } else if (statusFilter === 'Arrived at the warehouse') {
         matchesStatus = item.status === 'Arrived at the warehouse' || item.status === 'Arrived';
       } else if (statusFilter === 'Arrived at warehouse') {
@@ -678,7 +679,7 @@ function TrackingPageContent() {
             }`}
           >
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-[11px] font-bold uppercase tracking-wider">Total Bookings</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider">Booked Orders</span>
               <Boxes className="w-4 h-4 text-primary" />
             </div>
             <div className="text-2xl font-black font-mono text-slate-900 mt-2">{stats.total}</div>
@@ -799,7 +800,7 @@ function TrackingPageContent() {
               className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer"
             >
               <option value="">All 12 Statuses</option>
-              <option value="Total Booking">1. Total Booking</option>
+              <option value="Booked">1. Booked</option>
               <option value="Picked up by rider">2. Picked up by rider</option>
               <option value="Arrived at warehouse (Origin)">3. Arrived at warehouse (Origin)</option>
               <option value="Not Arrived">4. Not Arrived</option>
@@ -927,7 +928,7 @@ function TrackingPageContent() {
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeColors(parcel.status)}`}>
-                          {parcel.status === 'booked' ? 'Total Booking' : parcel.status}
+                          {parcel.status === 'Total Booking' || parcel.status === 'booked' ? 'Booked' : parcel.status}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
@@ -1134,7 +1135,7 @@ function TrackingPageContent() {
                         onChange={(e) => setEditStatus(e.target.value)}
                         className="bg-slate-50 border border-outline-variant rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                       >
-                        <option value="Total Booking">1. Total Booking</option>
+                        <option value="Booked">1. Booked</option>
                         <option value="Picked up by rider">2. Picked up by rider</option>
                         <option value="Arrived at warehouse (Origin)">3. Arrived at warehouse (Origin)</option>
                         <option value="Not Arrived">4. Not Arrived</option>

@@ -9,8 +9,8 @@ import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/s
 
 interface BulkShipmentItem {
   id: string;
-  parcelId?: number | string;
-  documentId?: string;
+  parcelId?: number | string | undefined;
+  documentId?: string | undefined;
   shipmentNumber: string;
   consigneeName: string;
   originCity: string;

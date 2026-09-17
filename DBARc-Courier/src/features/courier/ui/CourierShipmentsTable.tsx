@@ -14,7 +14,7 @@ type ShipmentRow = {
   destination: string;
   paymentType: 'COD' | 'PAID';
   codAmount: number;
-  status: 'Total Booking' | 'Not Arrived' | 'Arrived' | 'In Transit' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked';
+  status: 'Booked' | 'Total Booking' | 'Not Arrived' | 'Arrived' | 'In Transit' | 'Arrived At Destination' | 'Out For delivery' | 'Delivered' | 'Failed Attempt' | 'Ready To Return' | 'Return Dispatched' | 'Return to Shipper' | 'booked';
   eta: string;
 };
 
@@ -102,10 +102,10 @@ export const CourierShipmentsTable = ({
             const origin = (item as any).source_city?.name || 'Karachi';
             const destination = (item as any).destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
             
-            let uiStatus: ShipmentRow['status'] = 'booked';
+            let uiStatus: ShipmentRow['status'] = 'Booked';
             if (item.status) {
-              if (item.status === 'Total Booking') {
-                uiStatus = 'booked';
+              if ((item.status as string) === 'Total Booking' || (item.status as string) === 'booked') {
+                uiStatus = 'Booked';
               } else {
                 uiStatus = item.status as any;
               }
@@ -217,11 +217,12 @@ export const CourierShipmentsTable = ({
             Delivered
           </span>
         );
+      case 'Booked':
       case 'booked':
       case 'Total Booking':
         return (
           <span className="bg-surface-container-high text-on-surface-variant px-3 py-1 rounded-full text-[12px] font-semibold border border-outline-variant">
-            Total Booking
+            Booked
           </span>
         );
       default:

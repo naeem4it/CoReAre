@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { Download, UserCheck, Search, RefreshCw, Truck, ArrowDownLeft, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
+import { Download, UserCheck, Search, RefreshCw, Truck, ArrowDownLeft, CheckCircle2, XCircle, RotateCcw, X } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, DeliverySheetService } from '@/services/api';
 import { 
@@ -30,6 +30,7 @@ interface RiderSummaryRow {
   returnToShipperCount: number;
   totalAssigned: number;
   successRatio: number;
+  parcelsList?: any[];
 }
 
 export default function CustomerServiceRidersSummaryPage() {
@@ -37,36 +38,46 @@ export default function CustomerServiceRidersSummaryPage() {
   const [toDate, setToDate] = React.useState('');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [summaryData, setSummaryData] = React.useState<RiderSummaryRow[]>([]);
+  const [selectedRiderDetail, setSelectedRiderDetail] = React.useState<RiderSummaryRow | null>(null);
+  const [riderParcelsList, setRiderParcelsList] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const fetchRiderSummary = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch active riders, delivery-sheets, and parcels
-      let dateFilter = '';
-      if (fromDate) dateFilter += `&filters[createdAt][$gte]=${fromDate}`;
-      if (toDate) dateFilter += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
-
+      // 1. Fetch active riders, delivery-sheets (with populated parcels and rider), and parcels
       const [ridersRes, sheetsRes, parcelsRes] = await Promise.allSettled([
         RiderService.getAll(),
-        DeliverySheetService.getAll(`?sort[0]=createdAt:desc&pagination[pageSize]=500${dateFilter}`),
-        apiClient.get(`/parcels?populate[rider]=true&populate[load_sheet][populate]=rider&pagination[pageSize]=1000${dateFilter}`)
+        DeliverySheetService.getAll('?sort[0]=createdAt:desc&pagination[pageSize]=500&populate=*'),
+        apiClient.get('/parcels?populate=*&pagination[pageSize]=1000')
       ]);
 
       const ridersList: any[] = ridersRes.status === 'fulfilled' ? ridersRes.value.data || [] : [];
       const sheetsList: any[] = sheetsRes.status === 'fulfilled' ? sheetsRes.value.data || [] : [];
       const rawParcels: any[] = parcelsRes.status === 'fulfilled' ? parcelsRes.value.data?.data || [] : [];
 
+      // Date range filtering helper (safe client-side comparison)
+      const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
+      const toTs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
+
+      const isDateInRange = (dateStr?: string) => {
+        if (!fromDate && !toDate) return true;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        if (isNaN(t)) return true;
+        return t >= fromTs && t <= toTs;
+      };
+
       // Create a map of active parcels by tracking number
       const parcelByTracking = new Map<string, any>();
       for (const p of rawParcels) {
         if (p.tracking_number) {
-          parcelByTracking.set(p.tracking_number.toUpperCase(), p);
+          parcelByTracking.set(p.tracking_number.toUpperCase().trim(), p);
         }
       }
 
       // Initialize rider aggregates
-      // Map: riderId -> { riderInfo, assignedParcels: Set<trackingNumber> }
+      // Map: riderId -> { riderInfo, parcels: Map<trackingNumber, parcelData> }
       const riderMap = new Map<string, {
         riderId: number | string;
         riderCode: string;
@@ -77,50 +88,85 @@ export default function CustomerServiceRidersSummaryPage() {
 
       ridersList.forEach((r: any) => {
         const idStr = String(r.id);
+        const rName = r.name || r.fullName || r.username || `Rider #${r.id}`;
         riderMap.set(idStr, {
           riderId: r.id,
           riderCode: r.rider_code || `R-${r.id}`,
-          riderName: r.name || r.fullName || r.username || `Rider #${r.id}`,
+          riderName: rName,
           phone: r.phone || '',
           parcels: new Map(),
         });
       });
 
-      // 1. Associate parcels directly linked to rider (parcel.rider or load_sheet.rider)
-      rawParcels.forEach((p: any) => {
-        const directRiderId = p.rider?.id || p.load_sheet?.rider?.id;
-        if (directRiderId && riderMap.has(String(directRiderId))) {
-          const entry = riderMap.get(String(directRiderId))!;
-          entry.parcels.set(p.tracking_number.toUpperCase(), p);
-        }
-      });
+      // Filter sheets by date
+      const filteredSheets = sheetsList.filter((sheet: any) => 
+        isDateInRange(sheet.sheet_date || sheet.createdAt || sheet.updatedAt)
+      );
 
-      // 2. Associate parcels assigned through delivery sheets
-      sheetsList.forEach((sheet: any) => {
-        const sheetRiderId = sheet.rider?.id;
-        const sheetRiderName = (sheet.rider_name || '').trim().toLowerCase();
+      // 1. Associate parcels assigned through delivery sheets
+      filteredSheets.forEach((sheet: any) => {
+        const sheetRiderId = sheet.rider?.id ? String(sheet.rider.id) : null;
+        const sheetRiderCode = (sheet.rider?.rider_code || '').trim().toLowerCase();
+        const sheetRiderName = (sheet.custom_name || sheet.rider?.name || sheet.rider_name || '').trim().toLowerCase();
 
         let targetEntry: any = null;
-        if (sheetRiderId && riderMap.has(String(sheetRiderId))) {
-          targetEntry = riderMap.get(String(sheetRiderId));
-        } else if (sheetRiderName) {
+        if (sheetRiderId && riderMap.has(sheetRiderId)) {
+          targetEntry = riderMap.get(sheetRiderId);
+        } else if (sheetRiderCode) {
           for (const val of riderMap.values()) {
-            if (val.riderName.toLowerCase().includes(sheetRiderName) || sheetRiderName.includes(val.riderName.toLowerCase())) {
+            if (val.riderCode.toLowerCase() === sheetRiderCode) {
+              targetEntry = val;
+              break;
+            }
+          }
+        }
+        
+        if (!targetEntry && sheetRiderName) {
+          for (const val of riderMap.values()) {
+            const valName = val.riderName.toLowerCase();
+            const valCode = val.riderCode.toLowerCase();
+            if (
+              valName.includes(sheetRiderName) ||
+              sheetRiderName.includes(valName) ||
+              valCode === sheetRiderName ||
+              (val.phone && sheetRiderName.includes(val.phone))
+            ) {
               targetEntry = val;
               break;
             }
           }
         }
 
+        // Fallback: If only 1 rider exists in this tenant, associate unassigned runsheets to this active rider
+        if (!targetEntry && riderMap.size === 1) {
+          targetEntry = riderMap.values().next().value;
+        }
+
         if (targetEntry) {
-          // Process parcels attached to delivery sheet
-          const items = Array.isArray(sheet.parcels_data) ? sheet.parcels_data : sheet.parcels || [];
+          // Process parcels attached to delivery sheet (both Strapi relation & fallback parcels_data)
+          const items = Array.isArray(sheet.parcels) && sheet.parcels.length > 0 
+            ? sheet.parcels 
+            : (Array.isArray(sheet.parcels_data) ? sheet.parcels_data : []);
+
           items.forEach((item: any) => {
-            const trk = (item.shipmentNumber || item.tracking_number || '').toUpperCase();
+            const trk = (item.tracking_number || item.shipmentNumber || '').toUpperCase().trim();
             if (!trk) return;
             const live = parcelByTracking.get(trk) || item;
             targetEntry.parcels.set(trk, live);
           });
+        }
+      });
+
+      // 2. Associate parcels directly linked to rider (parcel.rider or load_sheet.rider)
+      rawParcels.forEach((p: any) => {
+        if (!isDateInRange(p.arrival_date || p.delivered_date || p.createdAt)) return;
+
+        const directRiderId = p.rider?.id ? String(p.rider.id) : (p.load_sheet?.rider?.id ? String(p.load_sheet.rider.id) : null);
+        if (directRiderId && riderMap.has(directRiderId)) {
+          const entry = riderMap.get(directRiderId)!;
+          if (p.tracking_number) {
+            entry.parcels.set(p.tracking_number.toUpperCase().trim(), p);
+          }
         }
       });
 
@@ -181,6 +227,7 @@ export default function CustomerServiceRidersSummaryPage() {
           returnToShipperCount,
           totalAssigned,
           successRatio,
+          parcelsList: assignedList,
         };
       });
 
@@ -306,11 +353,22 @@ export default function CustomerServiceRidersSummaryPage() {
                     </td>
                   </tr>
                 ) : filteredData.map((r) => (
-                  <tr key={r.sNo} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-3.5 text-slate-400">{r.sNo}</td>
-                    <td className="p-3.5 font-bold font-mono text-slate-900">{r.riderCode}</td>
+                  <tr 
+                    key={r.sNo} 
+                    onClick={() => {
+                      setSelectedRiderDetail(r);
+                      setRiderParcelsList(r.parcelsList || []);
+                    }}
+                    className="hover:bg-slate-100/90 transition-colors cursor-pointer group"
+                    title="Click to view assigned shipments details"
+                  >
+                    <td className="p-3.5 text-slate-400 group-hover:text-primary">{r.sNo}</td>
+                    <td className="p-3.5 font-bold font-mono text-slate-900 group-hover:text-primary">{r.riderCode}</td>
                     <td className="p-3.5">
-                      <div className="font-bold text-slate-900">{r.riderName}</div>
+                      <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <span>{r.riderName}</span>
+                        <span className="text-[10px] text-slate-400 font-normal opacity-0 group-hover:opacity-100 transition-opacity">(view details)</span>
+                      </div>
                       {r.phone && <div className="text-[10px] text-slate-500 font-mono">{r.phone}</div>}
                     </td>
                     <td className="p-3.5 text-center font-black bg-slate-50 text-slate-900 text-sm">
@@ -352,6 +410,103 @@ export default function CustomerServiceRidersSummaryPage() {
             </table>
           </div>
         </div>
+
+        {/* Assigned Shipments Details Modal */}
+        {selectedRiderDetail && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned Shipments Details</div>
+                  <h3 className="font-bold text-base flex items-center gap-2">
+                    <span>{selectedRiderDetail.riderName}</span>
+                    <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-md font-mono">{selectedRiderDetail.riderCode}</span>
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedRiderDetail(null)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Total Handled</div>
+                    <div className="text-lg font-black text-slate-900">{selectedRiderDetail.totalAssigned}</div>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                    <div className="text-[10px] text-blue-700 font-bold uppercase">Out For Delivery</div>
+                    <div className="text-lg font-black text-blue-900">{selectedRiderDetail.outForDeliveryCount}</div>
+                  </div>
+                  <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                    <div className="text-[10px] text-emerald-700 font-bold uppercase">Delivered</div>
+                    <div className="text-lg font-black text-emerald-900">{selectedRiderDetail.deliveredCount}</div>
+                  </div>
+                  <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                    <div className="text-[10px] text-rose-700 font-bold uppercase">Delivery Failed</div>
+                    <div className="text-lg font-black text-rose-900">{selectedRiderDetail.deliveryFailedCount}</div>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">Tracking #</th>
+                        <th className="p-3">Recipient</th>
+                        <th className="p-3">Destination</th>
+                        <th className="p-3 text-right">COD (PKR)</th>
+                        <th className="p-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {riderParcelsList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-400">
+                            No shipments assigned yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        riderParcelsList.map((p, idx) => (
+                          <tr key={p.tracking_number || idx} className="hover:bg-slate-50">
+                            <td className="p-3 text-slate-400">{idx + 1}</td>
+                            <td className="p-3 font-mono font-bold text-slate-900">{p.tracking_number || p.shipmentNumber || '-'}</td>
+                            <td className="p-3">
+                              <div className="font-semibold text-slate-800">{p.recipient_name || p.consigneeName || '-'}</div>
+                              {(p.recipient_phone || p.phone) && <div className="text-[10px] text-slate-500">{p.recipient_phone || p.phone}</div>}
+                            </td>
+                            <td className="p-3 text-slate-600 truncate max-w-[150px]">{p.recipient_address || p.destination || p.destination_city?.CityName || '-'}</td>
+                            <td className="p-3 text-right font-bold text-slate-900">
+                              {Number(p.cod_amount || p.amountCollect || 0).toLocaleString()}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                                {p.status || 'Out for Delivery'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setSelectedRiderDetail(null)}
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </PortalLayout>

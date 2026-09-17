@@ -220,6 +220,49 @@ export default function OperationsArrivalsPage() {
     fetchExpectedQueue();
   }, [fetchExpectedQueue]);
 
+  // Auto-populate pieces and weight when order tracking is entered/scanned
+  const handleLookupAndPopulate = React.useCallback(async (targetTracking?: string) => {
+    const tracking = (targetTracking || scanBarcode).trim().toUpperCase();
+    if (!tracking) return null;
+
+    // 1. Check if already in the expected shipments queue in memory
+    const fromExpected = expectedShipments.find(p => (p.tracking_number || '').trim().toUpperCase() === tracking);
+    if (fromExpected) {
+      if (fromExpected.pieces !== undefined && fromExpected.pieces !== null) {
+        setScanPieces(Number(fromExpected.pieces) || 1);
+      }
+      if (fromExpected.weight !== undefined && fromExpected.weight !== null) {
+        setScanWeight(Number(fromExpected.weight) || 0.5);
+      }
+      playScannerBeep('success');
+      triggerToast(`Order #${tracking} loaded: ${fromExpected.pieces || 1} pcs • ${fromExpected.weight || 0.5} kg`, 'success');
+      return fromExpected;
+    }
+
+    // 2. Otherwise fetch from backend database
+    try {
+      const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(tracking)}&populate=*`);
+      const foundParcel = parcelRes.data?.data?.[0];
+      if (foundParcel) {
+        if (foundParcel.pieces !== undefined && foundParcel.pieces !== null) {
+          setScanPieces(Number(foundParcel.pieces) || 1);
+        }
+        if (foundParcel.weight !== undefined && foundParcel.weight !== null) {
+          setScanWeight(Number(foundParcel.weight) || 0.5);
+        }
+        playScannerBeep('success');
+        triggerToast(`Order #${tracking} loaded: ${foundParcel.pieces || 1} pcs • ${foundParcel.weight || 0.5} kg`, 'success');
+        return foundParcel;
+      } else {
+        playScannerBeep('error');
+        triggerToast(`Parcel #${tracking} not found in database!`, 'error');
+      }
+    } catch (err: any) {
+      console.warn('Could not lookup parcel details:', err);
+    }
+    return null;
+  }, [expectedShipments, scanBarcode]);
+
   // Handle Scanning or Confirming Arrival
   const handleProcessArrival = async (targetTracking?: string) => {
     const tracking = (targetTracking || scanBarcode).trim().toUpperCase();
@@ -278,6 +321,14 @@ export default function OperationsArrivalsPage() {
       triggerScanFlash('success');
       triggerToast(`Parcel #${tracking} marked ${targetStatus}!`, 'success');
 
+      // Resolve delivering rider:
+      // If a rider is selected from the dropdown above, assign it to the grid entry!
+      // Otherwise fall back to parcel's rider or 'Unassigned'
+      const selectedRiderObj = riders.find(r => String(r.id) === String(selectedRiderId));
+      const riderDisplayName = selectedRiderId !== 'all' && selectedRiderObj
+        ? (selectedRiderObj.name || selectedRiderObj.username || `Rider #${selectedRiderObj.id}`)
+        : (foundParcel.rider?.name || foundParcel.rider?.username || '-');
+
       // Add to physically received list
       const newItem: ArrivalItem = {
         id: foundParcel.id.toString(),
@@ -288,9 +339,9 @@ export default function OperationsArrivalsPage() {
         originCity: foundParcel.source_city?.CityName || foundParcel.source_city?.name || 'Origin',
         destinationCity: foundParcel.destination_city?.CityName || foundParcel.destination_city?.name || 'Destination',
         shipperName: foundParcel.shipper?.name || 'Shipper',
-        riderName: foundParcel.rider?.name || 'Rider',
-        pieces: foundParcel.pieces || Number(scanPieces) || 1,
-        weight: foundParcel.weight || Number(scanWeight) || 0.8,
+        riderName: riderDisplayName,
+        pieces: Number(scanPieces) || foundParcel.pieces || 1,
+        weight: Number(scanWeight) || foundParcel.weight || 0.8,
         codAmount: foundParcel.cod_amount || 0,
         status: targetStatus,
         arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -541,9 +592,19 @@ export default function OperationsArrivalsPage() {
                   type="text"
                   required
                   disabled={isScanning}
-                  placeholder="Scan barcode or enter tracking # and hit Enter..."
+                  placeholder="Scan barcode or enter tracking # and press Tab..."
                   value={scanBarcode}
                   onChange={(e) => setScanBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && scanBarcode.trim()) {
+                      handleLookupAndPopulate(scanBarcode);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (scanBarcode.trim()) {
+                      handleLookupAndPopulate(scanBarcode);
+                    }
+                  }}
                   className={`w-full bg-white border rounded-xl py-2.5 pl-3.5 pr-24 text-sm font-bold font-mono text-slate-900 focus:outline-none transition-all ${
                     scanFlash === 'success'
                       ? 'border-emerald-500 ring-2 ring-emerald-400'
@@ -649,6 +710,7 @@ export default function OperationsArrivalsPage() {
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Consignee & Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Rider</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">COD (PKR)</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
@@ -658,7 +720,7 @@ export default function OperationsArrivalsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {receivedShipments.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                           No shipments received yet in this batch. Scan tracking barcode or receive from Expected queue below.
                         </td>
                       </tr>
@@ -673,6 +735,18 @@ export default function OperationsArrivalsPage() {
                           <td className="px-5 py-3.5">
                             <span className="text-xs font-bold text-slate-800">{item.consigneeName}</span>
                             <span className="block text-[11px] text-slate-500">{item.originCity} &rarr; {item.destinationCity}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {item.riderName && item.riderName !== '-' && item.riderName !== 'Rider' ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+                                  <Truck className="w-3 h-3 text-indigo-600" />
+                                </span>
+                                <span className="text-xs font-bold text-slate-800">{item.riderName}</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">Unassigned</span>
+                            )}
                           </td>
                           <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
                             PKR {item.codAmount?.toLocaleString() || 0}
@@ -729,6 +803,7 @@ export default function OperationsArrivalsPage() {
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipper / Consignee</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Rider</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Current Status</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Receiving Action</th>
@@ -737,13 +812,13 @@ export default function OperationsArrivalsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {isLoadingExpected ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
                           Loading expected shipments...
                         </td>
                       </tr>
                     ) : expectedShipments.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
                           No pending expected shipments for this warehouse. All dispatched cargo has been physically arrived!
                         </td>
                       </tr>
@@ -754,9 +829,6 @@ export default function OperationsArrivalsPage() {
                           <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-5 py-3.5">
                               <span className="text-sm font-bold font-mono text-slate-900">{p.tracking_number}</span>
-                              {p.rider?.name && (
-                                <span className="block text-[10px] text-slate-500 font-medium">🛵 {p.rider.name}</span>
-                              )}
                             </td>
                             <td className="px-5 py-3.5">
                               <span className="text-xs font-bold text-slate-800">{p.shipper?.name || 'Shipper'}</span>
@@ -764,6 +836,18 @@ export default function OperationsArrivalsPage() {
                             </td>
                             <td className="px-5 py-3.5 text-xs font-medium text-slate-700">
                               {(p.source_city?.CityName || p.source_city?.name || 'Origin')} &rarr; {(p.destination_city?.CityName || p.destination_city?.name || 'Dest')}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              {p.rider?.name ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+                                    <Truck className="w-3 h-3 text-indigo-600" />
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-800">{p.rider.name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">Unassigned</span>
+                              )}
                             </td>
                             <td className="px-5 py-3.5">
                               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${

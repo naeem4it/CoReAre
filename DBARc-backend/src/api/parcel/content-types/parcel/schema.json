@@ -19,9 +19,9 @@
     },
     "status": {
       "type": "enumeration",
-      "default": "Total Booking",
+      "default": "Booked",
       "enum": [
-        "Total Booking",
+        "Booked",
         "Picked up by rider",
         "Arrived at warehouse (Origin)",
         "Arrived at the warehouse",

@@ -120,7 +120,7 @@ export default function QaOrderSandboxPage() {
           pieces: 1,
           service_type: 'Overnight',
           shipment_type: 'Parcel',
-          status: 'Total Booking',
+          status: 'Booked',
           comments: comments,
         }
       };
@@ -131,7 +131,7 @@ export default function QaOrderSandboxPage() {
       setBookedParcel({
         id: created.id || Math.floor(Math.random() * 1000),
         trackingNumber: trackingNumber,
-        status: 'Total Booking',
+        status: 'Booked',
         paymentType: paymentType,
         codAmount: actualCod,
       });

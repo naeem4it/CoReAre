@@ -101,11 +101,11 @@ export default function OperationsManifestationPage() {
       }
 
       // BUSINESS RULE: Manifestation eligibility validation
-      // Eligible: Total Booking, Picked up by rider, Arrived at warehouse (Origin)
+      // Eligible: Booked, Picked up by rider, Arrived at warehouse (Origin)
       // Ineligible: In Transit, Arrived at warehouse (Dest), Out for Delivery, Delivered, Delivery Failed, Ready for Return, Return to Shipper, Lost / Damage
       const normStatus = normalizeShipmentStatus(parcel.status);
       const isEligible = 
-        normStatus === SHIPMENT_STATUSES.TOTAL_BOOKING ||
+        normStatus === SHIPMENT_STATUSES.BOOKED ||
         normStatus === SHIPMENT_STATUSES.PICKED_UP_BY_RIDER ||
         normStatus === SHIPMENT_STATUSES.ARRIVED_ORIGIN;
 
@@ -115,9 +115,19 @@ export default function OperationsManifestationPage() {
         return;
       }
 
+      const targetId = parcel.documentId || parcel.id;
+      // Update status immediately to In Transit
+      try {
+        await apiClient.put(`/parcels/${targetId}`, {
+          data: { status: SHIPMENT_STATUSES.IN_TRANSIT }
+        });
+      } catch (putErr) {
+        console.warn('Could not update status to In Transit immediately:', putErr);
+      }
+
       const newItem: ManifestShipment = {
         id: Date.now().toString(),
-        parcelId: parcel.documentId || parcel.id,
+        parcelId: targetId,
         shipmentNumber: code,
         bookingDate: parcel.createdAt ? parcel.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
         trackPolyCn: parcel.poly_tracking || `TRX-${code}`,
@@ -127,11 +137,11 @@ export default function OperationsManifestationPage() {
         consigneeAddress: parcel.recipient_address || '',
         destinationCity: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
         cashCollect: Number(parcel.cod_amount) || 0,
-        status: normStatus,
+        status: SHIPMENT_STATUSES.IN_TRANSIT,
       };
 
       setShipments(prev => [newItem, ...prev]);
-      triggerToast(`Added #${code} (${normStatus}) to manifest.`, 'success');
+      triggerToast(`Added #${code} to manifest. Status updated to "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
       setScanBarcode('');
       barcodeInputRef.current?.focus();
     } catch (err: any) {
@@ -170,13 +180,19 @@ export default function OperationsManifestationPage() {
       // 2. Mark each parcel as In Transit and link to manifest (Active Queue Isolation)
       for (const item of shipments) {
         try {
-          const targetId = item.parcelId || item.shipmentNumber;
-          await apiClient.put(`/parcels/${targetId}`, { 
-            data: { 
-              status: SHIPMENT_STATUSES.IN_TRANSIT,
-              ...(savedManifestId ? { manifest: savedManifestId } : {})
-            } 
-          });
+          let docId = item.parcelId;
+          if (!docId || /^\d+$/.test(String(docId))) {
+            const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+            docId = parcelRes.data?.data?.[0]?.documentId;
+          }
+          if (docId) {
+            await apiClient.put(`/parcels/${docId}`, { 
+              data: { 
+                status: SHIPMENT_STATUSES.IN_TRANSIT,
+                ...(savedManifestId ? { manifest: savedManifestId } : {})
+              } 
+            });
+          }
         } catch (e) {
           console.warn(`Could not update ${item.shipmentNumber}:`, e);
         }
@@ -362,7 +378,7 @@ export default function OperationsManifestationPage() {
                   <th className="px-4 py-3.5">Shipper</th>
                   <th className="px-4 py-3.5">Consignee & Dest</th>
                   <th className="px-4 py-3.5 text-right">Cash Collect</th>
-                  <th className="px-4 py-3.5 text-center">Pre-Manifest Status</th>
+                  <th className="px-4 py-3.5 text-center">Status</th>
                   <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
               </thead>

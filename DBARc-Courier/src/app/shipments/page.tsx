@@ -82,7 +82,7 @@ export default function ShipmentsPage() {
     recipient_address: '',
     cod_amount: 0,
     weight: 0.5,
-    status: 'Total Booking',
+    status: 'Booked',
   });
 
   const fetchParcels = async () => {
@@ -126,7 +126,7 @@ export default function ShipmentsPage() {
             codAmount: item.cod_amount || 0,
             weight: item.weight || 0.5,
             deliveryCharges: item.delivery_charges || 0,
-            status: item.status || 'Total Booking',
+            status: item.status || 'Booked',
             eta: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A',
             createdAt: item.createdAt || new Date().toISOString(),
             rawParcel: item,
@@ -337,7 +337,7 @@ export default function ShipmentsPage() {
                 className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
               >
                 <option value="All">All Statuses</option>
-                <option value="Total Booking">Total Booking</option>
+                <option value="Booked">Booked</option>
                 <option value="Arrived">Arrived</option>
                 <option value="Out For delivery">Out For delivery</option>
                 <option value="Delivered">Delivered</option>
@@ -663,7 +663,7 @@ export default function ShipmentsPage() {
                     onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
                     className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                   >
-                    <option value="Total Booking">Total Booking</option>
+                    <option value="Booked">Booked</option>
                     <option value="Arrived">Arrived</option>
                     <option value="Out For delivery">Out For delivery</option>
                     <option value="Delivered">Delivered</option>

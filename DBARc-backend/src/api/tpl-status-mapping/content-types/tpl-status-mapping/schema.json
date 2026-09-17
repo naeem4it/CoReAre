@@ -24,7 +24,7 @@
     "internal_status": {
       "type": "enumeration",
       "enum": [
-        "Total Booking",
+        "Booked",
         "Not Arrived",
         "Arrived",
         "Arrived At Destination",

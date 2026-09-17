@@ -113,13 +113,23 @@ export default function CustomerServiceArrivalSummaryPage() {
       ];
 
       const statusQueryParams = arrivalStatuses.map((s, idx) => `filters[status][$in][${idx}]=${encodeURIComponent(s)}`).join('&');
-      let url = `/parcels?populate[shipper]=true&populate[destination_city]=true&populate[source_city]=true&populate[origin_office]=true&populate[rider]=true&populate[manifest]=true&populate[pickup_location][populate]=*&${statusQueryParams}&pagination[pageSize]=1000&sort[0]=createdAt:desc`;
-
-      if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
-      if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
+      const url = `/parcels?populate[shipper]=true&populate[destination_city]=true&populate[source_city]=true&populate[origin_office]=true&populate[load_sheet][populate][rider]=true&populate[manifest]=true&populate[pickup_location][populate]=*&${statusQueryParams}&pagination[pageSize]=1000&sort[0]=createdAt:desc`;
 
       const res = await apiClient.get(url);
-      const parcels: any[] = res.data?.data || [];
+      const rawParcels: any[] = res.data?.data || [];
+
+      // Safe date filtering
+      const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
+      const toTs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
+
+      const parcels = rawParcels.filter((p: any) => {
+        if (!fromDate && !toDate) return true;
+        const dateStr = p.arrival_date || p.createdAt;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        if (isNaN(t)) return true;
+        return t >= fromTs && t <= toTs;
+      });
 
       // Map raw parcels to detailed records
       const details: ArrivalShipmentDetail[] = parcels.map((p: any) => {
@@ -127,7 +137,7 @@ export default function CustomerServiceArrivalSummaryPage() {
         const originCity = p.source_city?.CityName || p.source_city?.name || p.origin_office?.name || 'Origin';
         const destCity = p.destination_city?.CityName || p.destination_city?.name || p.destination_city || 'Destination';
         const warehouseName = p.origin_office?.name || 'Central Warehouse';
-        const rName = p.rider?.name || p.rider?.username || 'Unassigned';
+        const rName = p.load_sheet?.rider?.name || p.load_sheet?.rider?.username || 'Unassigned';
         const mNum = p.manifest?.manifest_number ? String(p.manifest.manifest_number) : '-';
 
         return {
