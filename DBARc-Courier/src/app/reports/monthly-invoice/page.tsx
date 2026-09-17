@@ -39,7 +39,7 @@ export default function MonthlyInvoiceReportPage() {
   const fetchReport = React.useCallback(async (pg = 1) => {
     setIsLoading(true);
     try {
-      let url = `/parcels?populate[source_city]=*&populate[destination_city]=*&populate[shipper]=*&populate[pickup_location][populate]=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
+      let url = `/parcels?populate=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
       if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
       if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
 
@@ -53,8 +53,8 @@ export default function MonthlyInvoiceReportPage() {
         bookDate: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-',
         arrivalDate: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending',
         consignee: p.recipient_name || p.shipper?.name || '-',
-        origin: p.source_city?.name || p.source_city?.CityName || p.pickup_location?.city?.name || 'N/A',
-        destination: p.destination_city?.name || p.destination_city || 'N/A',
+        origin: p.source_city?.CityName || p.source_city?.name || p.pickup_location?.city?.name || 'N/A',
+        destination: p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : 'N/A'),
         weight: Number(p.weight) || 0,
         cashCollect: Number(p.cod_amount) || 0,
         serviceCharges: Number(p.delivery_charges) || 0,

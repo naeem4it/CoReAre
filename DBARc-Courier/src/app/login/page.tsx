@@ -35,35 +35,19 @@ export default function LoginPage() {
     },
   });
 
-  // If already logged in with a valid non-expired token, redirect to home
+  // Clear stale session on arriving at login page so user can login with any account
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('expired') === '1') {
         setError('Your session has expired. Please log in again to continue.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('dbarc-token');
-        localStorage.removeItem('user');
-        return;
       }
-
-      const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
-      if (token && !token.startsWith('mock-')) {
-        try {
-          const parts = token.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1]));
-            if (payload.exp && Date.now() < payload.exp * 1000) {
-              router.push('/');
-              return;
-            }
-          }
-        } catch (e) {}
-        // Stale or expired token found - purge it
-        localStorage.removeItem('token');
-        localStorage.removeItem('dbarc-token');
-        localStorage.removeItem('user');
-      }
+      // Purge any stale tokens on the login page so fresh credentials can be entered
+      localStorage.removeItem('token');
+      localStorage.removeItem('dbarc-token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('activeBusinessId');
+      localStorage.removeItem('activeOfficeId');
 
       // Restore remembered email if previously checked
       const savedEmail = localStorage.getItem('rememberedEmail');
@@ -109,8 +93,8 @@ export default function LoginPage() {
       localStorage.setItem('dbarc-token', data.jwt);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect to dashboard
-      router.push('/');
+      // Full window redirect to guarantee fresh in-memory React state
+      window.location.href = '/';
     },
     onError: (err) => {
       console.warn('Backend login API notice:', err.message);

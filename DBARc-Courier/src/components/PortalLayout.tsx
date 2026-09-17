@@ -53,6 +53,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           }
 
           localStorage.setItem('user', JSON.stringify(userData));
+          // Reset any previous activeBusinessId/activeOfficeId so user gets courier context immediately
+          localStorage.removeItem('activeBusinessId');
+          localStorage.removeItem('activeOfficeId');
           refreshUser();
           setIsAuthenticated(true);
         })
@@ -256,9 +259,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   <div className="p-2 border-t border-outline-variant">
                     <button
                       onClick={() => {
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('dbarc-token');
-                        localStorage.removeItem('user');
+                        localStorage.clear();
+                        sessionStorage.clear();
                         window.location.href = '/login';
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error-container/20 hover:text-error rounded-lg flex items-center gap-2 transition-colors font-medium cursor-pointer"

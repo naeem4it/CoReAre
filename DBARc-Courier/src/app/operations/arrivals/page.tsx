@@ -6,7 +6,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { 
   Plus, 
   Save, 
-  Printer, 
   RefreshCw, 
   List, 
   Trash2, 
@@ -16,21 +15,30 @@ import {
   CheckCircle2, 
   AlertCircle, 
   X, 
-  Clock,
-  Volume2,
-  Check,
   Building2,
-  Truck
+  Truck,
+  ArrowDownRight,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
-import { RiderService, ArrivalService, ParcelService } from '@/services/api';
+import { RiderService, ArrivalService } from '@/services/api';
+import { 
+  SHIPMENT_STATUSES, 
+  normalizeShipmentStatus, 
+  getDbStatusQueryValues 
+} from '@/shared/constants/shipment-statuses';
 
 interface ArrivalItem {
   id: string;
+  documentId?: string;
   shipmentNumber: string;
   recipientName: string;
   consigneeName?: string;
   destinationCity: string;
+  originCity?: string;
+  shipperName?: string;
+  riderName?: string;
   destination?: string;
   pieces: number;
   weight: number;
@@ -39,7 +47,7 @@ interface ArrivalItem {
   arrivedAt: string;
 }
 
-// Web Audio API beep feedback for barcode scanner
+// Web Audio API feedback for barcode scanner
 const playScannerBeep = (type: 'success' | 'error' = 'success') => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -52,14 +60,14 @@ const playScannerBeep = (type: 'success' | 'error' = 'success') => {
 
     if (type === 'success') {
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // High pitch A5
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
       gain.gain.setValueAtTime(0.2, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
       osc.start();
       osc.stop(ctx.currentTime + 0.15);
     } else {
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(220, ctx.currentTime); // Low buzz
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
       osc.start();
@@ -73,11 +81,26 @@ const playScannerBeep = (type: 'success' | 'error' = 'success') => {
 export default function OperationsArrivalsPage() {
   const { user } = useAuth();
   const [arrivalId, setArrivalId] = React.useState<string>(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
-  const [selectedOrigin, setSelectedOrigin] = React.useState<string>('hub-default');
-  const [selectedRiderId, setSelectedRiderId] = React.useState<string>('');
-  const [riders, setRiders] = React.useState<any[]>([]);
-  const [offices, setOffices] = React.useState<any[]>([]);
   
+  // Arrival Type / Stage: Origin Warehouse or Destination Warehouse
+  const [arrivalStage, setArrivalStage] = React.useState<'Origin' | 'Dest'>('Origin');
+  
+  // Selected Warehouse/Office
+  const [selectedOfficeId, setSelectedOfficeId] = React.useState<string>('all');
+  const [offices, setOffices] = React.useState<any[]>([]);
+  const [riders, setRiders] = React.useState<any[]>([]);
+  const [selectedRiderId, setSelectedRiderId] = React.useState<string>('all');
+
+  // Active Tab: Expected vs. Physically Received
+  const [activeTab, setActiveTab] = React.useState<'received' | 'expected'>('received');
+
+  // Expected Shipments Queue (fetched from DB)
+  const [expectedShipments, setExpectedShipments] = React.useState<any[]>([]);
+  const [isLoadingExpected, setIsLoadingExpected] = React.useState(false);
+
+  // Scanned / Confirmed Received shipments in current batch
+  const [receivedShipments, setReceivedShipments] = React.useState<ArrivalItem[]>([]);
+
   // Barcode input states
   const [scanBarcode, setScanBarcode] = React.useState('');
   const [scanPieces, setScanPieces] = React.useState<number>(1);
@@ -85,14 +108,6 @@ export default function OperationsArrivalsPage() {
   const [isScanning, setIsScanning] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [scanFlash, setScanFlash] = React.useState<'success' | 'error' | null>(null);
-
-  const triggerScanFlash = (type: 'success' | 'error') => {
-    setScanFlash(type);
-    setTimeout(() => setScanFlash(null), 800);
-  };
-
-  // Scanned shipments list
-  const [shipments, setShipments] = React.useState<ArrivalItem[]>([]);
 
   // List History Modal
   const [isListModalOpen, setIsListModalOpen] = React.useState(false);
@@ -111,76 +126,115 @@ export default function OperationsArrivalsPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
+  const triggerScanFlash = (type: 'success' | 'error') => {
+    setScanFlash(type);
+    setTimeout(() => setScanFlash(null), 800);
+  };
+
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Fetch active origins (offices/hubs, riders, delivery routes)
+  // Fetch offices and active riders
   React.useEffect(() => {
-    const fetchOriginsList = async () => {
+    const fetchMetadata = async () => {
       try {
         const [ridersRes, officesRes] = await Promise.allSettled([
           RiderService.getAll('?filters[status][$ne]=inactive&pagination[pageSize]=100'),
           apiClient.get('/offices?populate=*&pagination[pageSize]=100')
         ]);
         
-        let loadedRiders: any[] = [];
         if (ridersRes.status === 'fulfilled') {
-          loadedRiders = ridersRes.value.data || [];
-          setRiders(loadedRiders);
+          setRiders(ridersRes.value.data || []);
         }
-        
-        let loadedOffices: any[] = [];
         if (officesRes.status === 'fulfilled') {
-          loadedOffices = officesRes.value.data?.data || [];
+          const loadedOffices = officesRes.value.data?.data || [];
           setOffices(loadedOffices);
-        }
-
-        if (loadedOffices.length > 0) {
-          setSelectedOrigin(`office-${loadedOffices[0].id}`);
-        } else if (loadedRiders.length > 0) {
-          setSelectedOrigin(`rider-${loadedRiders[0].id}`);
-          setSelectedRiderId(String(loadedRiders[0].id));
+          if (loadedOffices.length > 0) {
+            setSelectedOfficeId(String(loadedOffices[0].id));
+          }
         }
       } catch (err) {
-        console.warn('Could not load origins list:', err);
+        console.warn('Could not load offices/riders:', err);
       }
     };
 
-    fetchOriginsList();
+    fetchMetadata();
     barcodeInputRef.current?.focus();
   }, []);
 
-  // Continuous auto-focus on scanner input (only when clicking blank area, never stealing focus from selects or inputs)
-  const keepFocus = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (
-      target.closest('select') ||
-      target.closest('input') ||
-      target.closest('button') ||
-      target.closest('textarea') ||
-      target.closest('a') ||
-      target.closest('[role="dialog"]')
-    ) {
-      return;
+  // Fetch Expected Shipments based on warehouse and arrival operation
+  const fetchExpectedQueue = React.useCallback(async () => {
+    setIsLoadingExpected(true);
+    try {
+      // For Origin warehouse: expected shipments are 'Picked up by rider' or 'Not Arrived'
+      // For Destination warehouse: expected shipments are 'In Transit'
+      let queryStatuses: string[] = [];
+      if (arrivalStage === 'Origin') {
+        queryStatuses = [
+          ...getDbStatusQueryValues(SHIPMENT_STATUSES.PICKED_UP_BY_RIDER),
+          ...getDbStatusQueryValues(SHIPMENT_STATUSES.NOT_ARRIVED)
+        ];
+      } else {
+        queryStatuses = getDbStatusQueryValues(SHIPMENT_STATUSES.IN_TRANSIT);
+      }
+
+      const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
+      let url = `/parcels?populate[shipper]=true&populate[destination_city]=true&populate[source_city]=true&populate[origin_office]=true&populate[rider]=true&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
+
+      if (selectedRiderId !== 'all') {
+        url += `&filters[rider][id][$eq]=${selectedRiderId}`;
+      }
+
+      const res = await apiClient.get(url);
+      const allParcels: any[] = res.data?.data || [];
+
+      // Filter by selected warehouse/office city if applicable
+      const selectedOffice = offices.find(o => String(o.id) === String(selectedOfficeId));
+      const officeCity = selectedOffice?.city?.CityName || selectedOffice?.city?.name || '';
+
+      const filtered = allParcels.filter(p => {
+        if (!selectedOffice || selectedOfficeId === 'all') return true;
+        
+        if (arrivalStage === 'Origin') {
+          // Check origin office or source city
+          if (p.origin_office?.id && String(p.origin_office.id) === String(selectedOfficeId)) return true;
+          const src = p.source_city?.CityName || p.source_city?.name || '';
+          if (officeCity && src.toLowerCase() === officeCity.toLowerCase()) return true;
+          return !p.origin_office; // Include unassigned origin
+        } else {
+          // Destination warehouse: check destination city
+          const dest = p.destination_city?.CityName || p.destination_city?.name || p.destination_city || '';
+          if (officeCity && dest.toLowerCase() === officeCity.toLowerCase()) return true;
+          return true;
+        }
+      });
+
+      setExpectedShipments(filtered);
+    } catch (err) {
+      console.warn('Failed to load expected arrival queue:', err);
+    } finally {
+      setIsLoadingExpected(false);
     }
-    barcodeInputRef.current?.focus();
-  };
+  }, [arrivalStage, selectedOfficeId, selectedRiderId, offices]);
 
-  const handleAddShipment = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!scanBarcode.trim()) return;
+  React.useEffect(() => {
+    fetchExpectedQueue();
+  }, [fetchExpectedQueue]);
 
-    const tracking = scanBarcode.trim().toUpperCase();
-    if (shipments.some(s => s.shipmentNumber === tracking)) {
+  // Handle Scanning or Confirming Arrival
+  const handleProcessArrival = async (targetTracking?: string) => {
+    const tracking = (targetTracking || scanBarcode).trim().toUpperCase();
+    if (!tracking) return;
+
+    if (receivedShipments.some(s => s.shipmentNumber === tracking)) {
       playScannerBeep('error');
       triggerScanFlash('error');
       triggerToast(`Tracking #${tracking} is already scanned in this session.`, 'error');
-      setScanBarcode('');
+      if (!targetTracking) setScanBarcode('');
       return;
     }
 
     setIsScanning(true);
     try {
-      // 1. Look up parcel by tracking number in Strapi
       const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(tracking)}&populate=*`);
       const foundParcel = parcelRes.data?.data?.[0];
 
@@ -188,43 +242,71 @@ export default function OperationsArrivalsPage() {
         playScannerBeep('error');
         triggerScanFlash('error');
         triggerToast(`Parcel #${tracking} not found in database!`, 'error');
-        setScanBarcode('');
+        if (!targetTracking) setScanBarcode('');
         barcodeInputRef.current?.focus();
         return;
       }
 
-      // 2. Mark as Arrived at the warehouse directly in Strapi (support Strapi 5 documentId)
+      // Business Rule Validation: Do not show/process unrelated completed delivery/return shipments
+      const currentNormStatus = normalizeShipmentStatus(foundParcel.status);
+      if (
+        currentNormStatus === SHIPMENT_STATUSES.DELIVERED ||
+        currentNormStatus === SHIPMENT_STATUSES.RETURN_TO_SHIPPER ||
+        currentNormStatus === SHIPMENT_STATUSES.LOST_DAMAGE
+      ) {
+        playScannerBeep('error');
+        triggerScanFlash('error');
+        triggerToast(`Shipment #${tracking} is ${currentNormStatus} and cannot be received as active arrival work.`, 'error');
+        if (!targetTracking) setScanBarcode('');
+        return;
+      }
+
+      // Determine target arrival status based on operational stage
+      const targetStatus = arrivalStage === 'Origin' 
+        ? SHIPMENT_STATUSES.ARRIVED_ORIGIN 
+        : SHIPMENT_STATUSES.ARRIVED_DEST;
+
       const targetIdentifier = foundParcel.documentId || foundParcel.id;
       await apiClient.put(`/parcels/${targetIdentifier}`, {
         data: {
-          status: 'Arrived',
+          status: targetStatus,
           arrival_date: new Date().toISOString()
         }
       });
 
-      // 3. Audio & Visual success feedback
       playScannerBeep('success');
       triggerScanFlash('success');
-      triggerToast(`Parcel #${tracking} marked ARRIVED AT WAREHOUSE!`, 'success');
+      triggerToast(`Parcel #${tracking} marked ${targetStatus}!`, 'success');
 
-      // 4. Add to scanned list with real parcel details
+      // Add to physically received list
       const newItem: ArrivalItem = {
         id: foundParcel.id.toString(),
+        documentId: targetIdentifier,
         shipmentNumber: tracking,
         recipientName: foundParcel.recipient_name || 'Customer',
-        destinationCity: foundParcel.destination_city?.name || foundParcel.recipient_address?.split(',').pop()?.trim() || 'Pakistan',
+        consigneeName: foundParcel.recipient_name || 'Customer',
+        originCity: foundParcel.source_city?.CityName || foundParcel.source_city?.name || 'Origin',
+        destinationCity: foundParcel.destination_city?.CityName || foundParcel.destination_city?.name || 'Destination',
+        shipperName: foundParcel.shipper?.name || 'Shipper',
+        riderName: foundParcel.rider?.name || 'Rider',
         pieces: foundParcel.pieces || Number(scanPieces) || 1,
-        weight: foundParcel.weight || Number(scanWeight) || 0.5,
+        weight: foundParcel.weight || Number(scanWeight) || 0.8,
         codAmount: foundParcel.cod_amount || 0,
-        status: 'Arrived at the warehouse',
+        status: targetStatus,
         arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       };
 
-      setShipments(prev => [newItem, ...prev]);
-      setScanBarcode('');
-      setScanPieces(1);
-      setScanWeight(0.8);
-      barcodeInputRef.current?.focus();
+      setReceivedShipments(prev => [newItem, ...prev]);
+
+      // Remove from Expected queue immediately (Active Queue Isolation)
+      setExpectedShipments(prev => prev.filter(p => p.tracking_number.toUpperCase() !== tracking));
+
+      if (!targetTracking) {
+        setScanBarcode('');
+        setScanPieces(1);
+        setScanWeight(0.8);
+        barcodeInputRef.current?.focus();
+      }
     } catch (err: any) {
       playScannerBeep('error');
       console.error('Scan arrival error:', err);
@@ -234,57 +316,58 @@ export default function OperationsArrivalsPage() {
     }
   };
 
+  // Mark an Expected parcel as "Not Arrived"
+  const handleMarkNotArrived = async (parcel: any) => {
+    try {
+      const targetId = parcel.documentId || parcel.id;
+      await apiClient.put(`/parcels/${targetId}`, {
+        data: { status: SHIPMENT_STATUSES.NOT_ARRIVED }
+      });
+      triggerToast(`Shipment #${parcel.tracking_number} marked as NOT ARRIVED.`, 'success');
+      fetchExpectedQueue();
+    } catch (err: any) {
+      triggerToast(`Failed to update status: ${err.message}`, 'error');
+    }
+  };
+
   const handleRemoveItem = (id: string) => {
-    setShipments(prev => prev.filter(item => item.id !== id));
+    setReceivedShipments(prev => prev.filter(item => item.id !== id));
   };
 
   const handleReset = () => {
-    if (confirm('Reset current arrival batch form?')) {
+    if (confirm('Reset current arrival batch?')) {
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
-      setShipments([]);
+      setReceivedShipments([]);
       setScanBarcode('');
       barcodeInputRef.current?.focus();
     }
   };
 
   const handleSave = async () => {
-    if (shipments.length === 0) {
-      triggerToast('Please scan at least one shipment arrival before finalizing batch.', 'error');
+    if (receivedShipments.length === 0) {
+      triggerToast('Please scan or confirm at least one shipment arrival before finalizing batch.', 'error');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // Persist Arrival Batch Record
-      try {
-        const riderIdNumber = selectedOrigin.startsWith('rider-')
-          ? Number(selectedOrigin.replace('rider-', ''))
-          : selectedRiderId
-          ? Number(selectedRiderId)
-          : null;
-        await ArrivalService.createBatch({
-          batch_id: arrivalId,
-          rider: riderIdNumber,
-          total_shipments: shipments.length,
-          total_weight: totalWeight,
-          total_pieces: totalPieces,
-          scanned_items: shipments,
-          arrival_date: new Date().toISOString(),
-        });
-      } catch (arrivalErr) {
-        console.warn('Arrival entity record save notice:', arrivalErr);
-      }
+      await ArrivalService.createBatch({
+        batch_id: arrivalId,
+        total_shipments: receivedShipments.length,
+        total_weight: totalWeight,
+        total_pieces: totalPieces,
+        scanned_items: receivedShipments,
+        arrival_date: new Date().toISOString(),
+      });
 
-      triggerToast(`Arrival batch ${arrivalId} finalized! ${shipments.length} parcels recorded.`, 'success');
-      
-      // Reset form
+      triggerToast(`Arrival batch ${arrivalId} finalized! ${receivedShipments.length} parcels recorded.`, 'success');
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
-      setShipments([]);
+      setReceivedShipments([]);
       setScanBarcode('');
-      barcodeInputRef.current?.focus();
+      fetchExpectedQueue();
     } catch (err: any) {
       console.error('Failed to save arrival batch:', err);
-      triggerToast('Failed to save arrival batch. Please check network connection.', 'error');
+      triggerToast('Failed to save arrival batch. Please check connection.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -303,8 +386,8 @@ export default function OperationsArrivalsPage() {
     }
   };
 
-  const totalPieces = React.useMemo(() => shipments.reduce((acc, curr) => acc + curr.pieces, 0), [shipments]);
-  const totalWeight = React.useMemo(() => Math.round(shipments.reduce((acc, curr) => acc + curr.weight, 0) * 10) / 10, [shipments]);
+  const totalPieces = React.useMemo(() => receivedShipments.reduce((acc, curr) => acc + curr.pieces, 0), [receivedShipments]);
+  const totalWeight = React.useMemo(() => Math.round(receivedShipments.reduce((acc, curr) => acc + curr.weight, 0) * 10) / 10, [receivedShipments]);
 
   return (
     <PortalLayout>
@@ -324,18 +407,19 @@ export default function OperationsArrivalsPage() {
         </div>
       )}
 
-      <div className="space-y-6 max-w-[1600px] mx-auto pb-16" onClick={keepFocus}>
+      <div className="space-y-6 max-w-[1600px] mx-auto pb-16">
+        
         {/* Header Action Strip */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5 mb-1">
-              <Barcode className="w-4 h-4" /> Inbound Logistics & Scanners
+              <Barcode className="w-4 h-4" /> Operations / Warehouse Intake & Arrivals
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Arrivals by Scanner
+              Arrivals Receiving Station
             </h1>
             <p className="text-xs text-slate-500">
-              Scan tracking barcodes directly with handheld or 2D scanner to automatically mark parcels as Arrived.
+              Receive inbound shipments for selected warehouse. Distinguishes Expected vs. Physically Received shipments.
             </p>
           </div>
 
@@ -350,77 +434,90 @@ export default function OperationsArrivalsPage() {
               onClick={handleReset}
               className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             >
-              <RefreshCw className="w-4 h-4" /> Clear Form
+              <RefreshCw className="w-4 h-4" /> Reset
             </button>
             <button
               onClick={handleSave}
-              disabled={isSubmitting || shipments.length === 0}
+              disabled={isSubmitting || receivedShipments.length === 0}
               className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
             >
-              <Save className="w-4 h-4" /> Finalize Batch ({shipments.length})
+              <Save className="w-4 h-4" /> Finalize Batch ({receivedShipments.length})
             </button>
           </div>
         </div>
 
-        {/* Scanner Work Area Card */}
+        {/* Warehouse, Stage & Mode Controls Bar */}
         <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
-          {/* Top Controls Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-slate-100">
-            <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Arrival Batch Code</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pb-4 border-b border-slate-100">
+            {/* Arrival Operation Stage */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Arrival Operation</label>
+              <select
+                value={arrivalStage}
+                onChange={(e) => setArrivalStage(e.target.value as 'Origin' | 'Dest')}
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                <option value="Origin">🏢 Origin Warehouse Arrival (Intake)</option>
+                <option value="Dest">🎯 Destination Warehouse Arrival (Linehaul)</option>
+              </select>
+            </div>
+
+            {/* Warehouse / Office Location */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5" /> Warehouse / Office
+              </label>
+              <select
+                value={selectedOfficeId}
+                onChange={(e) => setSelectedOfficeId(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                <option value="all">All Facilities</option>
+                {offices.map((o: any) => {
+                  const cityName = o.city?.CityName || o.city?.name || '';
+                  return (
+                    <option key={o.id} value={String(o.id)}>
+                      {o.name || `Office #${o.id}`} {cityName ? `(${cityName})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Filter by Delivering Rider */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5" /> Delivering Rider (Optional)
+              </label>
+              <select
+                value={selectedRiderId}
+                onChange={(e) => setSelectedRiderId(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                <option value="all">All Riders</option>
+                {riders.map((r: any) => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name || r.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Arrival Batch ID */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Arrival Batch ID</label>
               <input
                 type="text"
                 value={arrivalId}
                 onChange={(e) => setArrivalId(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
                 className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold font-mono text-slate-900 outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-
-            <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Origin / Delivering Hub, Van or Rider</label>
-              <select
-                value={selectedOrigin}
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  setSelectedOrigin(e.target.value);
-                  if (e.target.value.startsWith('rider-')) {
-                    setSelectedRiderId(e.target.value.replace('rider-', ''));
-                  }
-                }}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-              >
-                <option value="hub-default">Central Hub / Warehouse Intake Facility</option>
-                {offices.length > 0 && (
-                  <optgroup label="Offices & Hub Facilities">
-                    {offices.map((o: any) => {
-                      const cityName = o.city?.CityName || o.city?.name || o.cityName || '';
-                      return (
-                        <option key={`office-${o.id}`} value={`office-${o.id}`}>
-                          🏢 {o.name || `Office #${o.id}`} {cityName ? `(${cityName})` : ''}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                )}
-                {riders.length > 0 && (
-                  <optgroup label="Delivery Vans & Riders">
-                    {riders.map((r: any) => (
-                      <option key={`rider-${r.id}`} value={`rider-${r.id}`}>
-                        🛵 {r.name} ({r.phone || 'Active Rider'})
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
           </div>
 
-          {/* Barcode Scanner Bar with Visual Glow */}
+          {/* Barcode Scanner Bar */}
           <form 
-            onSubmit={handleAddShipment} 
+            onSubmit={(e) => { e.preventDefault(); handleProcessArrival(); }} 
             className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col md:flex-row items-end gap-3 ${
               scanFlash === 'success'
                 ? 'bg-emerald-50/70 border-emerald-500 ring-4 ring-emerald-500/20 shadow-lg'
@@ -432,10 +529,10 @@ export default function OperationsArrivalsPage() {
             <div className="flex-1 flex flex-col gap-1.5 w-full">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode
+                  <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode ({arrivalStage === 'Origin' ? 'Origin Arrival' : 'Dest Arrival'})
                 </span>
                 <span className="text-[10px] font-mono font-normal text-slate-400">
-                  Ready for physical scanner • Auto-submits on Enter
+                  Target Status: <strong>{arrivalStage === 'Origin' ? SHIPMENT_STATUSES.ARRIVED_ORIGIN : SHIPMENT_STATUSES.ARRIVED_DEST}</strong>
                 </span>
               </label>
               <div className="relative">
@@ -443,9 +540,8 @@ export default function OperationsArrivalsPage() {
                   ref={barcodeInputRef}
                   type="text"
                   required
-                  autoFocus
                   disabled={isScanning}
-                  placeholder="Scan barcode or type tracking # and hit Enter..."
+                  placeholder="Scan barcode or enter tracking # and hit Enter..."
                   value={scanBarcode}
                   onChange={(e) => setScanBarcode(e.target.value)}
                   className={`w-full bg-white border rounded-xl py-2.5 pl-3.5 pr-24 text-sm font-bold font-mono text-slate-900 focus:outline-none transition-all ${
@@ -458,10 +554,10 @@ export default function OperationsArrivalsPage() {
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
                   {isScanning ? (
-                    <span className="text-[10px] font-bold text-primary animate-pulse">Checking...</span>
+                    <span className="text-[10px] font-bold text-primary animate-pulse">Receiving...</span>
                   ) : (
                     <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-500">
-                      SCANNER ACTIVE
+                      SCANNER READY
                     </span>
                   )}
                 </div>
@@ -497,92 +593,220 @@ export default function OperationsArrivalsPage() {
 
             <button
               type="submit"
-              disabled={isScanning}
+              disabled={isScanning || !scanBarcode.trim()}
               className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer h-10 disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" /> {isScanning ? 'Verifying...' : 'Scan / Add'}
+              <Plus className="w-4 h-4" /> {isScanning ? 'Receiving...' : 'Confirm Arrival'}
             </button>
           </form>
 
-          {/* Metrics Summary Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <span className="text-xs font-bold text-slate-400 uppercase">Scanned Shipments</span>
-              <p className="text-2xl font-black text-slate-900 mt-1">{shipments.length}</p>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <span className="text-xs font-bold text-slate-400 uppercase">Total Pieces</span>
-              <p className="text-2xl font-black text-slate-900 mt-1">{totalPieces}</p>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <span className="text-xs font-bold text-slate-400 uppercase">Total Weight</span>
-              <p className="text-2xl font-black text-primary mt-1">{totalWeight} <span className="text-sm font-medium text-slate-400">kg</span></p>
-            </div>
+          {/* Section Navigation Tabs: Physically Received vs. Expected (Pending Physical Arrival) */}
+          <div className="flex border-b border-slate-200">
+            <button
+              onClick={() => setActiveTab('received')}
+              className={`pb-3 px-4 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeTab === 'received'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" /> Physically Received ({receivedShipments.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('expected')}
+              className={`pb-3 px-4 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeTab === 'expected'
+                  ? 'border-amber-500 text-amber-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Clock className="w-4 h-4" /> Expected / Inbound Work Queue ({expectedShipments.length})
+            </button>
           </div>
 
-          {/* Scanned Table */}
-          <div className="rounded-2xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipment Tracking #</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Consignee & Destination</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">COD (PKR)</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pieces & Weight</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {shipments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
-                      No shipments scanned yet. Connect your USB/Bluetooth barcode scanner or type tracking # above.
-                    </td>
-                  </tr>
-                ) : (
-                  shipments.map((item, idx) => (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-3.5 text-xs font-bold text-slate-400">{idx + 1}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold font-mono text-primary">{item.shipmentNumber}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">Scanned at {item.arrivedAt || 'Just now'}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800">{item.consigneeName || 'Customer'}</span>
-                          <span className="text-[11px] text-slate-500">{item.destination || 'Hub Destination'}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
-                        PKR {item.codAmount?.toLocaleString() || 0}
-                      </td>
-                      <td className="px-5 py-3.5 text-xs font-semibold text-slate-700">
-                        {item.pieces} pc{item.pieces > 1 ? 's' : ''} • {item.weight} kg
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3" /> Arrived
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <button
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Remove from current batch"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+          {/* Tab 1: Physically Received Shipments */}
+          {activeTab === 'received' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Received Shipments</span>
+                  <p className="text-2xl font-black text-slate-900 mt-1">{receivedShipments.length}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Total Pieces</span>
+                  <p className="text-2xl font-black text-slate-900 mt-1">{totalPieces}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Total Weight</span>
+                  <p className="text-2xl font-black text-primary mt-1">{totalWeight} <span className="text-sm font-medium text-slate-400">kg</span></p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Consignee & Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">COD (PKR)</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {receivedShipments.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                          No shipments received yet in this batch. Scan tracking barcode or receive from Expected queue below.
+                        </td>
+                      </tr>
+                    ) : (
+                      receivedShipments.map((item, idx) => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-5 py-3.5 text-xs font-bold text-slate-400">{idx + 1}</td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-bold font-mono text-primary">{item.shipmentNumber}</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">Scanned at {item.arrivedAt}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs font-bold text-slate-800">{item.consigneeName}</span>
+                            <span className="block text-[11px] text-slate-500">{item.originCity} &rarr; {item.destinationCity}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
+                            PKR {item.codAmount?.toLocaleString() || 0}
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-semibold text-slate-700">
+                            {item.pieces} pc • {item.weight} kg
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" /> {item.status}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove from current batch"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Expected Shipments (Pending Physical Arrival) */}
+          {activeTab === 'expected' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-amber-50/60 p-4 rounded-2xl border border-amber-200">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Expected shipments for <strong>{arrivalStage === 'Origin' ? 'Origin Intake' : 'Destination Linehaul'}</strong>. 
+                    These parcels have been booked/dispatched but not yet physically verified into warehouse inventory.
+                  </span>
+                </div>
+                <button
+                  onClick={fetchExpectedQueue}
+                  className="px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-bold text-amber-900 hover:bg-amber-100/50 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingExpected ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipper / Consignee</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Current Status</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Receiving Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {isLoadingExpected ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                          Loading expected shipments...
+                        </td>
+                      </tr>
+                    ) : expectedShipments.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                          No pending expected shipments for this warehouse. All dispatched cargo has been physically arrived!
+                        </td>
+                      </tr>
+                    ) : (
+                      expectedShipments.map((p) => {
+                        const isNotArrived = normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.NOT_ARRIVED;
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-bold font-mono text-slate-900">{p.tracking_number}</span>
+                              {p.rider?.name && (
+                                <span className="block text-[10px] text-slate-500 font-medium">🛵 {p.rider.name}</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-xs font-bold text-slate-800">{p.shipper?.name || 'Shipper'}</span>
+                              <span className="block text-[11px] text-slate-500">&rarr; {p.recipient_name || 'Customer'}</span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-medium text-slate-700">
+                              {(p.source_city?.CityName || p.source_city?.name || 'Origin')} &rarr; {(p.destination_city?.CityName || p.destination_city?.name || 'Dest')}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                isNotArrived
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {isNotArrived ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-medium text-slate-700">
+                              {p.pieces || 1} pc • {p.weight || 0.5} kg
+                            </td>
+                            <td className="px-5 py-3.5 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleProcessArrival(p.tracking_number)}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Mark Received
+                                </button>
+                                {!isNotArrived && arrivalStage === 'Origin' && (
+                                  <button
+                                    onClick={() => handleMarkNotArrived(p)}
+                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all cursor-pointer border border-rose-200"
+                                    title="Mark parcel as missing / Not Arrived at origin warehouse"
+                                  >
+                                    Not Arrived
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -618,8 +842,8 @@ export default function OperationsArrivalsPage() {
                   <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-bold">
                     <tr>
                       <th className="px-4 py-3">Batch ID</th>
-                      <th className="px-4 py-3">Rider</th>
                       <th className="px-4 py-3">Parcels</th>
+                      <th className="px-4 py-3">Weight</th>
                       <th className="px-4 py-3">Date</th>
                     </tr>
                   </thead>
@@ -627,8 +851,8 @@ export default function OperationsArrivalsPage() {
                     {arrivalHistory.map((item: any) => (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-mono font-bold text-primary">{item.batch_id || `ARR-${item.id}`}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{item.rider?.name || 'Assigned Rider'}</td>
                         <td className="px-4 py-3 font-bold text-slate-900">{item.total_shipments || item.scanned_items?.length || '-'} units</td>
+                        <td className="px-4 py-3 text-slate-600">{item.total_weight || '-'} kg</td>
                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">{new Date(item.createdAt || item.arrival_date).toLocaleDateString()}</td>
                       </tr>
                     ))}

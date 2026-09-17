@@ -801,16 +801,16 @@ function TrackingPageContent() {
               <option value="">All 12 Statuses</option>
               <option value="Total Booking">1. Total Booking</option>
               <option value="Picked up by rider">2. Picked up by rider</option>
-              <option value="Arrived at the warehouse">3. Arrived at the warehouse</option>
+              <option value="Arrived at warehouse (Origin)">3. Arrived at warehouse (Origin)</option>
               <option value="Not Arrived">4. Not Arrived</option>
-              <option value="In Transit">5. In Transit (Inter-City)</option>
-              <option value="Arrived at warehouse">6. Arrived at warehouse (Dest)</option>
+              <option value="In Transit">5. In Transit</option>
+              <option value="Arrived at warehouse (Dest)">6. Arrived at warehouse (Dest)</option>
               <option value="Out for Delivery">7. Out for Delivery</option>
               <option value="Delivered">8. Delivered</option>
               <option value="Delivery Failed">9. Delivery Failed</option>
               <option value="Ready for Return">10. Ready for Return</option>
               <option value="Return to Shipper">11. Return to Shipper</option>
-              <option value="Lost/Damage">12. Lost / Damage</option>
+              <option value="Lost / Damage">12. Lost / Damage</option>
             </select>
           </div>
 
@@ -1136,16 +1136,16 @@ function TrackingPageContent() {
                       >
                         <option value="Total Booking">1. Total Booking</option>
                         <option value="Picked up by rider">2. Picked up by rider</option>
-                        <option value="Arrived at the warehouse">3. Arrived at the warehouse (Origin)</option>
+                        <option value="Arrived at warehouse (Origin)">3. Arrived at warehouse (Origin)</option>
                         <option value="Not Arrived">4. Not Arrived</option>
-                        <option value="In Transit">5. In Transit (Linehaul)</option>
-                        <option value="Arrived at warehouse">6. Arrived at warehouse (Dest)</option>
+                        <option value="In Transit">5. In Transit</option>
+                        <option value="Arrived at warehouse (Dest)">6. Arrived at warehouse (Dest)</option>
                         <option value="Out for Delivery">7. Out for Delivery</option>
                         <option value="Delivered">8. Delivered</option>
                         <option value="Delivery Failed">9. Delivery Failed</option>
                         <option value="Ready for Return">10. Ready for Return</option>
                         <option value="Return to Shipper">11. Return to Shipper</option>
-                        <option value="Lost/Damage">12. Lost / Damage</option>
+                        <option value="Lost / Damage">12. Lost / Damage</option>
                       </select>
                     </div>
 

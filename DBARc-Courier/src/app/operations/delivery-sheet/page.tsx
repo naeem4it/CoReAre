@@ -5,6 +5,7 @@ import PortalLayout from '@/components/PortalLayout';
 import { List, Save, Printer, RefreshCw, X, Search, FileText, Barcode, CheckCircle2, UserCheck, Shield, Plus, Trash2 } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, DeliverySheetService } from '@/services/api';
+import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
 
 interface DeliverySheetItem {
@@ -106,6 +107,23 @@ export default function OperationsDeliverySheetPage() {
       const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${barcode}&populate=*`);
       const parcel = res.data?.data?.[0];
 
+      if (!parcel) {
+        triggerToast(`Shipment #${barcode} not found in database.`, 'error');
+        return;
+      }
+
+      // Business Rule: Delivery Sheet Eligibility
+      const normStatus = normalizeShipmentStatus(parcel.status);
+      if (
+        normStatus === SHIPMENT_STATUSES.DELIVERED ||
+        normStatus === SHIPMENT_STATUSES.RETURN_TO_SHIPPER ||
+        normStatus === SHIPMENT_STATUSES.LOST_DAMAGE
+      ) {
+        triggerToast(`Cannot add #${barcode} to delivery sheet: Already in terminal state (${normStatus}).`, 'error');
+        setScanBarcode('');
+        return;
+      }
+
       const dest = typeof parcel?.destination_city === 'string'
         ? parcel.destination_city
         : (parcel?.destination_city?.city_name || parcel?.destination_city?.CityName || parcel?.destination_city?.name || 'LHE');
@@ -122,32 +140,19 @@ export default function OperationsDeliverySheetPage() {
         consigneeName: parcel?.recipient_name || 'Recipient Consignee',
         consigneeAddress: parcel?.recipient_address || 'Delivery Address',
         destination: dest,
-        pieces: 1,
+        pieces: parcel?.pieces || 1,
         weight: parcel?.weight || 1.0,
         amountCollect: parcel?.cod_amount || 0,
-        status: 'Out for Delivery',
+        status: SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
         remarks: ''
       };
 
       setShipments(prev => [newItem, ...prev]);
+      triggerToast(`Added #${barcode} as Out for Delivery.`, 'success');
       setScanBarcode('');
-    } catch (err) {
-      console.warn('Could not query parcel, adding standard item:', err);
-      const newItem: DeliveryShipment = {
-        id: Date.now().toString(),
-        shipmentNumber: barcode,
-        shipmentRef: `#${Math.floor(100000 + Math.random() * 900000)}`,
-        shipperName: 'Merchant Store',
-        consigneeName: 'Recipient Customer',
-        consigneeAddress: 'Delivery Address Location',
-        destination: 'LHE',
-        pieces: 1,
-        weight: 1.0,
-        amountCollect: 0,
-        status: 'Out for Delivery',
-        remarks: ''
-      };
-      setShipments(prev => [newItem, ...prev]);
+    } catch (err: any) {
+      console.warn('Could not query parcel:', err);
+      triggerToast(`Error adding shipment: ${err.message}`, 'error');
       setScanBarcode('');
     }
   };
@@ -163,12 +168,17 @@ export default function OperationsDeliverySheetPage() {
       // 1. Update parcel statuses & remarks in Strapi
       for (const item of shipments) {
         try {
+          const updatePayload: any = {
+            status: item.status,
+            comments: item.remarks || undefined,
+          };
+          if (item.status === SHIPMENT_STATUSES.DELIVERED) {
+            updatePayload.delivered_date = new Date().toISOString();
+          }
+
           if (item.parcelId) {
             await apiClient.put(`/parcels/${item.parcelId}`, {
-              data: {
-                status: item.status,
-                comments: item.remarks || undefined,
-              }
+              data: updatePayload
             });
           } else {
             const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${item.shipmentNumber}`);
@@ -176,10 +186,7 @@ export default function OperationsDeliverySheetPage() {
             if (p) {
               const pid = p.documentId || p.id;
               await apiClient.put(`/parcels/${pid}`, {
-                data: {
-                  status: item.status,
-                  comments: item.remarks || undefined,
-                }
+                data: updatePayload
               });
             }
           }
@@ -393,10 +400,10 @@ export default function OperationsDeliverySheetPage() {
                             : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}
                       >
-                        <option value="Delivered">Delivered</option>
-                        <option value="Ready To Return">Ready To Return</option>
-                        <option value="Failed Attempt">Failed Attempt</option>
-                        <option value="Out For Delivery">Out For Delivery</option>
+                        <option value={SHIPMENT_STATUSES.OUT_FOR_DELIVERY}>Out for Delivery</option>
+                        <option value={SHIPMENT_STATUSES.DELIVERED}>Delivered</option>
+                        <option value={SHIPMENT_STATUSES.DELIVERY_FAILED}>Delivery Failed</option>
+                        <option value={SHIPMENT_STATUSES.READY_FOR_RETURN}>Ready for Return</option>
                       </select>
                     </td>
                     <td className="px-4 py-3.5">

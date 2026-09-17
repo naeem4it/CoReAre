@@ -35,11 +35,13 @@ export default function CustomerReportPage() {
   const fetchReport = React.useCallback(async (pg = 1) => {
     setIsLoading(true);
     try {
-      let url = `/parcels?populate[shipper]=*&populate[destination_city]=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
+      let url = `/parcels?populate=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
       if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
       if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
       if (selectedStatus) url += `&filters[status][$eq]=${encodeURIComponent(selectedStatus)}`;
-      if (selectedCity) url += `&filters[destination_city][name][$eq]=${encodeURIComponent(selectedCity)}`;
+      if (selectedCity) {
+        url += `&filters[$or][0][destination_city][CityName][$containsi]=${encodeURIComponent(selectedCity)}&filters[$or][1][destination_city][CityName][$eq]=${encodeURIComponent(selectedCity)}`;
+      }
 
       const res = await apiClient.get(url);
       const parcels: any[] = res.data?.data || [];
@@ -141,12 +143,18 @@ export default function CustomerReportPage() {
               <label className="font-label-md text-label-md text-outline">STATUS TYPE</label>
               <select className="w-full h-10 px-sm border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary" value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
                 <option value="">All Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Arrived">Arrived</option>
-                <option value="Out For Delivery">Out For Delivery</option>
+                <option value="Total Booking">Total Booking</option>
+                <option value="Picked up by rider">Picked up by rider</option>
+                <option value="Arrived at warehouse (Origin)">Arrived at warehouse (Origin)</option>
+                <option value="Not Arrived">Not Arrived</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Arrived at warehouse (Dest)">Arrived at warehouse (Dest)</option>
+                <option value="Out for Delivery">Out for Delivery</option>
                 <option value="Delivered">Delivered</option>
-                <option value="Ready To Return">Ready To Return</option>
-                <option value="Returned">Returned</option>
+                <option value="Delivery Failed">Delivery Failed</option>
+                <option value="Ready for Return">Ready for Return</option>
+                <option value="Return to Shipper">Return to Shipper</option>
+                <option value="Lost / Damage">Lost / Damage</option>
               </select>
             </div>
           </div>

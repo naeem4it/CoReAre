@@ -2,8 +2,12 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { List, Save, Printer, RefreshCw, Barcode, Shield, MapPin, X, Download, FileSpreadsheet, Search, CheckCircle2 } from 'lucide-react';
+import { List, Save, Printer, RefreshCw, Barcode, Shield, MapPin, X, Download, Search, CheckCircle2, AlertCircle } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
+import { 
+  SHIPMENT_STATUSES, 
+  normalizeShipmentStatus 
+} from '@/shared/constants/shipment-statuses';
 
 interface ManifestItem {
   id: string;
@@ -18,6 +22,7 @@ interface ManifestItem {
 
 interface ManifestShipment {
   id: string;
+  parcelId?: number | string;
   shipmentNumber: string;
   bookingDate: string;
   trackPolyCn: string;
@@ -25,19 +30,17 @@ interface ManifestShipment {
   consigneeName: string;
   consigneeContact: string;
   consigneeAddress: string;
+  destinationCity: string;
   cashCollect: number;
   status: string;
 }
 
-
 export default function OperationsManifestationPage() {
   const [manifestNumber, setManifestNumber] = React.useState<number>(() => Math.floor(1000 + Math.random() * 9000));
   const [manifestType, setManifestType] = React.useState<string>('Station');
-  const [selectedStation, setSelectedStation] = React.useState<string>('');
+  const [selectedStation, setSelectedStation] = React.useState<string>('Lahore Hub');
   const [sealNo, setSealNo] = React.useState<string>(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
   const [scanBarcode, setScanBarcode] = React.useState<string>('');
-  const [fromDate, setFromDate] = React.useState<string>('');
-  const [toDate, setToDate] = React.useState<string>('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
 
@@ -82,44 +85,59 @@ export default function OperationsManifestationPage() {
     if (!code) return;
 
     if (shipments.some(s => s.shipmentNumber === code)) {
-      triggerToast(`Shipment ${code} already in manifest.`, 'error');
+      triggerToast(`Shipment ${code} is already in current manifest.`, 'error');
+      setScanBarcode('');
       return;
     }
 
     try {
       const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(code)}&populate=*`);
       const parcel = res.data?.data?.[0];
-      const newItem: ManifestShipment = {
-        id: Date.now().toString(),
-        shipmentNumber: code,
-        bookingDate: parcel?.createdAt ? parcel.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
-        trackPolyCn: parcel?.poly_tracking || `TRX-${code}`,
-        shipperName: parcel?.shipper?.name || parcel?.pickup_location?.shipper?.name || 'Unknown Shipper',
-        consigneeName: parcel?.recipient_name || 'Unknown Consignee',
-        consigneeContact: parcel?.recipient_phone || '',
-        consigneeAddress: parcel?.recipient_address || '',
-        cashCollect: Number(parcel?.cod_amount) || 0,
-        status: 'Manifested',
-      };
-      setShipments(prev => [newItem, ...prev]);
-    } catch {
-      const newItem: ManifestShipment = {
-        id: Date.now().toString(),
-        shipmentNumber: code,
-        bookingDate: new Date().toISOString().split('T')[0],
-        trackPolyCn: `TRX-${code}`,
-        shipperName: 'Unknown Shipper',
-        consigneeName: 'Unknown Consignee',
-        consigneeContact: '',
-        consigneeAddress: '',
-        cashCollect: 0,
-        status: 'Manifested',
-      };
-      setShipments(prev => [newItem, ...prev]);
-    }
 
-    setScanBarcode('');
-    barcodeInputRef.current?.focus();
+      if (!parcel) {
+        triggerToast(`Shipment #${code} not found in system!`, 'error');
+        setScanBarcode('');
+        return;
+      }
+
+      // BUSINESS RULE: Manifestation eligibility validation
+      // Eligible: Total Booking, Picked up by rider, Arrived at warehouse (Origin)
+      // Ineligible: In Transit, Arrived at warehouse (Dest), Out for Delivery, Delivered, Delivery Failed, Ready for Return, Return to Shipper, Lost / Damage
+      const normStatus = normalizeShipmentStatus(parcel.status);
+      const isEligible = 
+        normStatus === SHIPMENT_STATUSES.TOTAL_BOOKING ||
+        normStatus === SHIPMENT_STATUSES.PICKED_UP_BY_RIDER ||
+        normStatus === SHIPMENT_STATUSES.ARRIVED_ORIGIN;
+
+      if (!isEligible) {
+        triggerToast(`Cannot manifest #${code}: Current status is "${normStatus}". Only Booked, Picked Up, or Origin-Arrived parcels can be manifested.`, 'error');
+        setScanBarcode('');
+        return;
+      }
+
+      const newItem: ManifestShipment = {
+        id: Date.now().toString(),
+        parcelId: parcel.documentId || parcel.id,
+        shipmentNumber: code,
+        bookingDate: parcel.createdAt ? parcel.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        trackPolyCn: parcel.poly_tracking || `TRX-${code}`,
+        shipperName: parcel.shipper?.name || parcel.pickup_location?.shipper?.name || 'Unknown Shipper',
+        consigneeName: parcel.recipient_name || 'Unknown Consignee',
+        consigneeContact: parcel.recipient_phone || '',
+        consigneeAddress: parcel.recipient_address || '',
+        destinationCity: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
+        cashCollect: Number(parcel.cod_amount) || 0,
+        status: normStatus,
+      };
+
+      setShipments(prev => [newItem, ...prev]);
+      triggerToast(`Added #${code} (${normStatus}) to manifest.`, 'success');
+      setScanBarcode('');
+      barcodeInputRef.current?.focus();
+    } catch (err: any) {
+      triggerToast(`Error looking up #${code}: ${err.message}`, 'error');
+      setScanBarcode('');
+    }
   };
 
   const handleSave = async () => {
@@ -149,26 +167,22 @@ export default function OperationsManifestationPage() {
         console.warn('Manifest persistence note:', e?.message || e);
       }
 
-      // 2. Mark each parcel as In Transit and link to manifest
+      // 2. Mark each parcel as In Transit and link to manifest (Active Queue Isolation)
       for (const item of shipments) {
         try {
-          const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
-          const parcel = res.data?.data?.[0];
-          if (parcel) {
-            const pid = parcel.documentId || parcel.id;
-            await apiClient.put(`/parcels/${pid}`, { 
-              data: { 
-                status: 'In Transit',
-                ...(savedManifestId ? { manifest: savedManifestId } : {})
-              } 
-            });
-          }
+          const targetId = item.parcelId || item.shipmentNumber;
+          await apiClient.put(`/parcels/${targetId}`, { 
+            data: { 
+              status: SHIPMENT_STATUSES.IN_TRANSIT,
+              ...(savedManifestId ? { manifest: savedManifestId } : {})
+            } 
+          });
         } catch (e) {
           console.warn(`Could not update ${item.shipmentNumber}:`, e);
         }
       }
 
-      triggerToast(`Manifest #${manifestNumber} (Seal: ${sealNo}) saved with ${shipments.length} parcels!`, 'success');
+      triggerToast(`Manifest #${manifestNumber} (Seal: ${sealNo}) dispatched! ${shipments.length} parcels marked "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
       setManifestNumber(prev => prev + 1);
       setSealNo(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
       setShipments([]);
@@ -202,7 +216,7 @@ export default function OperationsManifestationPage() {
         }`}>
           {toast.type === 'success'
             ? <div className="bg-emerald-500 rounded-full p-1 text-white"><CheckCircle2 className="w-4 h-4" /></div>
-            : <div className="bg-red-500 rounded-full p-1 text-white"><Shield className="w-4 h-4" /></div>
+            : <div className="bg-red-500 rounded-full p-1 text-white"><AlertCircle className="w-4 h-4" /></div>
           }
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>
@@ -213,28 +227,22 @@ export default function OperationsManifestationPage() {
         <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Operation Module</div>
-            <h1 className="text-xl font-bold tracking-tight">Operation / Manifestation</h1>
+            <h1 className="text-xl font-bold tracking-tight">Operation / Manifestation & Linehaul Dispatch</h1>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => alert('Exporting manifest report...')}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
-            >
-              <Download className="w-4 h-4" /> Export
-            </button>
-            <button
               onClick={() => { setIsListModalOpen(true); fetchPastManifests(); }}
               className="bg-primary hover:bg-primary-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <List className="w-4 h-4" /> Manifest List
+              <List className="w-4 h-4" /> Past Manifests
             </button>
             <button
               onClick={handleSave}
-              disabled={isSubmitting}
+              disabled={isSubmitting || shipments.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <Save className="w-4 h-4" /> {isSubmitting ? 'Saving...' : 'Save'}
+              <Save className="w-4 h-4" /> {isSubmitting ? 'Dispatching...' : `Dispatch Manifest (${shipments.length})`}
             </button>
             <button
               onClick={() => window.print()}
@@ -261,7 +269,7 @@ export default function OperationsManifestationPage() {
                 type="number"
                 value={manifestNumber}
                 onChange={(e) => setManifestNumber(Number(e.target.value))}
-                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none font-mono"
               />
             </div>
 
@@ -279,7 +287,7 @@ export default function OperationsManifestationPage() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Station / Destination</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Destination Station / Hub</label>
               <select
                 value={selectedStation}
                 onChange={(e) => setSelectedStation(e.target.value)}
@@ -302,7 +310,7 @@ export default function OperationsManifestationPage() {
                 value={sealNo}
                 onChange={(e) => setSealNo(e.target.value)}
                 placeholder="Bag Seal Serial #"
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary"
+                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary font-mono"
               />
             </div>
           </div>
@@ -310,34 +318,30 @@ export default function OperationsManifestationPage() {
           {/* Barcode Scan Input */}
           <form onSubmit={handleAddShipment} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center gap-3">
             <div className="flex-1 flex flex-col gap-1 w-full">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Barcode className="w-4 h-4 text-primary" /> Scan Shipments to Add in Manifest
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Barcode className="w-4 h-4 text-primary" /> Scan Eligible Shipments (Booked / Picked Up / Origin Arrived)
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Target Status on Dispatch: <strong>{SHIPMENT_STATUSES.IN_TRANSIT}</strong>
+                </span>
               </label>
               <input
                 ref={barcodeInputRef}
                 type="text"
-                placeholder="Scan CN or Tracking Number..."
+                placeholder="Scan tracking barcode or type CN and hit Enter..."
                 value={scanBarcode}
                 onChange={(e) => setScanBarcode(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl py-2.5 px-3.5 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary"
+                className="bg-white border border-slate-300 rounded-xl py-2.5 px-3.5 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary font-mono"
               />
             </div>
-
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl py-2 px-2.5 text-xs font-semibold"
-              />
-              <span className="text-xs text-slate-500 font-bold">to</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl py-2 px-2.5 text-xs font-semibold"
-              />
-            </div>
+            <button
+              type="submit"
+              disabled={!scanBarcode.trim()}
+              className="w-full md:w-auto bg-primary hover:bg-primary-600 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all cursor-pointer h-10 mt-auto"
+            >
+              Add to Manifest
+            </button>
           </form>
 
         </div>
@@ -345,8 +349,8 @@ export default function OperationsManifestationPage() {
         {/* Manifest Shipments Table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="px-6 py-4 bg-slate-900 text-white font-bold text-sm flex items-center justify-between">
-            <span>Shipments List ({shipments.length})</span>
-            <span className="text-xs text-amber-400 font-bold">Total Cash Collect: Rs. {shipments.reduce((acc, curr) => acc + curr.cashCollect, 0)}</span>
+            <span>Manifest Shipments List ({shipments.length})</span>
+            <span className="text-xs text-amber-400 font-bold">Total Cash Collect: PKR {shipments.reduce((acc, curr) => acc + curr.cashCollect, 0).toLocaleString()}</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -355,31 +359,47 @@ export default function OperationsManifestationPage() {
                 <tr>
                   <th className="px-4 py-3.5">Shipment #</th>
                   <th className="px-4 py-3.5">Booking Date</th>
-                  <th className="px-4 py-3.5">Track / Poly CN</th>
-                  <th className="px-4 py-3.5">Shipper Name</th>
-                  <th className="px-4 py-3.5">Consignee Name</th>
-                  <th className="px-4 py-3.5">Consignee Address</th>
+                  <th className="px-4 py-3.5">Shipper</th>
+                  <th className="px-4 py-3.5">Consignee & Dest</th>
                   <th className="px-4 py-3.5 text-right">Cash Collect</th>
-                  <th className="px-4 py-3.5 text-center">Status</th>
+                  <th className="px-4 py-3.5 text-center">Pre-Manifest Status</th>
+                  <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                {shipments.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3.5 font-bold text-slate-900">{s.shipmentNumber}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{s.bookingDate}</td>
-                    <td className="px-4 py-3.5 text-slate-600 font-mono">{s.trackPolyCn}</td>
-                    <td className="px-4 py-3.5 text-slate-900">{s.shipperName}</td>
-                    <td className="px-4 py-3.5 text-slate-900">{s.consigneeName}</td>
-                    <td className="px-4 py-3.5 text-slate-600 max-w-[200px] truncate" title={s.consigneeAddress}>{s.consigneeAddress}</td>
-                    <td className="px-4 py-3.5 text-right font-bold text-slate-900">Rs. {s.cashCollect}</td>
-                    <td className="px-4 py-3.5 text-center">
-                      <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                        {s.status}
-                      </span>
+                {shipments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                      No shipments added to manifest yet. Scan barcode above.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  shipments.map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3.5 font-bold font-mono text-primary">{s.shipmentNumber}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{s.bookingDate}</td>
+                      <td className="px-4 py-3.5 text-slate-900">{s.shipperName}</td>
+                      <td className="px-4 py-3.5 text-slate-900">
+                        <div>{s.consigneeName}</div>
+                        <div className="text-[10px] text-slate-500">{s.destinationCity}</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-bold text-slate-900">PKR {s.cashCollect.toLocaleString()}</td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <button
+                          onClick={() => setShipments(prev => prev.filter(item => item.id !== s.id))}
+                          className="text-rose-600 hover:text-rose-800 font-bold text-xs cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -391,8 +411,8 @@ export default function OperationsManifestationPage() {
             <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
               
               <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
-                <h2 className="text-base font-bold">Manifest List</h2>
-                <button onClick={() => setIsListModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full">
+                <h2 className="text-base font-bold">Past Dispatched Manifests</h2>
+                <button onClick={() => setIsListModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -417,11 +437,9 @@ export default function OperationsManifestationPage() {
                     <tr>
                       <th className="p-3">Manifest #</th>
                       <th className="p-3">Date</th>
-                      <th className="p-3">Manifest Type</th>
-                      <th className="p-3">Third Party</th>
-                      <th className="p-3">Station</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3">Destination Station</th>
                       <th className="p-3">Seal No</th>
-                      <th className="p-3 text-center">City Code</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -430,10 +448,8 @@ export default function OperationsManifestationPage() {
                         <td className="p-3 font-bold text-primary">{m.manifestNumber}</td>
                         <td className="p-3 text-slate-600">{m.date}</td>
                         <td className="p-3">{m.manifestType}</td>
-                        <td className="p-3 text-slate-500">{m.thirdParty}</td>
                         <td className="p-3 font-bold text-slate-900">{m.station}</td>
                         <td className="p-3 text-slate-600 font-mono">{m.sealNo}</td>
-                        <td className="p-3 text-center font-bold text-slate-900">{m.cityCode}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -441,7 +457,7 @@ export default function OperationsManifestationPage() {
               </div>
 
               <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
-                <button onClick={() => setIsListModalOpen(false)} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">
+                <button onClick={() => setIsListModalOpen(false)} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">
                   Close
                 </button>
               </div>

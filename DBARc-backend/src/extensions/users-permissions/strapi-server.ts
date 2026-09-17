@@ -81,8 +81,10 @@ export default (plugin: any) => {
             candidateUser = await strapi.db.query('plugin::users-permissions.user').findOne({
               where: {
                 $or: [
-                  { email: { $containsi: cleanIdentifier } },
-                  { username: { $containsi: cleanIdentifier } },
+                  { email: cleanIdentifier },
+                  { username: cleanIdentifier },
+                  { email: { $startsWith: `${cleanIdentifier}#` } },
+                  { username: { $startsWith: `${cleanIdentifier}#` } },
                 ],
                 tenant: Number(tenantId) || tenantId,
               }
@@ -90,20 +92,17 @@ export default (plugin: any) => {
           }
 
           if (!candidateUser) {
-            const matchingUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
+            // First try exact match across all tenants
+            candidateUser = await strapi.db.query('plugin::users-permissions.user').findOne({
               where: {
                 $or: [
-                  { email: { $containsi: cleanIdentifier } },
-                  { username: { $containsi: cleanIdentifier } },
+                  { email: cleanIdentifier },
+                  { username: cleanIdentifier },
+                  { email: { $startsWith: `${cleanIdentifier}#` } },
+                  { username: { $startsWith: `${cleanIdentifier}#` } },
                 ]
-              },
-              orderBy: { id: 'desc' },
-              limit: 1
+              }
             });
-
-            if (matchingUsers && matchingUsers.length > 0) {
-              candidateUser = matchingUsers[0];
-            }
           }
 
           if (candidateUser) {

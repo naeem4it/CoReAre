@@ -15,6 +15,7 @@ import {
   AlertCircle,
   FileSpreadsheet
 } from 'lucide-react';
+import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
 interface RunsheetParcel {
   id: string | number;
@@ -190,10 +191,10 @@ export default function DeRunsheetPage() {
 
   const cashDiff = (Number(cashSurrendered) || 0) - metrics.expectedCash;
 
-  const handleToggleParcelStatus = (parcelId: string | number, newStatus: 'Delivered' | 'Delivery Failed') => {
+  const handleToggleParcelStatus = (parcelId: string | number, newStatus: string) => {
     if (!selectedSheet) return;
     let comment: string | undefined;
-    if (newStatus === 'Delivery Failed') {
+    if (newStatus === SHIPMENT_STATUSES.DELIVERY_FAILED || newStatus === 'Delivery Failed') {
       const reason = prompt('Enter reason for delivery failure (e.g. Receiver refused, Customer not available, Incomplete address):', 'Customer not available');
       if (reason === null) return;
       comment = reason.trim();
@@ -465,30 +466,16 @@ export default function DeRunsheetPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleParcelStatus(p.id, 'Delivered')}
-                              className={`px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
-                                p.status === 'Delivered'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200'
-                              }`}
-                            >
-                              ✓ Delivered
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleParcelStatus(p.id, 'Delivery Failed')}
-                              className={`px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
-                                p.status === 'Delivery Failed' || p.status === 'Failed Attempt'
-                                  ? 'bg-red-600 text-white shadow-xs'
-                                  : 'bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200'
-                              }`}
-                            >
-                              ✕ Failed
-                            </button>
-                          </div>
+                          <select
+                            value={normalizeShipmentStatus(p.status)}
+                            onChange={(e) => handleToggleParcelStatus(p.id, e.target.value)}
+                            className="bg-white border border-slate-300 rounded-lg py-1 px-2 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                          >
+                            <option value={SHIPMENT_STATUSES.DELIVERED}>✓ Delivered</option>
+                            <option value={SHIPMENT_STATUSES.DELIVERY_FAILED}>✕ Delivery Failed</option>
+                            <option value={SHIPMENT_STATUSES.READY_FOR_RETURN}>↩ Ready for Return</option>
+                            <option value={SHIPMENT_STATUSES.RETURN_TO_SHIPPER}>📦 Return to Shipper</option>
+                          </select>
                         </td>
                         <td className="px-4 py-3.5">
                           {p.paymentType === 'PAID' ? (
