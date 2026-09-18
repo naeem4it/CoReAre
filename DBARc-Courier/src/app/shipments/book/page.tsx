@@ -2237,7 +2237,10 @@ function BookShipmentForm() {
         {/* Modal for Pasting CSV Lines */}
         {showPasteModal && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div 
+              style={{ width: '100%', maxWidth: '640px', minWidth: '320px' }}
+              className="bg-white rounded-2xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+            >
               <div className="flex justify-between items-center border-b border-outline-variant pb-3">
                 <div>
                   <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
@@ -2289,7 +2292,10 @@ ORD-901, Ali Khan, +92 300 1112233, Gulberg II Lahore, Threads Store, Factory Ro
         {/* BARCODE STICKER LABEL PRINT MODAL */}
         {selectedOrderForLabel && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto no-print">
-            <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 max-h-[90vh]">
+            <div 
+              style={{ width: '100%', maxWidth: '680px', minWidth: '320px' }}
+              className="bg-white rounded-2xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 max-h-[90vh]"
+            >
               <div className="flex justify-between items-center border-b border-outline-variant pb-3">
                 <div>
                   <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
@@ -2395,80 +2401,117 @@ ORD-901, Ali Khan, +92 300 1112233, Gulberg II Lahore, Threads Store, Factory Ro
         )}
 
         {/* Referenced Order Details Modal */}
-        {showDetailsModal && selectedReferencedParcel && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 space-y-6">
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+        {showDetailsModal && selectedReferencedParcel && (() => {
+          const parcelData = selectedReferencedParcel.attributes || selectedReferencedParcel;
+          const trackingNo = parcelData.tracking_number || selectedReferencedParcel.tracking_number || 'N/A';
+          const status = parcelData.status || selectedReferencedParcel.status || 'Booked';
+          const weightVal = parcelData.weight || selectedReferencedParcel.weight || '0.5';
+          const recipientName = parcelData.recipient_name || selectedReferencedParcel.recipient_name || 'N/A';
+          const recipientPhone = parcelData.recipient_phone || selectedReferencedParcel.recipient_phone || 'N/A';
+          const recipientAddress = parcelData.recipient_address || selectedReferencedParcel.recipient_address || 'N/A';
+          const codVal = parcelData.cod_amount ?? selectedReferencedParcel.cod_amount ?? 0;
+          const deliveryCharges = parcelData.delivery_charges ?? selectedReferencedParcel.delivery_charges ?? 0;
+          const destCity = parcelData.destination_city || selectedReferencedParcel.destination_city || '';
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div 
+                style={{ width: '100%', maxWidth: '560px', minWidth: '320px' }}
+                className="bg-white rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 space-y-6 border border-slate-100 max-h-[90vh] overflow-y-auto"
               >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
-                <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-on-surface text-lg">Referenced Order Details</h3>
-                  <p className="text-xs text-outline font-medium font-mono">{selectedReferencedParcel.tracking_number}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Status</span>
-                  <span className="px-2.5 py-1 bg-primary-container text-on-primary-container font-extrabold rounded-full inline-block leading-none border border-primary-container uppercase text-[10px]">
-                    {selectedReferencedParcel.status}
-                  </span>
-                </div>
-                
-                <div className="space-y-1">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Weight (Kg)</span>
-                  <span className="text-on-surface font-bold text-sm">{selectedReferencedParcel.weight || '0.5'} kg</span>
-                </div>
-
-                <div className="space-y-1 col-span-2">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Recipient Name</span>
-                  <span className="text-on-surface font-bold text-sm">{selectedReferencedParcel.recipient_name}</span>
-                </div>
-
-                <div className="space-y-1 col-span-2">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Recipient Phone</span>
-                  <span className="text-on-surface font-bold text-sm">{selectedReferencedParcel.recipient_phone}</span>
-                </div>
-
-                <div className="space-y-1 col-span-2">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Delivery Address</span>
-                  <span className="text-on-surface font-semibold leading-relaxed text-sm block bg-slate-50 p-3 border border-slate-100 rounded-xl">
-                    {selectedReferencedParcel.recipient_address}
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">COD Amount</span>
-                  <span className="text-on-surface font-bold text-sm">PKR {selectedReferencedParcel.cod_amount || 0}</span>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-outline font-bold block uppercase tracking-wider text-[10px]">Delivery Charges</span>
-                  <span className="text-on-surface font-bold text-sm">PKR {selectedReferencedParcel.delivery_charges || 0}</span>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-4 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setShowDetailsModal(false)}
-                  className="px-4.5 py-2 bg-surface-container-high hover:bg-surface-container-highest text-secondary text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
                 >
-                  Close Details
+                  <X className="h-5 w-5" />
                 </button>
+
+                {/* Header */}
+                <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4 pr-10">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 text-primary border border-blue-100 flex items-center justify-center shrink-0">
+                    <Package className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-lg leading-tight">Referenced Order Details</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                        {trackingNo}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid Details */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {/* Status */}
+                  <div className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-bold block uppercase tracking-wider text-[10px]">Current Status</span>
+                    <span className="px-2.5 py-1 bg-blue-100 text-blue-800 font-extrabold rounded-full inline-block leading-none border border-blue-200 uppercase text-[10px]">
+                      {status}
+                    </span>
+                  </div>
+                  
+                  {/* Weight */}
+                  <div className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-bold block uppercase tracking-wider text-[10px]">Weight</span>
+                    <span className="text-slate-800 font-bold text-sm block">{weightVal} kg</span>
+                  </div>
+
+                  {/* Recipient Name */}
+                  <div className="space-y-1 col-span-2 sm:col-span-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-bold block uppercase tracking-wider text-[10px]">Recipient Name</span>
+                    <span className="text-slate-800 font-bold text-sm block">{recipientName}</span>
+                  </div>
+
+                  {/* Recipient Phone */}
+                  <div className="space-y-1 col-span-2 sm:col-span-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-bold block uppercase tracking-wider text-[10px]">Recipient Phone</span>
+                    <span className="text-slate-800 font-bold text-sm font-mono block">{recipientPhone}</span>
+                  </div>
+
+                  {/* Delivery Address */}
+                  <div className="space-y-1 col-span-2 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Delivery Address</span>
+                      {destCity && (
+                        <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {destCity}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-slate-800 font-medium leading-relaxed text-sm block pt-1">
+                      {recipientAddress}
+                    </span>
+                  </div>
+
+                  {/* COD Amount */}
+                  <div className="space-y-1 bg-emerald-50 p-3.5 rounded-xl border border-emerald-100">
+                    <span className="text-emerald-700 font-bold block uppercase tracking-wider text-[10px]">COD Amount</span>
+                    <span className="text-emerald-900 font-black text-base font-mono">PKR {Number(codVal).toLocaleString()}</span>
+                  </div>
+
+                  {/* Delivery Charges */}
+                  <div className="space-y-1 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-bold block uppercase tracking-wider text-[10px]">Delivery Charges</span>
+                    <span className="text-slate-800 font-bold text-base font-mono">PKR {Number(deliveryCharges).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-slate-100 pt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowDetailsModal(false)}
+                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Close Details
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ISOLATED PRINT AREA FOR BULK LABELS */}
