@@ -1,0 +1,87 @@
+{
+  "kind": "collectionType",
+  "collectionName": "expenses",
+  "info": {
+    "singularName": "expense",
+    "pluralName": "expenses",
+    "displayName": "Expense",
+    "description": "Courier operational expenses"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": false
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::expense-category.expense-category"
+    },
+    "amount": {
+      "type": "decimal",
+      "required": true
+    },
+    "expense_date": {
+      "type": "date",
+      "required": true
+    },
+    "payment_method": {
+      "type": "enumeration",
+      "enum": [
+        "Cash",
+        "Bank Transfer",
+        "Cheque",
+        "Online / Card",
+        "Mobile Wallet"
+      ],
+      "default": "Cash",
+      "required": true
+    },
+    "payee": {
+      "type": "string"
+    },
+    "reference_no": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "text"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "Paid",
+        "Pending",
+        "Cancelled"
+      ],
+      "default": "Paid",
+      "required": true
+    },
+    "allocation_type": {
+      "type": "enumeration",
+      "enum": [
+        "Office",
+        "Employee"
+      ],
+      "default": "Office"
+    },
+    "office": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::office.office"
+    },
+    "employee": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

@@ -948,6 +948,93 @@ export interface ApiEventStreamEventStream extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiExpenseCategoryExpenseCategory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'expense_categories';
+  info: {
+    description: 'Categories for operational courier expenses';
+    displayName: 'Expense Category';
+    pluralName: 'expense-categories';
+    singularName: 'expense-category';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    is_active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::expense-category.expense-category'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiExpenseExpense extends Struct.CollectionTypeSchema {
+  collectionName: 'expenses';
+  info: {
+    description: 'Courier operational expenses';
+    displayName: 'Expense';
+    pluralName: 'expenses';
+    singularName: 'expense';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    allocation_type: Schema.Attribute.Enumeration<['Office', 'Employee']> &
+      Schema.Attribute.DefaultTo<'Office'>;
+    amount: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    category: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::expense-category.expense-category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    employee: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    expense_date: Schema.Attribute.Date & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::expense.expense'
+    > &
+      Schema.Attribute.Private;
+    notes: Schema.Attribute.Text;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    payee: Schema.Attribute.String;
+    payment_method: Schema.Attribute.Enumeration<
+      ['Cash', 'Bank Transfer', 'Cheque', 'Online / Card', 'Mobile Wallet']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'Cash'>;
+    publishedAt: Schema.Attribute.DateTime;
+    reference_no: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<['Paid', 'Pending', 'Cancelled']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'Paid'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    title: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiGlobalGlobal extends Struct.SingleTypeSchema {
   collectionName: 'globals';
   info: {
@@ -2710,6 +2797,8 @@ declare module '@strapi/strapi' {
       'api::delivery-sheet.delivery-sheet': ApiDeliverySheetDeliverySheet;
       'api::dispute.dispute': ApiDisputeDispute;
       'api::event-stream.event-stream': ApiEventStreamEventStream;
+      'api::expense-category.expense-category': ApiExpenseCategoryExpenseCategory;
+      'api::expense.expense': ApiExpenseExpense;
       'api::global.global': ApiGlobalGlobal;
       'api::hub.hub': ApiHubHub;
       'api::invoice.invoice': ApiInvoiceInvoice;

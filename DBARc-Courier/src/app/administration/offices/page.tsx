@@ -36,7 +36,7 @@ export default function OfficesPage() {
       } else {
         const tenantId = user.tenant?.id || user.tenant;
         if (!tenantId) return;
-        filters = { type: 'courier', courier: tenantId };
+        filters = { type: 'courier', tenant: tenantId };
       }
 
       const res = await apiClient.get('/offices', {

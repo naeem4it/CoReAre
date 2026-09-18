@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "expense_categories",
+  "info": {
+    "singularName": "expense-category",
+    "pluralName": "expense-categories",
+    "displayName": "Expense Category",
+    "description": "Categories for operational courier expenses"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

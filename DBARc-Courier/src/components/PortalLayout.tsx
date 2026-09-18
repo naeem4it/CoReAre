@@ -475,6 +475,20 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
 
           {isCourierAdmin && (
             <Link
+              href="/administration/expenses"
+              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+                pathname === '/administration/expenses'
+                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">payments</span>
+              <span className="font-label-md text-label-md">Expense Management</span>
+            </Link>
+          )}
+
+          {isCourierAdmin && (
+            <Link
               href="/administration/shippers"
               className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
                 pathname === '/administration/shippers'

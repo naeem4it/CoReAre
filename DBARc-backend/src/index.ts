@@ -114,6 +114,33 @@ export default {
         }
       }
 
+      // Seed default expense categories
+      const defaultExpenseCategories = [
+        'Fuel & Travel',
+        'Vehicle Maintenance & Repair',
+        'Office Rent & Utilities',
+        'Packaging & Supplies',
+        'Rider / Staff Advances & Allowances',
+        'Refreshments & Food',
+        'Marketing',
+        'Miscellaneous'
+      ];
+      for (const catName of defaultExpenseCategories) {
+        const existingCat = await strapi.db.query('api::expense-category.expense-category').findOne({
+          where: { name: catName }
+        });
+        if (!existingCat) {
+          await strapi.db.query('api::expense-category.expense-category').create({
+            data: {
+              name: catName,
+              description: `Default category for ${catName}`,
+              is_active: true
+            }
+          });
+          console.log(`Seeded default expense category: ${catName}`);
+        }
+      }
+
       // Find the Roles
       const roles = await strapi.db.query('plugin::users-permissions.role').findMany();
       const authenticatedRole = roles.find((r: any) => r.type === 'authenticated');
