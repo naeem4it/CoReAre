@@ -218,16 +218,16 @@ export function SearchableDropdown<TFieldValues extends FieldValues>({
                                       setIsOpen(false);
                                     }}
                                     className={cn(
-                                      "w-full px-lg py-sm font-body-md text-body-md text-left flex items-center justify-between transition-colors cursor-pointer hover:bg-surface-container-low",
+                                      "w-full px-lg py-sm font-body-md text-body-md text-left flex items-center justify-between transition-colors cursor-pointer",
                                       value === opt.value
-                                        ? "bg-primary-container text-on-primary-container font-semibold"
-                                        : "text-on-surface-variant",
+                                        ? "bg-primary/10 text-primary font-bold"
+                                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
                                       opt.disabled && "opacity-40 cursor-not-allowed hover:bg-transparent"
                                     )}
                                   >
                                     <span>{opt.label}</span>
                                     {value === opt.value && (
-                                      <span className="material-symbols-outlined text-[18px] text-primary select-none">
+                                      <span className="material-symbols-outlined text-[18px] text-primary font-bold select-none">
                                         check
                                       </span>
                                     )}
@@ -247,16 +247,16 @@ export function SearchableDropdown<TFieldValues extends FieldValues>({
                                 setIsOpen(false);
                               }}
                               className={cn(
-                                "w-full px-md py-sm font-body-md text-body-md text-left flex items-center justify-between transition-colors cursor-pointer hover:bg-surface-container-low",
+                                "w-full px-md py-sm font-body-md text-body-md text-left flex items-center justify-between transition-colors cursor-pointer",
                                 value === item.value
-                                  ? "bg-primary-container/60 text-on-primary font-semibold"
-                                  : "text-on-surface-variant",
+                                  ? "bg-primary/10 text-primary font-bold"
+                                  : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
                                 item.disabled && "opacity-40 cursor-not-allowed hover:bg-transparent"
                               )}
                             >
                               <span>{item.label}</span>
                               {value === item.value && (
-                                <span className="material-symbols-outlined text-[18px] text-primary select-none">
+                                <span className="material-symbols-outlined text-[18px] text-primary font-bold select-none">
                                   check
                                 </span>
                               )}

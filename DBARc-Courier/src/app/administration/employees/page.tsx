@@ -161,7 +161,14 @@ function EmployeeManagementContent() {
 
   const [employees, setEmployees] = React.useState<User[]>([]);
   const [roles, setRoles] = React.useState<RoleDefinition[]>([]);
-  const [shippers, setShippers] = React.useState<{ id: number; name: string; shipper_plan?: any }[]>([]);
+  const [shippers, setShippers] = React.useState<Array<{ 
+    id: number; 
+    name: string; 
+    address?: string; 
+    city?: string; 
+    offices?: any[]; 
+    shipper_plan?: any 
+  }>>([]);
   const [offices, setOffices] = React.useState<{ id: number; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'active' | 'quit'>('active');
@@ -194,16 +201,16 @@ function EmployeeManagementContent() {
   // Clean empty Initial Shipper Business Grid State
   const [businessGridRows, setBusinessGridRows] = React.useState<Array<{
     tempId: string;
-    id?: number;
+    id?: number | undefined;
     name: string;
-    address?: string;
-    city?: string;
-    planId?: number | 'custom';
+    address?: string | undefined;
+    city?: string | undefined;
+    planId?: number | 'custom' | undefined;
     planName: string;
-    customPlanData?: CustomPlanData;
-    isSelected?: boolean;
-    isEditingName?: boolean;
-    isEditingPlan?: boolean;
+    customPlanData?: CustomPlanData | undefined;
+    isSelected?: boolean | undefined;
+    isEditingName?: boolean | undefined;
+    isEditingPlan?: boolean | undefined;
   }>>([]);
 
   // Loading and error states
@@ -236,6 +243,7 @@ function EmployeeManagementContent() {
   const [newBusinessName, setNewBusinessName] = React.useState('');
   const [newBusinessAddress, setNewBusinessAddress] = React.useState('');
   const [newBusinessCity, setNewBusinessCity] = React.useState('');
+  const [businessModalError, setBusinessModalError] = React.useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = React.useState<number | 'custom'>(1);
 
   // Custom Tariff Plan configuration modal state
@@ -251,6 +259,7 @@ function EmployeeManagementContent() {
   });
   const [configuredCustomPlan, setConfiguredCustomPlan] = React.useState<CustomPlanData | null>(null);
   const [editingBusinessRowTempId, setEditingBusinessRowTempId] = React.useState<string | null>(null);
+  const [editingBusinessRow, setEditingBusinessRow] = React.useState<any | null>(null);
 
   const fetchEmployeesAndRoles = async () => {
     setIsLoading(true);
@@ -278,6 +287,8 @@ function EmployeeManagementContent() {
         const mappedShippers = rawShippers.map((item: any) => ({
           id: item.id,
           name: item.name || item.attributes?.name || `Shipper #${item.id}`,
+          address: item.address || item.attributes?.address || (item.offices && item.offices[0]?.address) || '',
+          city: item.city || item.attributes?.city || (item.offices && item.offices[0]?.city?.name) || (typeof item.offices?.[0]?.city === 'string' ? item.offices[0].city : '') || '',
           shipper_plan: item.shipper_plan,
         }));
         setShippers(mappedShippers);
@@ -523,15 +534,74 @@ function EmployeeManagementContent() {
     setAssignedShipperIds(selectedUser.shipper ? selectedUser.shipper.map((s: any) => s.id) : []);
     setAssignedOfficeIds(selectedUser.offices ? selectedUser.offices.map((o: any) => o.id) : []);
 
-    if (selectedUser.shipper && Array.isArray(selectedUser.shipper) && selectedUser.shipper.length > 0) {
-      setBusinessGridRows(selectedUser.shipper.map((s: any, idx: number) => ({
-        tempId: String(s.id || idx + 1),
-        id: s.id,
-        name: s.name,
-        planId: 1,
-        planName: s.planName || 'Standard Tariff Plan (Default)',
-        isSelected: false
-      })));
+    const userShippers = Array.isArray(selectedUser.shipper) 
+      ? selectedUser.shipper 
+      : (selectedUser.shipper ? [selectedUser.shipper] : []);
+
+    if (userShippers.length > 0) {
+      setBusinessGridRows(userShippers.map((s: any, idx: number) => {
+        const sId = typeof s === 'object' ? s.id : s;
+        const matched = (shippers || []).find((sh: any) => 
+          (sId && sh.id && Number(sh.id) === Number(sId)) ||
+          (s.documentId && sh.documentId && sh.documentId === s.documentId) ||
+          (s.name && sh.name && sh.name.trim().toLowerCase() === s.name.trim().toLowerCase())
+        );
+        const address = s.address || matched?.address || (s.offices && s.offices[0]?.address) || (matched?.offices && matched.offices[0]?.address) || '';
+        const city = s.city || matched?.city || (s.offices && s.offices[0]?.city?.name) || (typeof s.offices?.[0]?.city === 'string' ? s.offices[0].city : '') || (matched?.offices && matched.offices[0]?.city?.name) || (typeof matched?.offices?.[0]?.city === 'string' ? matched.offices[0].city : '') || '';
+        const rowObj: {
+          tempId: string;
+          id?: number;
+          name: string;
+          address?: string;
+          city?: string;
+          planId?: number | 'custom';
+          planName: string;
+          isSelected?: boolean;
+        } = {
+          tempId: String(sId || idx + 1),
+          name: s.name || matched?.name || `Shipper #${sId}`,
+          address: address || '',
+          city: city || '',
+          planId: s.shipper_plan?.id || matched?.shipper_plan?.id || 1,
+          planName: s.shipper_plan?.name || matched?.shipper_plan?.name || s.planName || 'Standard Tariff Plan (Default)',
+          isSelected: false
+        };
+        if (sId && !isNaN(Number(sId))) {
+          rowObj.id = Number(sId);
+        }
+        return rowObj;
+      }));
+    } else if ((selectedUser as any)?.businessName) {
+      const bName = String((selectedUser as any).businessName).trim();
+      const matched = (shippers || []).find((sh: any) => 
+        sh.name && sh.name.trim().toLowerCase() === bName.toLowerCase()
+      );
+      if (matched) {
+        const rowObj: {
+          tempId: string;
+          id?: number;
+          name: string;
+          address?: string;
+          city?: string;
+          planId?: number | 'custom';
+          planName: string;
+          isSelected?: boolean;
+        } = {
+          tempId: String(matched.id || 1),
+          name: matched.name,
+          address: matched.address || '',
+          city: matched.city || '',
+          planId: matched.shipper_plan?.id || 1,
+          planName: matched.shipper_plan?.name || 'Standard Tariff Plan (Default)',
+          isSelected: false
+        };
+        if (matched.id && !isNaN(Number(matched.id))) {
+          rowObj.id = Number(matched.id);
+        }
+        setBusinessGridRows([rowObj]);
+      } else {
+        setBusinessGridRows([]);
+      }
     } else {
       setBusinessGridRows([]);
     }
@@ -796,38 +866,90 @@ function EmployeeManagementContent() {
     setEditingBusinessRowTempId(null);
   };
 
-  // Add Business Modal submit
+  // Open Edit Business Modal
+  const handleOpenEditBusinessModal = (row: any) => {
+    setEditingBusinessRow(row);
+    setNewBusinessName(row.name || '');
+    setNewBusinessAddress(row.address || '');
+    setNewBusinessCity(row.city || '');
+    setSelectedPlanId(row.customPlanData ? 'custom' : (row.planId || 1));
+    if (row.customPlanData) {
+      setConfiguredCustomPlan(JSON.parse(JSON.stringify(row.customPlanData)));
+    } else {
+      setConfiguredCustomPlan(null);
+    }
+    setBusinessModalError(null);
+    setIsAddBusinessModalOpen(true);
+  };
+
+  // Add/Update Business Modal submit
   const handleAddBusinessToGrid = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBusinessName.trim()) {
-      alert('Business Name is required.');
+    setBusinessModalError(null);
+
+    const trimmedName = (newBusinessName || '').trim();
+    const trimmedAddress = (newBusinessAddress || '').trim();
+    const trimmedCity = (newBusinessCity || '').trim();
+
+    if (!trimmedName) {
+      setBusinessModalError('Business Name is required.');
+      return;
+    }
+
+    if (!trimmedAddress) {
+      setBusinessModalError('Business Address is mandatory.');
+      return;
+    }
+
+    if (!trimmedCity) {
+      setBusinessModalError('City / Location is mandatory.');
       return;
     }
 
     const isCustom = selectedPlanId === 'custom';
     if (isCustom && !configuredCustomPlan) {
-      alert('Please configure the Custom Tariff Plan rates before adding the business.');
-      handleOpenCustomPlanModal(newBusinessName);
+      setBusinessModalError('Please configure the Custom Tariff Plan rates before adding the business.');
+      handleOpenCustomPlanModal(trimmedName);
       return;
     }
 
     const planObj = isCustom ? null : (availablePlans.find(p => p.id === Number(selectedPlanId)) || availablePlans[0]);
-    const newRow = {
-      tempId: Date.now().toString(),
-      name: newBusinessName.trim(),
-      address: newBusinessAddress.trim(),
-      city: newBusinessCity.trim(),
-      planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
-      planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
-      isSelected: false,
-      ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
-    };
 
-    setBusinessGridRows(prev => [...prev, newRow]);
+    if (editingBusinessRow) {
+      setBusinessGridRows(prev => prev.map(r => {
+        if (r.tempId === editingBusinessRow.tempId) {
+          return {
+            ...r,
+            name: trimmedName,
+            address: trimmedAddress,
+            city: trimmedCity,
+            planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
+            planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
+            ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
+          };
+        }
+        return r;
+      }));
+    } else {
+      const newRow = {
+        tempId: Date.now().toString(),
+        name: trimmedName,
+        address: trimmedAddress,
+        city: trimmedCity,
+        planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
+        planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
+        isSelected: false,
+        ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
+      };
+      setBusinessGridRows(prev => [...prev, newRow]);
+    }
+
     setIsAddBusinessModalOpen(false);
+    setEditingBusinessRow(null);
     setNewBusinessName('');
     setNewBusinessAddress('');
     setNewBusinessCity('');
+    setBusinessModalError(null);
     setConfiguredCustomPlan(null);
     setSelectedPlanId(availablePlans[0]?.id || 1);
     setFormError(null);
@@ -855,19 +977,31 @@ function EmployeeManagementContent() {
 
     const isShipperFlow = formEmployeeType === 'shipper' || effectiveType === 'shipper';
 
-    // Auto-create default business store if none was manually added
+    // Validate shipper businesses (Address and City are mandatory)
     let activeBusinessRows = [...businessGridRows];
-    if (isShipperFlow && !isLoggedShipper && activeBusinessRows.length === 0) {
-      const defaultName = formFullName.trim() ? `${formFullName.trim()} Store` : `${formUsername.trim()} Store`;
-      activeBusinessRows = [{
-        tempId: Date.now().toString(),
-        name: defaultName,
-        address: '',
-        city: '',
-        planId: availablePlans[0]?.id || 1,
-        planName: availablePlans[0]?.name || 'Standard Tariff Plan (Default)',
-        isSelected: false,
-      }];
+    if (isShipperFlow && !isLoggedShipper) {
+      if (activeBusinessRows.length === 0) {
+        setFormError('At least one shipper business is required. Please click "Add Business" to add details.');
+        return;
+      }
+      for (const b of activeBusinessRows) {
+        const bName = (b.name || '').trim();
+        const bAddress = (b.address || '').trim();
+        const bCity = (b.city || '').trim();
+
+        if (!bName) {
+          setFormError('Business name is required.');
+          return;
+        }
+        if (!bAddress) {
+          setFormError(`Business Address is mandatory for "${bName}".`);
+          return;
+        }
+        if (!bCity) {
+          setFormError(`City is mandatory for "${bName}".`);
+          return;
+        }
+      }
     }
 
     if (!isEditMode && formConfirmationType === 'no_confirmation') {
@@ -936,8 +1070,9 @@ function EmployeeManagementContent() {
             }
           }
 
+          const numId = Number(b.id);
           shipperObjects.push({
-            id: (b.id && typeof b.id === 'number' && b.id < 1000000000000) ? b.id : undefined,
+            id: (!isNaN(numId) && numId > 0 && numId < 1000000000000) ? numId : undefined,
             name: b.name,
             address: b.address || '',
             city: b.city || '',
@@ -1574,6 +1709,7 @@ function EmployeeManagementContent() {
                         setNewBusinessName('');
                         setNewBusinessAddress('');
                         setNewBusinessCity('');
+                        setBusinessModalError(null);
                         setSelectedPlanId(availablePlans[0]?.id || 1);
                         setIsAddBusinessModalOpen(true);
                       }}
@@ -1589,6 +1725,8 @@ function EmployeeManagementContent() {
                         <tr>
                           <th className="p-2.5 w-8">#</th>
                           <th className="p-2.5">Business Name</th>
+                          <th className="p-2.5">City</th>
+                          <th className="p-2.5">Address</th>
                           <th className="p-2.5">Assigned Tariff Plan</th>
                           <th className="p-2.5 w-16 text-center">Action</th>
                         </tr>
@@ -1599,6 +1737,15 @@ function EmployeeManagementContent() {
                             <tr key={row.tempId} className="hover:bg-slate-50 transition-colors">
                               <td className="p-2.5 text-slate-400">{idx + 1}</td>
                               <td className="p-2.5 font-bold text-slate-900">{row.name}</td>
+                              <td className="p-2.5 text-slate-700">
+                                <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
+                                  <span className="material-symbols-outlined text-[13px] text-slate-500">location_on</span>
+                                  {row.city || '—'}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-slate-600 text-[11px] max-w-[180px] truncate" title={row.address}>
+                                {row.address || '—'}
+                              </td>
                               <td className="p-2.5">
                                 <div className="flex items-center gap-2">
                                   <span className={row.customPlanData ? "text-emerald-700 font-bold flex items-center gap-1" : "text-primary font-bold"}>
@@ -1618,20 +1765,30 @@ function EmployeeManagementContent() {
                                 </div>
                               </td>
                               <td className="p-2.5 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveBusinessRow(row.tempId)}
-                                  className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 cursor-pointer"
-                                  title="Remove Business"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">delete</span>
-                                </button>
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditBusinessModal(row)}
+                                    className="text-primary hover:text-primary/80 p-1 rounded-md hover:bg-primary/10 cursor-pointer transition-colors"
+                                    title="Edit Business Details"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBusinessRow(row.tempId)}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 cursor-pointer transition-colors"
+                                    title="Remove Business"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={4} className="p-6 text-center text-slate-400 italic bg-slate-50/50">
+                            <td colSpan={6} className="p-6 text-center text-slate-400 italic bg-slate-50/50">
                               <div className="flex flex-col items-center gap-1">
                                 <span className="material-symbols-outlined text-slate-400 text-[28px]">storefront</span>
                                 <span className="text-xs">No business added yet. Click &quot;Add Business&quot; above to configure details.</span>
@@ -1808,23 +1965,36 @@ function EmployeeManagementContent() {
         </div>
       )}
 
-      {/* CENTERED POPUP MODAL: Add Shipper Business Details */}
+      {/* CENTERED POPUP MODAL: Add / Edit Shipper Business Details */}
       {isAddBusinessModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsAddBusinessModalOpen(false)} />
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => { setEditingBusinessRow(null); setIsAddBusinessModalOpen(false); }} />
           
           <div className="relative z-10 bg-white rounded-3xl shadow-2xl w-[560px] max-w-[95vw] shrink-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-900 text-white rounded-t-3xl">
               <h3 className="font-bold text-base flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-container">storefront</span> Add Shipper Business
+                <span className="material-symbols-outlined text-primary-container">
+                  {editingBusinessRow ? 'edit' : 'storefront'}
+                </span>
+                {editingBusinessRow ? 'Edit Shipper Business' : 'Add Shipper Business'}
               </h3>
-              <button onClick={() => setIsAddBusinessModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
+              <button 
+                onClick={() => { setEditingBusinessRow(null); setIsAddBusinessModalOpen(false); }} 
+                className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
             <form onSubmit={handleAddBusinessToGrid} className="p-6 flex flex-col gap-4">
+              {businessModalError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
+                  <span className="material-symbols-outlined text-red-500 text-[18px]">error</span>
+                  <span>{businessModalError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
                   Business / Store Name <span className="text-red-500">*</span>
@@ -1834,33 +2004,54 @@ function EmployeeManagementContent() {
                   type="text"
                   placeholder="e.g. Acme Apparel Store"
                   value={newBusinessName}
-                  onChange={e => setNewBusinessName(e.target.value)}
+                  onChange={e => {
+                    setNewBusinessName(e.target.value);
+                    if (businessModalError) setBusinessModalError(null);
+                  }}
                   className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
                 />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
-                  Business Address
+                  Business Address <span className="text-red-500">*</span>
                 </label>
                 <input
+                  required
                   type="text"
                   placeholder="e.g. 14-C Commercial Area Phase 5"
                   value={newBusinessAddress}
-                  onChange={e => setNewBusinessAddress(e.target.value)}
+                  onChange={e => {
+                    setNewBusinessAddress(e.target.value);
+                    if (businessModalError) setBusinessModalError(null);
+                  }}
                   className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
                 />
               </div>
 
               <div className="z-50">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
-                  City / Location
+                  City / Location <span className="text-red-500">*</span>
                 </label>
                 <PakistanLocationSelect
+                  required
                   value={newBusinessCity}
-                  onChange={(val, loc: any) => setNewBusinessCity(loc ? (loc.cityName || loc.tehsil) : String(val))}
+                  onChange={(val: any, details: any) => {
+                    const cityStr = 
+                      (typeof val === 'string' && val.trim()) 
+                        ? val.trim() 
+                        : (details?.cityName || details?.tehsil || details?.district || (val ? String(val).trim() : ''));
+                    setNewBusinessCity(cityStr || '');
+                    if (businessModalError && cityStr) setBusinessModalError(null);
+                  }}
                   placeholder="Search and select city / tehsil (e.g. Lahore, Karachi, Islamabad...)"
                 />
+                {newBusinessCity && (
+                  <p className="mt-1.5 text-[11px] font-semibold text-emerald-700 flex items-center gap-1 animate-in fade-in duration-150">
+                    <span className="material-symbols-outlined text-[15px] text-emerald-600">check_circle</span>
+                    Selected Location: <span className="font-bold text-slate-800">{newBusinessCity}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1930,7 +2121,10 @@ function EmployeeManagementContent() {
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddBusinessModalOpen(false)}
+                  onClick={() => {
+                    setEditingBusinessRow(null);
+                    setIsAddBusinessModalOpen(false);
+                  }}
                   className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
@@ -1939,7 +2133,10 @@ function EmployeeManagementContent() {
                   type="submit"
                   className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">add_circle</span> Add to Grid
+                  <span className="material-symbols-outlined text-[16px]">
+                    {editingBusinessRow ? 'check_circle' : 'add_circle'}
+                  </span>
+                  {editingBusinessRow ? 'Update in Grid' : 'Add to Grid'}
                 </button>
               </div>
             </form>

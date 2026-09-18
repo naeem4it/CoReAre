@@ -19,7 +19,7 @@ export default factories.createCoreController('api::shipper.shipper', ({ strapi 
   async findShippersWithPlans(ctx) {
     try {
       const shippers = await strapi.db.query('api::shipper.shipper').findMany({
-        populate: ['shipper_plan', 'tenant'],
+        populate: ['shipper_plan', 'tenant', 'offices'],
         orderBy: { id: 'asc' },
       });
       return ctx.send({ data: shippers });

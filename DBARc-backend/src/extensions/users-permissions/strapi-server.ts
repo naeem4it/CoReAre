@@ -588,6 +588,8 @@ export default (plugin: any) => {
               const newShipper = await strapi.db.query('api::shipper.shipper').create({
                 data: {
                   name: item.name,
+                  address: item.address || '',
+                  city: item.city || '',
                   tenant: tenantId,
                   status: 'active',
                   shipper_plan: resolvedPlanId || null,
@@ -876,6 +878,12 @@ export default (plugin: any) => {
                     if (item.name && item.name !== existingShipper.name) {
                       updateShipperData.name = item.name;
                     }
+                    if (item.address && item.address !== existingShipper.address) {
+                      updateShipperData.address = item.address;
+                    }
+                    if (item.city && item.city !== existingShipper.city) {
+                      updateShipperData.city = item.city;
+                    }
                     if (resolvedPlanId) {
                       updateShipperData.shipper_plan = resolvedPlanId;
                     }
@@ -894,6 +902,8 @@ export default (plugin: any) => {
                   const newShipper = await strapi.db.query('api::shipper.shipper').create({
                     data: {
                       name: item.name,
+                      address: item.address || '',
+                      city: item.city || '',
                       tenant: tenantId || null,
                       status: 'active',
                       shipper_plan: resolvedPlanId || null,

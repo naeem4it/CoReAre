@@ -71,6 +71,15 @@
     "address": {
       "type": "text"
     },
+    "city": {
+      "type": "string"
+    },
+    "offices": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::office.office",
+      "mappedBy": "shipper"
+    },
     "entity_type": {
       "type": "enumeration",
       "enum": [

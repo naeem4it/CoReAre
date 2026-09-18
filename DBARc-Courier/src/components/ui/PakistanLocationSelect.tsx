@@ -160,7 +160,7 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
       cityName,
       fullName: [teh, dist, prov].filter(Boolean).join(', ')
     };
-    onChange(cityName, cityName, details);
+    onChange(cityName, details, details);
   };
 
   // Handlers for selection
@@ -208,7 +208,8 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     setSelectedTehsil('');
     setDirectSearch('');
     setOpenDropdown(null);
-    onChange('', '', { province: '', district: '', tehsil: '', cityName: '', fullName: '' });
+    const emptyDetails = { province: '', district: '', tehsil: '', cityName: '', fullName: '' };
+    onChange('', emptyDetails, emptyDetails);
   };
 
   const isComplete = Boolean(selectedProvince && selectedDistrict && selectedTehsil);
@@ -245,6 +246,19 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
             }}
             onFocus={() => {
               if (directSearch.trim()) setOpenDropdown('search');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (directSearchResults.length > 0) {
+                  handleSelectTehsil(directSearchResults[0]);
+                } else if (directSearch.trim()) {
+                  const match = findPakistanLocation(directSearch.trim());
+                  if (match) {
+                    handleSelectTehsil(match);
+                  }
+                }
+              }
             }}
             placeholder={isComplete ? `${selectedTehsil}, ${selectedDistrict}, ${selectedProvince}` : placeholder}
             className={`w-full text-xs pl-9 pr-8 py-2 bg-white dark:bg-slate-900 border rounded-xl outline-none transition-all ${

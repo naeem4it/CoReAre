@@ -1843,6 +1843,7 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     address: Schema.Attribute.Text;
     api_key: Schema.Attribute.String & Schema.Attribute.Unique;
     business_type: Schema.Attribute.String;
+    city: Schema.Attribute.String;
     couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1861,6 +1862,7 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    offices: Schema.Attribute.Relation<'oneToMany', 'api::office.office'>;
     phone: Schema.Attribute.String;
     pickup_locations: Schema.Attribute.Relation<
       'oneToMany',

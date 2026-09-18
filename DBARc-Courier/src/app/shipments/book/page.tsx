@@ -38,10 +38,12 @@ import {
   Plus, 
   HelpCircle,
   Navigation,
-  MapPin
+  MapPin,
+  Building2
 } from 'lucide-react';
 
 import PortalLayout from '@/components/PortalLayout';
+import { useAuth } from '@/components/AuthProvider';
 import { apiClient } from '@/shared/api/api-client';
 import { TextBox } from '@/components/ui/form/text-box';
 import { TextAreaInput } from '@/components/ui/form/text-area';
@@ -203,11 +205,14 @@ const TIME_SLOT_OPTIONS = [
 function BookShipmentForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user: authUser, activeBusinessId: authActiveBizId } = useAuth();
   
-  // User auth state read directly from localStorage
+  // User auth state read directly from authContext or localStorage fallback
   const [user, setUser] = React.useState<any>(null);
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (authUser) {
+      setUser(authUser);
+    } else if (typeof window !== 'undefined') {
       try {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -217,7 +222,77 @@ function BookShipmentForm() {
         console.error('Failed to parse user from localStorage:', e);
       }
     }
+  }, [authUser]);
+
+  // Load all tenant shippers to guarantee full business address and city data
+  const [allShippers, setAllShippers] = React.useState<Array<{
+    id: number;
+    name: string;
+    address?: string;
+    city?: string;
+    shipper_plan?: any;
+  }>>([]);
+
+  React.useEffect(() => {
+    apiClient.get('/shippers/with-plans')
+      .catch(() => apiClient.get('/shippers?populate=*'))
+      .then(res => {
+        const raw = res.data?.data || [];
+        const mapped = raw.map((item: any) => ({
+          id: item.id,
+          name: item.name || item.attributes?.name || `Shipper #${item.id}`,
+          address: item.address || item.attributes?.address || (item.offices && item.offices[0]?.address) || '',
+          city: item.city || item.attributes?.city || (item.offices && item.offices[0]?.city?.name) || (typeof item.offices?.[0]?.city === 'string' ? item.offices[0].city : '') || '',
+          shipper_plan: item.shipper_plan,
+        }));
+        setAllShippers(mapped);
+      })
+      .catch(err => console.warn('Failed to load shippers:', err));
   }, []);
+
+  const currentActiveBizId = authActiveBizId || (typeof window !== 'undefined' ? Number(localStorage.getItem('activeBusinessId')) : null);
+
+  const selectedShipperBusiness = React.useMemo(() => {
+    // 1. Match by currentActiveBizId in allShippers
+    if (currentActiveBizId && allShippers.length > 0) {
+      const found = allShippers.find(s => s.id === currentActiveBizId);
+      if (found) return found;
+    }
+    // 2. Match in user.shipper
+    const currentUser = authUser || user;
+    if (currentUser?.shipper) {
+      const userShippers = Array.isArray(currentUser.shipper) ? currentUser.shipper : [currentUser.shipper];
+      if (currentActiveBizId) {
+        const foundInUser = userShippers.find((s: any) => s.id === currentActiveBizId);
+        if (foundInUser) {
+          const full = allShippers.find(s => s.id === foundInUser.id);
+          return {
+            id: foundInUser.id,
+            name: foundInUser.name || full?.name || `Shipper #${foundInUser.id}`,
+            address: full?.address || foundInUser.address || '',
+            city: full?.city || foundInUser.city || '',
+            shipper_plan: full?.shipper_plan || foundInUser.shipper_plan,
+          };
+        }
+      }
+      if (userShippers.length > 0) {
+        const first = userShippers[0];
+        const full = allShippers.find(s => s.id === first.id);
+        return {
+          id: first.id,
+          name: first.name || full?.name || `Shipper #${first.id}`,
+          address: full?.address || first.address || '',
+          city: full?.city || first.city || '',
+          shipper_plan: full?.shipper_plan || first.shipper_plan,
+        };
+      }
+    }
+    // 3. Fallback to first in allShippers
+    if (allShippers.length > 0) {
+      return allShippers[0];
+    }
+    return null;
+  }, [currentActiveBizId, allShippers, authUser, user]);
   
   // UI States
   const [bookingMode, setBookingMode] = React.useState<'manual' | 'bulk'>('manual');
@@ -434,11 +509,13 @@ function BookShipmentForm() {
           const dropdownItems = mappedDetailed.map(o => ({ label: `${o.name} (${o.cityName})`, value: o.id }));
           setOffices(dropdownItems);
 
-          // Auto-select first office & auto-populate source city!
+          // Auto-select first office (if no shipper business city)
           if (mappedDetailed.length > 0) {
             setValue('pickupLocation', mappedDetailed[0].id);
-            setValue('sourceCity', mappedDetailed[0].cityName);
-            setValue('sourceCityName', mappedDetailed[0].cityName);
+            if (!selectedShipperBusiness?.city) {
+              setValue('sourceCity', mappedDetailed[0].cityName);
+              setValue('sourceCityName', mappedDetailed[0].cityName);
+            }
           }
         }
       } catch (e) {
@@ -447,19 +524,22 @@ function BookShipmentForm() {
     };
 
     fetchOfficesData();
-  }, [user, setValue]);
+  }, [user, selectedShipperBusiness, setValue]);
 
-  // When pickup location changes, sync sourceCity
+  // Priority: Auto-populate source city from selected shipper business (fallback to office)
   const selectedPickupLocation = watch('pickupLocation');
   React.useEffect(() => {
-    if (selectedPickupLocation && detailedOffices.length > 0) {
+    if (selectedShipperBusiness?.city) {
+      setValue('sourceCity', selectedShipperBusiness.city);
+      setValue('sourceCityName', selectedShipperBusiness.city);
+    } else if (selectedPickupLocation && detailedOffices.length > 0) {
       const match = detailedOffices.find(o => o.id === String(selectedPickupLocation));
       if (match && match.cityName) {
         setValue('sourceCity', match.cityName);
         setValue('sourceCityName', match.cityName);
       }
     }
-  }, [selectedPickupLocation, detailedOffices, setValue]);
+  }, [selectedShipperBusiness, selectedPickupLocation, detailedOffices, setValue]);
 
   // GPS Auto-detect location
   const handleDetectOriginLocation = () => {
@@ -499,12 +579,12 @@ function BookShipmentForm() {
   const paymentType = watch('paymentType') || 'COD';
   const serviceType = watch('serviceType') || 'Overnight';
   const sourceCityVal = watch('sourceCity');
-  const sourceCityName = watch('sourceCityName') || (typeof sourceCityVal === 'string' ? sourceCityVal : '');
+  const sourceCityName = selectedShipperBusiness?.city || watch('sourceCityName') || (typeof sourceCityVal === 'string' ? sourceCityVal : '') || 'Lahore';
   const destinationCityId = watch('destinationCity');
   const destinationCityName = watch('destinationCityName') || (typeof destinationCityId === 'string' ? destinationCityId : '');
 
   const pricing = React.useMemo(() => {
-    const activePlanName = user?.tariffPlan || user?.planName || (typeof window !== 'undefined' ? localStorage.getItem('activeBusinessTariffPlan') : null) || 'Standard Tariff Plan';
+    const activePlanName = selectedShipperBusiness?.shipper_plan?.name || user?.tariffPlan || user?.planName || (typeof window !== 'undefined' ? localStorage.getItem('activeBusinessTariffPlan') : null) || 'Standard Tariff Plan';
     const sourceLower = String(sourceCityName || '').toLowerCase().trim();
     const cityLower = String(destinationCityName || '').toLowerCase().trim();
     let zoneName = 'Within City';
@@ -694,14 +774,16 @@ function BookShipmentForm() {
       const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
       const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
       
-      let shipperId: number | null = null;
-      if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
-        const matchingShipper = user.shipper.find((s: any) => s.id === activeBusinessId);
-        shipperId = matchingShipper ? matchingShipper.id : user.shipper[0].id;
-      } else if (user?.shipper?.id) {
-        shipperId = user.shipper.id;
-      } else if (activeBusinessId && !isNaN(activeBusinessId)) {
-        shipperId = activeBusinessId;
+      let shipperId: number | null = selectedShipperBusiness?.id || null;
+      if (!shipperId) {
+        if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
+          const matchingShipper = user.shipper.find((s: any) => s.id === activeBusinessId);
+          shipperId = matchingShipper ? matchingShipper.id : user.shipper[0].id;
+        } else if (user?.shipper?.id) {
+          shipperId = user.shipper.id;
+        } else if (activeBusinessId && !isNaN(activeBusinessId)) {
+          shipperId = activeBusinessId;
+        }
       }
 
       const originOfficeId = data.pickupLocation && !isNaN(Number(data.pickupLocation)) ? Number(data.pickupLocation) : null;
@@ -718,7 +800,7 @@ function BookShipmentForm() {
           recipient_name: data.consigneeName,
           recipient_phone: data.consigneePhone,
           recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCityName || data.destinationCity}`,
-          source_city: data.sourceCityName || data.sourceCity || 'Lahore',
+          source_city: selectedShipperBusiness?.city || data.sourceCityName || data.sourceCity || 'Lahore',
           destination_city: data.destinationCityName || data.destinationCity,
           consignee_email: data.consigneeEmail || '',
           consignee_alt_phone: data.consigneeAltPhone || '',
@@ -1190,84 +1272,108 @@ function BookShipmentForm() {
             </h1>
           </div>
           
-          {/* Header Action Buttons & Live Price Summary */}
-          <div className="flex items-center gap-2.5">
-            {bookingMode === 'manual' && (
-              <div className="hidden sm:flex flex-col items-end gap-0.5">
-                <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
-                  <span>Estimated Cost:</span>
-                  <span className="text-sm font-black font-mono">PKR {pricing.total.toFixed(2)}</span>
+          {/* Header Action Buttons, Live Price Summary & Selected Business Badge */}
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-2.5">
+              {bookingMode === 'manual' && (
+                <div className="hidden sm:flex flex-col items-end gap-0.5">
+                  <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
+                    <span>Estimated Cost:</span>
+                    <span className="text-sm font-black font-mono">PKR {pricing.total.toFixed(2)}</span>
+                  </div>
+                  <span className="text-[10px] text-outline font-medium">
+                    {pricing.planName} • {pricing.zoneName}
+                  </span>
                 </div>
-                <span className="text-[10px] text-outline font-medium">
-                  {pricing.planName} • {pricing.zoneName}
-                </span>
-              </div>
-            )}
-            
-            {bookingMode === 'manual' ? (
-              <button 
-                onClick={handleSubmit(onSubmit)}
-                disabled={bookingStatus === 'submitting' || bookingStatus === 'success'}
-                className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
-                  ${bookingStatus === 'success' 
-                    ? 'bg-emerald-600 hover:bg-emerald-700' 
-                    : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
-              >
-                {bookingStatus === 'submitting' && (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                )}
-                {bookingStatus === 'success' && (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Booked!
-                  </>
-                )}
-                {bookingStatus === 'idle' && (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Create Order
-                  </>
-                )}
-                {bookingStatus === 'error' && (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Retry Order
-                  </>
-                )}
-              </button>
-            ) : (
-              <button 
-                onClick={importAndProcessShipments}
-                disabled={bulkStatus === 'uploading' || bulkStatus === 'success' || parsedRows.length === 0}
-                className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
-                  ${bulkStatus === 'success' 
-                    ? 'bg-emerald-600 hover:bg-emerald-700' 
-                    : parsedRows.length === 0 || bulkStatus === 'uploading'
-                      ? 'bg-slate-300 cursor-not-allowed opacity-60'
+              )}
+              
+              {bookingMode === 'manual' ? (
+                <button 
+                  onClick={handleSubmit(onSubmit)}
+                  disabled={bookingStatus === 'submitting' || bookingStatus === 'success'}
+                  className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
+                    ${bookingStatus === 'success' 
+                      ? 'bg-emerald-600 hover:bg-emerald-700' 
                       : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
-              >
-                {bulkStatus === 'uploading' && (
+                >
+                  {bookingStatus === 'submitting' && (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  )}
+                  {bookingStatus === 'success' && (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      Booked!
+                    </>
+                  )}
+                  {bookingStatus === 'idle' && (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Create Order
+                    </>
+                  )}
+                  {bookingStatus === 'error' && (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Retry Order
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button 
+                  onClick={importAndProcessShipments}
+                  disabled={bulkStatus === 'uploading' || bulkStatus === 'success' || parsedRows.length === 0}
+                  className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
+                    ${bulkStatus === 'success' 
+                      ? 'bg-emerald-600 hover:bg-emerald-700' 
+                      : parsedRows.length === 0 || bulkStatus === 'uploading'
+                        ? 'bg-slate-300 cursor-not-allowed opacity-60'
+                        : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
+                >
+                  {bulkStatus === 'uploading' && (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Booking ({bulkProgress}%)...
+                    </>
+                  )}
+                  {bulkStatus === 'success' && (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      Booked!
+                    </>
+                  )}
+                  {(bulkStatus === 'idle' || bulkStatus === 'parsing' || bulkStatus === 'loaded') && (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Create Order
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Below Create Order: Selected Business Address & Origin City Indicator */}
+            {selectedShipperBusiness && (
+              <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl shadow-2xs animate-in fade-in duration-200">
+                <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="font-bold text-slate-800">{selectedShipperBusiness.name}</span>
+                {selectedShipperBusiness.address && (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Booking ({bulkProgress}%)...
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-600 text-[11px] max-w-[280px] truncate" title={selectedShipperBusiness.address}>
+                      {selectedShipperBusiness.address}
+                    </span>
                   </>
                 )}
-                {bulkStatus === 'success' && (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Booked!
-                  </>
+                {selectedShipperBusiness.city && (
+                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] ml-1">
+                    <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+                    Origin: {selectedShipperBusiness.city}
+                  </span>
                 )}
-                {(bulkStatus === 'idle' || bulkStatus === 'parsing' || bulkStatus === 'loaded') && (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Create Order
-                  </>
-                )}
-              </button>
+              </div>
             )}
           </div>
         </div>
@@ -1388,43 +1494,11 @@ function BookShipmentForm() {
                       placeholder="+92 300 7654321"
                     />
 
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-on-surface flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-primary" />
-                          Origin City / Tehsil
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleDetectOriginLocation}
-                          disabled={isDetectingOriginLocation}
-                          className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer transition-colors"
-                          title="Auto-detect closest city via GPS"
-                        >
-                          <Navigation className={`h-3 w-3 ${isDetectingOriginLocation ? 'animate-spin' : ''}`} />
-                          {isDetectingOriginLocation ? 'Detecting...' : 'Auto-Detect'}
-                        </button>
-                      </div>
-                      <Controller
-                        name="sourceCity"
-                        control={control}
-                        render={({ field }) => (
-                          <PakistanLocationSelect
-                            value={field.value ?? ''}
-                            onChange={(val, loc: any) => {
-                              field.onChange(val);
-                              if (loc) {
-                                setValue('sourceCityName', loc.cityName || loc.tehsil);
-                              }
-                            }}
-                            placeholder="Origin City / Tehsil"
-                          />
-                        )}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-on-surface">Destination City / Tehsil <span className="text-error">*</span></label>
+                    <div className="flex flex-col gap-1.5 sm:col-span-1 lg:col-span-2">
+                      <label className="text-xs font-bold text-on-surface flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-primary" />
+                        Destination City / Tehsil <span className="text-error font-bold">*</span>
+                      </label>
                       <Controller
                         name="destinationCity"
                         control={control}
@@ -1444,13 +1518,15 @@ function BookShipmentForm() {
                       />
                     </div>
 
-                    <TextBox<BookingFormValues>
-                      name="area"
-                      label="Area/Locality"
-                      placeholder="DHA Phase 6"
-                    />
+                    <div className="sm:col-span-1 lg:col-span-2">
+                      <TextBox<BookingFormValues>
+                        name="area"
+                        label="Area/Locality"
+                        placeholder="DHA Phase 6"
+                      />
+                    </div>
 
-                    <div className="lg:col-span-2">
+                    <div className="col-span-full">
                       <TextBox<BookingFormValues>
                         name="deliveryAddress"
                         label="Delivery Address"
@@ -1624,11 +1700,13 @@ function BookShipmentForm() {
                       />
                     </div>
 
-                    <TextBox<BookingFormValues>
-                      name="comments"
-                      label="Comments"
-                      placeholder="Special remarks..."
-                    />
+                    <div className="col-span-full">
+                      <TextBox<BookingFormValues>
+                        name="comments"
+                        label="Comments"
+                        placeholder="Special remarks..."
+                      />
+                    </div>
                   </div>
                 </section>
 
@@ -1651,23 +1729,13 @@ function BookShipmentForm() {
                       type="date"
                     />
 
-                    <SearchableDropdown<BookingFormValues>
-                      name="pickupTimeSlot"
-                      label="Pickup Time Slot"
-                      items={TIME_SLOT_OPTIONS}
-                    />
-
-                    <SearchableDropdown<BookingFormValues>
-                      name="pickupLocation"
-                      label="Pickup Location (Office)"
-                      items={offices.length > 0 ? offices : [{ label: 'Default Office', value: 'default' }]}
-                    />
-
-                    <TextBox<BookingFormValues>
-                      name="specialInstructions"
-                      label="Special Instructions"
-                      placeholder="Fragile, call before arrival..."
-                    />
+                    <div className="sm:col-span-1 lg:col-span-3">
+                      <TextBox<BookingFormValues>
+                        name="specialInstructions"
+                        label="Special Instructions"
+                        placeholder="Fragile, call before arrival..."
+                      />
+                    </div>
 
                     {/* Replacement / Exchange Sub-fields */}
                     <div className="space-y-1.5 relative group flex flex-col w-full">
@@ -1726,18 +1794,13 @@ function BookShipmentForm() {
                       items={YES_NO_OPTIONS}
                     />
 
-                    <TextBox<BookingFormValues>
-                      name="parcelDetail"
-                      label="Parcel Detail"
-                      placeholder="Replacement item detail..."
-                    />
-
-                    <TextBox<BookingFormValues>
-                      name="collectRs"
-                      label="Collect Rs."
-                      placeholder="0"
-                      type="number"
-                    />
+                    <div className="sm:col-span-2 lg:col-span-2">
+                      <TextBox<BookingFormValues>
+                        name="parcelDetail"
+                        label="Parcel Detail"
+                        placeholder="Replacement item detail..."
+                      />
+                    </div>
                   </div>
                 </section>
               </form>

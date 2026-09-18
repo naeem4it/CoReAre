@@ -447,6 +447,18 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             <span className="font-label-md text-label-md">Zone Setup</span>
           </Link>
 
+          <Link
+            href="/administration/offices"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/offices'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">domain</span>
+            <span className="font-label-md text-label-md">Offices & Hubs</span>
+          </Link>
+
           {isCourierAdmin && (
             <Link
               href="/administration/sales-person"
