@@ -294,14 +294,15 @@ export default function OperationsArrivalsPage() {
     // 1. Check if already in the expected shipments queue in memory
     const fromExpected = expectedShipments.find(p => (p.tracking_number || '').trim().toUpperCase() === tracking);
     if (fromExpected) {
-      if (fromExpected.pieces !== undefined && fromExpected.pieces !== null) {
-        setScanPieces(Number(fromExpected.pieces) || 1);
-      }
-      if (fromExpected.weight !== undefined && fromExpected.weight !== null) {
-        setScanWeight(Number(fromExpected.weight) || 0.5);
-      }
+      const rawPcs = fromExpected.pieces ?? fromExpected.attributes?.pieces;
+      const rawWt = fromExpected.weight ?? fromExpected.attributes?.weight;
+      const pcs = (rawPcs !== undefined && rawPcs !== null && Number(rawPcs) > 0) ? Number(rawPcs) : 1;
+      const wt = (rawWt !== undefined && rawWt !== null && Number(rawWt) > 0) ? Number(rawWt) : 0.5;
+
+      setScanPieces(pcs);
+      setScanWeight(wt);
       playScannerBeep('success');
-      triggerToast(`Order #${tracking} loaded: ${fromExpected.pieces || 1} pcs • ${fromExpected.weight || 0.5} kg`, 'success');
+      triggerToast(`Order #${tracking} loaded: ${pcs} pcs • ${wt} kg`, 'success');
       return fromExpected;
     }
 
@@ -310,14 +311,15 @@ export default function OperationsArrivalsPage() {
       const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(tracking)}&populate=*`);
       const foundParcel = parcelRes.data?.data?.[0];
       if (foundParcel) {
-        if (foundParcel.pieces !== undefined && foundParcel.pieces !== null) {
-          setScanPieces(Number(foundParcel.pieces) || 1);
-        }
-        if (foundParcel.weight !== undefined && foundParcel.weight !== null) {
-          setScanWeight(Number(foundParcel.weight) || 0.5);
-        }
+        const rawPcs = foundParcel.pieces ?? foundParcel.attributes?.pieces;
+        const rawWt = foundParcel.weight ?? foundParcel.attributes?.weight;
+        const pcs = (rawPcs !== undefined && rawPcs !== null && Number(rawPcs) > 0) ? Number(rawPcs) : 1;
+        const wt = (rawWt !== undefined && rawWt !== null && Number(rawWt) > 0) ? Number(rawWt) : 0.5;
+
+        setScanPieces(pcs);
+        setScanWeight(wt);
         playScannerBeep('success');
-        triggerToast(`Order #${tracking} loaded: ${foundParcel.pieces || 1} pcs • ${foundParcel.weight || 0.5} kg`, 'success');
+        triggerToast(`Order #${tracking} loaded: ${pcs} pcs • ${wt} kg`, 'success');
         return foundParcel;
       } else {
         playScannerBeep('error');
@@ -383,9 +385,22 @@ export default function OperationsArrivalsPage() {
         }
       });
 
+      // Extract accurate pieces and weight directly from the order database record
+      const rawPcs = foundParcel.pieces ?? foundParcel.attributes?.pieces;
+      const rawWt = foundParcel.weight ?? foundParcel.attributes?.weight;
+      const orderPieces = (rawPcs !== undefined && rawPcs !== null && Number(rawPcs) > 0)
+        ? Number(rawPcs)
+        : (Number(scanPieces) || 1);
+      const orderWeight = (rawWt !== undefined && rawWt !== null && Number(rawWt) > 0)
+        ? Number(rawWt)
+        : (Number(scanWeight) || 0.5);
+
+      setScanPieces(orderPieces);
+      setScanWeight(orderWeight);
+
       playScannerBeep('success');
       triggerScanFlash('success');
-      triggerToast(`Parcel #${tracking} marked ${targetStatus}!`, 'success');
+      triggerToast(`Parcel #${tracking} (${orderPieces} pcs • ${orderWeight} kg) marked ${targetStatus}!`, 'success');
 
       // Resolve delivering rider:
       // If a rider is selected from the dropdown above, assign it to the grid entry!
@@ -395,7 +410,7 @@ export default function OperationsArrivalsPage() {
         ? (selectedRiderObj.name || selectedRiderObj.username || `Rider #${selectedRiderObj.id}`)
         : (foundParcel.rider?.name || foundParcel.rider?.username || '-');
 
-      // Add to physically received list
+      // Add to physically received list with the order's exact pieces & weight
       const newItem: ArrivalItem = {
         id: foundParcel.id.toString(),
         documentId: targetIdentifier,
@@ -406,8 +421,8 @@ export default function OperationsArrivalsPage() {
         destinationCity: foundParcel.destination_city?.CityName || foundParcel.destination_city?.name || 'Destination',
         shipperName: foundParcel.shipper?.name || 'Shipper',
         riderName: riderDisplayName,
-        pieces: Number(scanPieces) || foundParcel.pieces || 1,
-        weight: Number(scanWeight) || foundParcel.weight || 0.8,
+        pieces: orderPieces,
+        weight: orderWeight,
         codAmount: foundParcel.cod_amount || 0,
         status: targetStatus,
         arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -420,8 +435,6 @@ export default function OperationsArrivalsPage() {
 
       if (!targetTracking) {
         setScanBarcode('');
-        setScanPieces(1);
-        setScanWeight(0.8);
         barcodeInputRef.current?.focus();
       }
     } catch (err: any) {
@@ -517,7 +530,28 @@ export default function OperationsArrivalsPage() {
         await ArrivalService.createBatch(fallbackPayload);
       }
 
-      triggerToast(`Arrival batch ${arrivalId} finalized! ${receivedShipments.length} parcels recorded.`, 'success');
+      // Explicitly update all finalized parcels to "Arrived at warehouse (Origin)"
+      for (const item of receivedShipments) {
+        try {
+          let targetId = item.documentId || item.id;
+          if (!targetId || /^\d+$/.test(String(targetId))) {
+            const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+            targetId = parcelRes.data?.data?.[0]?.documentId || targetId;
+          }
+          if (targetId) {
+            await apiClient.put(`/parcels/${targetId}`, {
+              data: {
+                status: SHIPMENT_STATUSES.ARRIVED_ORIGIN,
+                arrival_date: new Date().toISOString()
+              }
+            });
+          }
+        } catch (pErr) {
+          console.warn(`Notice updating parcel status for ${item.shipmentNumber}:`, pErr);
+        }
+      }
+
+      triggerToast(`Arrival batch ${arrivalId} finalized! ${receivedShipments.length} parcels marked "${SHIPMENT_STATUSES.ARRIVED_ORIGIN}" and ready for Manifestation.`, 'success');
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
       setReceivedShipments([]);
       setScanBarcode('');
@@ -859,7 +893,20 @@ export default function OperationsArrivalsPage() {
                   disabled={isScanning}
                   placeholder="Scan barcode or enter tracking # and press Tab..."
                   value={scanBarcode}
-                  onChange={(e) => setScanBarcode(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setScanBarcode(val);
+                    const clean = val.trim().toUpperCase();
+                    if (clean.length >= 3) {
+                      const fromExp = expectedShipments.find(p => (p.tracking_number || '').trim().toUpperCase() === clean);
+                      if (fromExp) {
+                        const rawPcs = fromExp.pieces ?? fromExp.attributes?.pieces;
+                        const rawWt = fromExp.weight ?? fromExp.attributes?.weight;
+                        if (rawPcs !== undefined && rawPcs !== null && Number(rawPcs) > 0) setScanPieces(Number(rawPcs));
+                        if (rawWt !== undefined && rawWt !== null && Number(rawWt) > 0) setScanWeight(Number(rawWt));
+                      }
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Tab' && scanBarcode.trim()) {
                       handleLookupAndPopulate(scanBarcode);

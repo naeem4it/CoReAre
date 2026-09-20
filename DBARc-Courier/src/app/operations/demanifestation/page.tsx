@@ -2,7 +2,24 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { List, Save, Printer, RefreshCw, Barcode, Shield, CheckCircle2, PackageCheck, AlertTriangle, Search, X, Check, Eye } from 'lucide-react';
+import { 
+  List, 
+  Save, 
+  Printer, 
+  RefreshCw, 
+  Barcode, 
+  Shield, 
+  CheckCircle2, 
+  PackageCheck, 
+  AlertTriangle, 
+  Search, 
+  X, 
+  Check, 
+  Eye,
+  Truck,
+  ArrowRight,
+  Send
+} from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { 
   SHIPMENT_STATUSES, 
@@ -22,7 +39,7 @@ interface DeManifestItem {
   weight: number;
   codAmount: number;
   status: string;
-  isVerified: boolean;
+  isSentForDelivery: boolean;
 }
 
 export default function OperationsDeManifestationPage() {
@@ -168,6 +185,7 @@ export default function OperationsDeManifestationPage() {
 
       const mapped: DeManifestItem[] = parcelsList.map((p: any) => {
         const normStatus = normalizeShipmentStatus(p.status);
+        const isArrivedDest = normStatus === SHIPMENT_STATUSES.ARRIVED_DEST;
         return {
           id: String(p.id),
           documentId: p.documentId,
@@ -178,13 +196,13 @@ export default function OperationsDeManifestationPage() {
           pieces: p.pieces || 1,
           weight: Number(p.weight) || 1.0,
           codAmount: Number(p.cod_amount) || 0,
-          status: normStatus,
-          isVerified: normStatus === SHIPMENT_STATUSES.ARRIVED_DEST,
+          status: isArrivedDest ? SHIPMENT_STATUSES.ARRIVED_DEST : normStatus,
+          isSentForDelivery: isArrivedDest,
         };
       });
 
       setManifestParcels(mapped);
-      triggerToast(`Manifest #${manifest.manifest_number || cleanNum} loaded (${mapped.length} parcels). Seal: ${manifest.seal_no || 'None'}`, 'success');
+      triggerToast(`Manifest #${manifest.manifest_number || cleanNum} loaded (${mapped.length} parcels). Ready to send for delivery.`, 'success');
       barcodeInputRef.current?.focus();
     } catch (err: any) {
       console.error('Error fetching manifest:', err);
@@ -194,7 +212,7 @@ export default function OperationsDeManifestationPage() {
     }
   };
 
-  // Scan & Verify parcel against the incoming manifest or direct intake
+  // Scan & Send for Delivery (Status transitions to "Arrived at warehouse (Dest)")
   const handleScanShipment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const code = scanBarcode.trim().toUpperCase();
@@ -206,7 +224,8 @@ export default function OperationsDeManifestationPage() {
       if (existingIndex !== -1) {
         const item = manifestParcels[existingIndex];
         const targetId = item.documentId || item.id;
-        // Persist status to destination arrival
+        
+        // Update status to "Arrived at warehouse (Dest)" and register linehaul arrival timestamp
         await apiClient.put(`/parcels/${targetId}`, {
           data: {
             status: SHIPMENT_STATUSES.ARRIVED_DEST,
@@ -216,11 +235,11 @@ export default function OperationsDeManifestationPage() {
 
         setManifestParcels(prev => prev.map((p, idx) => 
           idx === existingIndex 
-            ? { ...p, isVerified: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
+            ? { ...p, isSentForDelivery: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
             : p
         ));
 
-        triggerToast(`Shipment #${code} verified! Status updated to "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
+        triggerToast(`Shipment #${code} sent for delivery! Status updated to "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
         setScanBarcode('');
         barcodeInputRef.current?.focus();
         return;
@@ -237,7 +256,7 @@ export default function OperationsDeManifestationPage() {
       }
 
       const targetId = parcel.documentId || parcel.id;
-      // Immediately set status to 'Arrived at warehouse (Dest)'
+      // Update status to "Arrived at warehouse (Dest)"
       await apiClient.put(`/parcels/${targetId}`, {
         data: {
           status: SHIPMENT_STATUSES.ARRIVED_DEST,
@@ -256,22 +275,22 @@ export default function OperationsDeManifestationPage() {
         weight: Number(parcel.weight) || 1.0,
         codAmount: Number(parcel.cod_amount) || 0,
         status: SHIPMENT_STATUSES.ARRIVED_DEST,
-        isVerified: true,
+        isSentForDelivery: true,
       };
 
       setManifestParcels(prev => [newItem, ...prev]);
-      triggerToast(`Shipment #${code} verified & added to demanifest grid! Status: "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
+      triggerToast(`Shipment #${code} sent for delivery! Ready in Delivery Sheet.`, 'success');
       setScanBarcode('');
       barcodeInputRef.current?.focus();
     } catch (err: any) {
       console.error('Scan demanifest error:', err);
-      triggerToast(`Error verifying #${code}: ${err.message}`, 'error');
+      triggerToast(`Error processing #${code}: ${err.message}`, 'error');
       setScanBarcode('');
     }
   };
 
-  // Single Item Manual Verify Toggle
-  const handleVerifyItem = async (code: string) => {
+  // Single Item: Send for Delivery
+  const handleSendItemForDelivery = async (code: string) => {
     const existingIndex = manifestParcels.findIndex(p => p.shipmentNumber === code);
     if (existingIndex === -1) return;
 
@@ -288,26 +307,26 @@ export default function OperationsDeManifestationPage() {
 
       setManifestParcels(prev => prev.map((p, idx) => 
         idx === existingIndex 
-          ? { ...p, isVerified: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
+          ? { ...p, isSentForDelivery: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
           : p
       ));
 
-      triggerToast(`Shipment #${code} verified!`, 'success');
+      triggerToast(`Shipment #${code} sent for delivery! Status: "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
     } catch (err: any) {
-      triggerToast(`Failed to verify #${code}: ${err.message}`, 'error');
+      triggerToast(`Failed to send #${code} for delivery: ${err.message}`, 'error');
     }
   };
 
-  // Verify All shipments on active manifest
-  const handleVerifyAll = async () => {
-    const unverified = manifestParcels.filter(p => !p.isVerified);
-    if (unverified.length === 0) {
-      triggerToast('All shipments on this manifest are already verified.', 'success');
+  // Send All shipments on active manifest for Delivery
+  const handleSendAllForDelivery = async () => {
+    const unqueued = manifestParcels.filter(p => !p.isSentForDelivery);
+    if (unqueued.length === 0) {
+      triggerToast('All shipments on this manifest are already sent for delivery.', 'success');
       return;
     }
 
     try {
-      for (const item of unverified) {
+      for (const item of unqueued) {
         const targetId = item.documentId || item.id;
         await apiClient.put(`/parcels/${targetId}`, {
           data: {
@@ -319,13 +338,13 @@ export default function OperationsDeManifestationPage() {
 
       setManifestParcels(prev => prev.map(p => ({
         ...p,
-        isVerified: true,
+        isSentForDelivery: true,
         status: SHIPMENT_STATUSES.ARRIVED_DEST
       })));
 
-      triggerToast(`All ${unverified.length} shipments verified!`, 'success');
+      triggerToast(`All ${unqueued.length} shipments queued for delivery! (Status: "${SHIPMENT_STATUSES.ARRIVED_DEST}")`, 'success');
     } catch (err: any) {
-      triggerToast(`Error verifying shipments: ${err.message}`, 'error');
+      triggerToast(`Error queuing shipments: ${err.message}`, 'error');
     }
   };
 
@@ -350,18 +369,18 @@ export default function OperationsDeManifestationPage() {
     handleLoadManifest(mNum);
   };
 
-  // Finalize De-Manifestation
+  // Finalize De-Manifestation and forward to Delivery Sheet queue
   const handleSave = async () => {
-    const verifiedItems = manifestParcels.filter(p => p.isVerified);
-    if (verifiedItems.length === 0) {
-      triggerToast('No shipments have been verified for DeManifestation yet.', 'error');
+    const readyItems = manifestParcels.filter(p => p.isSentForDelivery);
+    if (readyItems.length === 0) {
+      triggerToast('No shipments have been sent for delivery yet. Click "Send for Delivery" or scan parcels.', 'error');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Transition all verified parcels to "Arrived at warehouse (Dest)"
-      for (const item of verifiedItems) {
+      // 1. Update all ready parcels to "Arrived at warehouse (Dest)"
+      for (const item of readyItems) {
         try {
           let targetId = item.documentId;
           if (!targetId || /^\d+$/.test(String(targetId))) {
@@ -391,7 +410,7 @@ export default function OperationsDeManifestationPage() {
         }
       }
 
-      triggerToast(`De-manifestation for Manifest #${manifestNumber} completed! ${verifiedItems.length} parcels marked "${SHIPMENT_STATUSES.ARRIVED_DEST}".`, 'success');
+      triggerToast(`De-manifestation for Manifest #${manifestNumber} completed! ${readyItems.length} parcels marked "${SHIPMENT_STATUSES.ARRIVED_DEST}" and ready in Delivery Sheet.`, 'success');
       setManifestNumber('');
       setSealNo('');
       setManifestParcels([]);
@@ -413,8 +432,8 @@ export default function OperationsDeManifestationPage() {
     }
   };
 
-  const verifiedCount = manifestParcels.filter(p => p.isVerified).length;
-  const pendingCount = manifestParcels.length - verifiedCount;
+  const sentCount = manifestParcels.filter(p => p.isSentForDelivery).length;
+  const pendingCount = manifestParcels.length - sentCount;
 
   const filteredPastManifests = React.useMemo(() => {
     if (!modalSearch.trim()) return pastManifestsList;
@@ -447,7 +466,7 @@ export default function OperationsDeManifestationPage() {
         <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Operation Module</div>
-            <h1 className="text-xl font-bold tracking-tight">Operation / DeManifestation & Linehaul Inbound</h1>
+            <h1 className="text-xl font-bold tracking-tight">Operation / DeManifestation & Send for Delivery</h1>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -459,10 +478,10 @@ export default function OperationsDeManifestationPage() {
             </button>
             <button
               onClick={handleSave}
-              disabled={isSubmitting || verifiedCount === 0}
+              disabled={isSubmitting || sentCount === 0}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <Save className="w-4 h-4" /> {isSubmitting ? 'Finalizing...' : `Receive & Save (${verifiedCount} Verified)`}
+              <Send className="w-4 h-4" /> {isSubmitting ? 'Processing...' : `Send to Delivery Sheet (${sentCount} Ready)`}
             </button>
             <button
               onClick={() => window.print()}
@@ -519,10 +538,10 @@ export default function OperationsDeManifestationPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Linehaul Inbound Status</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Delivery Queue Intake Status</label>
               <div className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold flex items-center justify-between">
-                <span>Verified: <strong className="text-emerald-600">{verifiedCount}</strong></span>
-                <span>Pending Verification: <strong className="text-amber-600">{pendingCount}</strong></span>
+                <span>Sent for Delivery: <strong className="text-emerald-600">{sentCount}</strong></span>
+                <span>Pending Intake: <strong className="text-amber-600">{pendingCount}</strong></span>
                 <span>Total: <strong>{manifestParcels.length}</strong></span>
               </div>
             </div>
@@ -533,16 +552,16 @@ export default function OperationsDeManifestationPage() {
             <div className="flex-1 flex flex-col gap-1 w-full">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode for DeManifest Verification
+                  <Barcode className="w-4 h-4 text-primary" /> Scan Tracking Barcode to Send for Delivery
                 </span>
-                <span className="text-[10px] text-slate-400">
-                  Target Status upon receipt: <strong>{SHIPMENT_STATUSES.ARRIVED_DEST}</strong>
+                <span className="text-[10px] text-slate-500">
+                  Target Status: <strong className="text-emerald-700">{SHIPMENT_STATUSES.ARRIVED_DEST}</strong> • Assigned in Delivery Sheet ➔ <strong>{SHIPMENT_STATUSES.OUT_FOR_DELIVERY}</strong>
                 </span>
               </label>
               <input
                 ref={barcodeInputRef}
                 type="text"
-                placeholder="Scan CN / Tracking barcode from incoming linehaul..."
+                placeholder="Scan CN / Tracking barcode to queue for delivery sheet..."
                 value={scanBarcode}
                 onChange={(e) => setScanBarcode(e.target.value)}
                 className="bg-white border border-slate-300 rounded-xl py-2.5 px-3.5 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary font-mono"
@@ -551,9 +570,9 @@ export default function OperationsDeManifestationPage() {
             <button
               type="submit"
               disabled={!scanBarcode.trim()}
-              className="w-full md:w-auto bg-primary hover:bg-primary-600 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all cursor-pointer h-10 mt-auto"
+              className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all cursor-pointer h-10 mt-auto flex items-center justify-center gap-1.5 shadow-sm"
             >
-              Verify Shipment
+              <Truck className="w-4 h-4" /> Send for Delivery
             </button>
           </form>
 
@@ -569,14 +588,14 @@ export default function OperationsDeManifestationPage() {
               {manifestParcels.length > 0 && pendingCount > 0 && (
                 <button
                   type="button"
-                  onClick={handleVerifyAll}
+                  onClick={handleSendAllForDelivery}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
                 >
-                  <Check className="w-3.5 h-3.5" /> Verify All ({pendingCount})
+                  <Send className="w-3.5 h-3.5" /> Send All for Delivery ({pendingCount})
                 </button>
               )}
               <span className="text-xs text-amber-400 font-bold hidden sm:inline">
-                Target Status: {SHIPMENT_STATUSES.ARRIVED_DEST}
+                Target Status: {SHIPMENT_STATUSES.ARRIVED_DEST} (Becomes Out for Delivery on Rider Runsheet)
               </span>
             </div>
           </div>
@@ -590,7 +609,7 @@ export default function OperationsDeManifestationPage() {
                   <th className="px-6 py-3.5">Consignee</th>
                   <th className="px-6 py-3.5 text-center">Destination</th>
                   <th className="px-6 py-3.5 text-center">Pcs • Wt</th>
-                  <th className="px-6 py-3.5 text-center">Verification Action</th>
+                  <th className="px-6 py-3.5 text-center">Delivery Queue Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -611,17 +630,17 @@ export default function OperationsDeManifestationPage() {
                       <td className="px-6 py-3.5 text-center font-bold text-slate-900">{s.destination}</td>
                       <td className="px-6 py-3.5 text-center">{s.pieces} pc • {s.weight.toFixed(1)} kg</td>
                       <td className="px-6 py-3.5 text-center">
-                        {s.isVerified ? (
+                        {s.isSentForDelivery ? (
                           <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-[11px] font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Verified (Arrived Dest)
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Sent for Delivery (Arrived at Dest)
                           </span>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleVerifyItem(s.shipmentNumber)}
+                            onClick={() => handleSendItemForDelivery(s.shipmentNumber)}
                             className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                           >
-                            <Check className="w-3.5 h-3.5" /> Verify Shipment
+                            <Truck className="w-3.5 h-3.5" /> Send for Delivery
                           </button>
                         )}
                       </td>

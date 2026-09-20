@@ -105,7 +105,18 @@ export default function OperationsDeliverySheetPage() {
   const fetchAvailableParcels = React.useCallback(async () => {
     setIsLoadingAvailable(true);
     try {
-      const res = await apiClient.get('/parcels?filters[status][$in][0]=Arrived%20at%20warehouse%20(Dest)&filters[status][$in][1]=Arrived%20At%20Destination&filters[status][$in][2]=Out%20For%20delivery&filters[status][$in][3]=Out%20for%20Delivery&sort[0]=updatedAt:desc&pagination[pageSize]=50&populate=*');
+      const queryStatuses = [
+        'In Transit',
+        'in transit',
+        'Arrived at warehouse (Dest)',
+        'Arrived At Destination',
+        'Arrived at warehouse',
+        'Arrived',
+        'Out For delivery',
+        'Out for Delivery'
+      ];
+      const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
+      const res = await apiClient.get(`/parcels?${statusParams}&sort[0]=updatedAt:desc&pagination[pageSize]=100&populate=*`);
       setAvailableParcels(res.data?.data || []);
     } catch (e) {
       console.warn('Could not load available parcels for delivery sheet:', e);

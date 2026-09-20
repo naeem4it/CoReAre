@@ -16,6 +16,8 @@ import {
   Search, 
   CheckCircle2, 
   AlertCircle,
+  AlertTriangle,
+  Eye,
   PackageCheck,
   Building2,
   CheckSquare,
@@ -76,7 +78,10 @@ export default function OperationsManifestationPage() {
   const [isArrivalsModalOpen, setIsArrivalsModalOpen] = React.useState(false);
   const [isLoadingArrivals, setIsLoadingArrivals] = React.useState(false);
   const [arrivalParcels, setArrivalParcels] = React.useState<any[]>([]);
+  const [modalLinehaulType, setModalLinehaulType] = React.useState<'2PL' | '3PL'>('2PL');
   const [modalSelectedHubId, setModalSelectedHubId] = React.useState<string>('all');
+  const [modalSelectedTplPartnerId, setModalSelectedTplPartnerId] = React.useState<string>('trax');
+  const [modalSelectedTplHub, setModalSelectedTplHub] = React.useState<string>('all');
   const [arrivalsSearchQuery, setArrivalsSearchQuery] = React.useState<string>('');
   const [selectedArrivalIds, setSelectedArrivalIds] = React.useState<string[]>([]);
 
@@ -127,6 +132,157 @@ export default function OperationsManifestationPage() {
     fetchOffices();
   }, [user]);
 
+  // 3PL Integration State
+  const [tplPartners, setTplPartners] = React.useState<any[]>([]);
+  const [selectedTplPartnerId, setSelectedTplPartnerId] = React.useState<string>('trax');
+  const [selectedTplHub, setSelectedTplHub] = React.useState<string>('TRAX - Lahore Main Gateway Hub');
+
+  // Fetch 3PL Partners from database
+  React.useEffect(() => {
+    const fetchTplPartners = async () => {
+      try {
+        const res = await apiClient.get('/tpl-partners?populate=*');
+        const dbPartners = res.data?.data || [];
+        
+        const standardPartners = [
+          { 
+            id: 'trax', 
+            name: 'TRAX Logistics', 
+            provider_code: 'trax', 
+            is_preferred: true, 
+            hubs: [
+              'TRAX - Lahore Main Gateway Hub',
+              'TRAX - Karachi Mega Hub',
+              'TRAX - Islamabad Regional Hub',
+              'TRAX - Rawalpindi Hub',
+              'TRAX - Faisalabad Central Hub',
+              'TRAX - Multan Station',
+              'TRAX - Peshawar Hub',
+              'TRAX - Sialkot Hub',
+              'TRAX - Gujranwala Station',
+              'TRAX - Quetta Hub',
+              'TRAX - Hyderabad Hub',
+              'TRAX - Sukkur Hub'
+            ]
+          },
+          { 
+            id: 'postex', 
+            name: 'PostEx Express', 
+            provider_code: 'postex', 
+            is_preferred: false, 
+            hubs: [
+              'PostEx - Lahore Sorting Facility',
+              'PostEx - Karachi Central Hub',
+              'PostEx - Islamabad Hub',
+              'PostEx - Faisalabad Hub',
+              'PostEx - Multan Hub',
+              'PostEx - Peshawar Station'
+            ]
+          },
+          { 
+            id: 'leopards', 
+            name: 'Leopards Courier Service', 
+            provider_code: 'leopards', 
+            is_preferred: false, 
+            hubs: [
+              'Leopards - Lahore Central Mega Hub',
+              'Leopards - Karachi Express Terminal',
+              'Leopards - Islamabad Gateway',
+              'Leopards - Rawalpindi Sorting Center',
+              'Leopards - Faisalabad Hub',
+              'Leopards - Multan Hub',
+              'Leopards - Sialkot Hub',
+              'Leopards - Peshawar Gateway'
+            ]
+          },
+          { 
+            id: 'tcs', 
+            name: 'TCS Express Logistics', 
+            provider_code: 'tcs', 
+            is_preferred: false, 
+            hubs: [
+              'TCS - Lahore Gateway Hub (Airport)',
+              'TCS - Karachi National Distribution Hub',
+              'TCS - Islamabad Express Hub',
+              'TCS - Faisalabad Hub',
+              'TCS - Multan Hub',
+              'TCS - Peshawar Hub'
+            ]
+          },
+          { 
+            id: 'mnp', 
+            name: 'M&P Express Logistics', 
+            provider_code: 'mnp', 
+            is_preferred: false, 
+            hubs: [
+              'M&P - Lahore Hub',
+              'M&P - Karachi Central Gateway',
+              'M&P - Islamabad Hub',
+              'M&P - Rawalpindi Hub'
+            ]
+          },
+          { 
+            id: 'callcourier', 
+            name: 'Call Courier', 
+            provider_code: 'callcourier', 
+            is_preferred: false, 
+            hubs: [
+              'Call Courier - Lahore Hub',
+              'Call Courier - Karachi Hub',
+              'Call Courier - Rawalpindi / Islamabad Hub'
+            ]
+          }
+        ];
+
+        // Merge DB partners with standard catalog
+        const merged = [...standardPartners];
+        dbPartners.forEach((dbp: any) => {
+          const pCode = dbp.provider_code?.toLowerCase();
+          const existingIdx = merged.findIndex(m => m.provider_code.toLowerCase() === pCode);
+          if (existingIdx !== -1) {
+            merged[existingIdx] = {
+              ...merged[existingIdx],
+              ...dbp,
+              name: dbp.name || merged[existingIdx].name,
+              is_preferred: Boolean(dbp.is_preferred)
+            };
+          } else {
+            merged.unshift({
+              id: String(dbp.id),
+              name: dbp.name,
+              provider_code: dbp.provider_code || 'custom',
+              is_preferred: Boolean(dbp.is_preferred),
+              hubs: [
+                `${dbp.name} - Lahore Hub`,
+                `${dbp.name} - Karachi Hub`,
+                `${dbp.name} - Islamabad Hub`,
+                `${dbp.name} - Faisalabad Hub`,
+                `${dbp.name} - Multan Hub`,
+                `${dbp.name} - Peshawar Hub`
+              ]
+            });
+          }
+        });
+
+        // Ensure preferred is first
+        merged.sort((a, b) => (b.is_preferred ? 1 : 0) - (a.is_preferred ? 1 : 0));
+        setTplPartners(merged);
+
+        const preferred = merged.find(p => p.is_preferred) || merged[0];
+        if (preferred) {
+          setSelectedTplPartnerId(String(preferred.id || preferred.provider_code));
+          if (preferred.hubs && preferred.hubs.length > 0) {
+            setSelectedTplHub(preferred.hubs[0]);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load 3PL partners:', err);
+      }
+    };
+
+    fetchTplPartners();
+  }, []);
+
   // Past manifests from backend
   const [pastManifests, setPastManifests] = React.useState<ManifestItem[]>([]);
 
@@ -156,23 +312,24 @@ export default function OperationsManifestationPage() {
       const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
       const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
+      // Strictly query parcels that have arrived at the Origin warehouse
       const queryStatuses = [
         'Arrived at warehouse (Origin)',
         'Arrived at the warehouse',
         'Arrived at warehouse',
-        'Arrived',
-        'Booked',
-        'booked',
-        'Total Booking',
-        'Picked up by rider',
-        'picked up by rider',
-        'Order Created'
+        'Arrived'
       ];
       const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
       const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
       
       const res = await apiClient.get(url);
       let allParcels: any[] = res.data?.data || [];
+
+      // Strictly filter for Arrived at warehouse (Origin)
+      allParcels = allParcels.filter(p => {
+        const norm = normalizeShipmentStatus(p.status);
+        return norm === SHIPMENT_STATUSES.ARRIVED_ORIGIN;
+      });
 
       // Filter by tenant isolation
       if (tenantId && allParcels.length > 0) {
@@ -196,7 +353,15 @@ export default function OperationsManifestationPage() {
 
   const handleOpenArrivalsModal = () => {
     setIsArrivalsModalOpen(true);
+    setModalLinehaulType('2PL');
     setModalSelectedHubId('all');
+    
+    // Default 3PL preferred partner and hub
+    const preferred = tplPartners.find(p => p.is_preferred) || tplPartners[0];
+    if (preferred) {
+      setModalSelectedTplPartnerId(String(preferred.id || preferred.provider_code));
+    }
+    setModalSelectedTplHub('all');
     setArrivalsSearchQuery('');
     setSelectedArrivalIds([]);
     fetchArrivalsQueue();
@@ -231,15 +396,12 @@ export default function OperationsManifestationPage() {
         return;
       }
 
-      // BUSINESS RULE: Manifestation eligibility validation
+      // BUSINESS RULE: Manifestation eligibility validation (Only Origin-Arrived parcels)
       const normStatus = normalizeShipmentStatus(parcel.status);
-      const isEligible = 
-        normStatus === SHIPMENT_STATUSES.BOOKED ||
-        normStatus === SHIPMENT_STATUSES.PICKED_UP_BY_RIDER ||
-        normStatus === SHIPMENT_STATUSES.ARRIVED_ORIGIN;
+      const isEligible = normStatus === SHIPMENT_STATUSES.ARRIVED_ORIGIN;
 
       if (!isEligible) {
-        triggerToast(`Cannot manifest #${code}: Current status is "${normStatus}". Only Booked, Picked Up, or Origin-Arrived parcels can be manifested.`, 'error');
+        triggerToast(`Cannot manifest #${code}: Current status is "${normStatus}". Only "Arrived at warehouse (Origin)" parcels can be manifested.`, 'error');
         setScanBarcode('');
         return;
       }
@@ -281,37 +443,91 @@ export default function OperationsManifestationPage() {
     }
   };
 
-  // Filtered Arrivals in Modal by Destination Hub and Search
+  // Helper to extract available hubs from partner
+  const getPartnerHubs = React.useCallback((partner: any) => {
+    if (!partner) return [];
+    if (partner.hubs && partner.hubs.length > 0) return partner.hubs;
+    const name = partner.name || '3PL';
+    return [
+      `${name} - Lahore Hub`,
+      `${name} - Karachi Hub`,
+      `${name} - Islamabad Hub`,
+      `${name} - Faisalabad Hub`,
+      `${name} - Multan Hub`,
+      `${name} - Peshawar Hub`
+    ];
+  }, []);
+
+  // Modal 3PL Partner & Hubs
+  const modalCurrentTplPartner = React.useMemo(() => {
+    return tplPartners.find(p => String(p.id) === String(modalSelectedTplPartnerId) || p.provider_code === modalSelectedTplPartnerId) || tplPartners[0];
+  }, [tplPartners, modalSelectedTplPartnerId]);
+
+  const modalCurrentTplHubs = React.useMemo(() => {
+    return getPartnerHubs(modalCurrentTplPartner);
+  }, [modalCurrentTplPartner, getPartnerHubs]);
+
+  // Helper to test if a parcel is 3PL vs 2PL
+  const isParcel3PL = React.useCallback((p: any) => {
+    return Boolean(p.is_3pl) || p.is_3pl === 'true' || p.service_provider === '3PL' || (p.courier && p.courier?.name && p.courier.name !== 'IN-HOUSE' && p.courier.name !== '2PL');
+  }, []);
+
+  // Filtered Arrivals in Modal by 2PL/3PL Linehaul Type, Destination Hub, and Search
   const filteredArrivalParcels = React.useMemo(() => {
     let list = arrivalParcels;
 
-    // Filter out parcels already added to the manifest shipments list
+    // 1. Filter out parcels already added to the manifest shipments list in current session
     list = list.filter(p => !shipments.some(s => s.shipmentNumber === (p.tracking_number || '').toUpperCase()));
 
-    // Filter by destination office hub selection
-    if (modalSelectedHubId && modalSelectedHubId !== 'all') {
-      const selectedOffice = offices.find(o => String(o.id) === String(modalSelectedHubId));
-      const officeCity = selectedOffice?.city?.CityName || selectedOffice?.city?.name || (typeof selectedOffice?.city === 'string' ? selectedOffice.city : '') || '';
-      const officeName = (selectedOffice?.name || '').toLowerCase();
+    // 2. Filter by 2PL vs 3PL Linehaul Type
+    if (modalLinehaulType === '2PL') {
+      // 2PL Orders only
+      list = list.filter(p => !isParcel3PL(p));
 
-      list = list.filter(p => {
-        // 1. Direct destination office relationship
-        if (p.destination_office?.id && String(p.destination_office.id) === String(modalSelectedHubId)) return true;
-        
-        // 2. Match destination city
-        const destCity = p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || '';
-        if (officeCity && destCity && destCity.toLowerCase() === officeCity.toLowerCase()) return true;
+      // Filter by 2PL destination office hub selection
+      if (modalSelectedHubId && modalSelectedHubId !== 'all') {
+        const selectedOffice = offices.find(o => String(o.id) === String(modalSelectedHubId));
+        const officeCity = selectedOffice?.city?.CityName || selectedOffice?.city?.name || (typeof selectedOffice?.city === 'string' ? selectedOffice.city : '') || '';
+        const officeName = (selectedOffice?.name || '').toLowerCase();
 
-        // 3. Match recipient address mentioning city or office name
-        const addr = (p.recipient_address || '').toLowerCase();
-        if (officeCity && addr.includes(officeCity.toLowerCase())) return true;
-        if (officeName && addr.includes(officeName)) return true;
+        list = list.filter(p => {
+          // Direct destination office relationship
+          if (p.destination_office?.id && String(p.destination_office.id) === String(modalSelectedHubId)) return true;
+          
+          // Match destination city
+          const destCity = p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || '';
+          if (officeCity && destCity && destCity.toLowerCase() === officeCity.toLowerCase()) return true;
 
-        return false;
-      });
+          // Match recipient address mentioning city or office name
+          const addr = (p.recipient_address || '').toLowerCase();
+          if (officeCity && addr.includes(officeCity.toLowerCase())) return true;
+          if (officeName && addr.includes(officeName)) return true;
+
+          return false;
+        });
+      }
+    } else {
+      // 3PL Orders only
+      list = list.filter(p => isParcel3PL(p));
+
+      // Filter by 3PL destination hub selection if specific hub is picked
+      if (modalSelectedTplHub && modalSelectedTplHub !== 'all') {
+        const targetHubLower = modalSelectedTplHub.toLowerCase();
+        list = list.filter(p => {
+          const destCity = (p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || '').toLowerCase();
+          const addr = (p.recipient_address || '').toLowerCase();
+          
+          if (destCity && targetHubLower.includes(destCity)) return true;
+          
+          const hubWords = targetHubLower.split(/[\s-]+/).filter(w => w.length > 3 && !['trax', 'postex', 'leopards', 'tcs', 'mnp', 'call', 'courier', 'main', 'gateway', 'hub', 'facility', 'station', 'sorting', 'express', 'terminal'].includes(w));
+          if (destCity && hubWords.some(w => destCity.includes(w))) return true;
+          if (hubWords.some(w => addr.includes(w))) return true;
+          return false;
+        });
+      }
     }
 
-    // Filter by search text query
+    // 3. Filter by search text query
     if (arrivalsSearchQuery.trim()) {
       const q = arrivalsSearchQuery.trim().toLowerCase();
       list = list.filter(p => {
@@ -324,7 +540,7 @@ export default function OperationsManifestationPage() {
     }
 
     return list;
-  }, [arrivalParcels, shipments, modalSelectedHubId, offices, arrivalsSearchQuery]);
+  }, [arrivalParcels, shipments, modalLinehaulType, isParcel3PL, modalSelectedHubId, offices, modalSelectedTplHub, arrivalsSearchQuery]);
 
   // Checkbox toggle helpers
   const toggleSelectArrival = (id: string) => {
@@ -389,31 +605,42 @@ export default function OperationsManifestationPage() {
       triggerToast(`Added ${newItems.length} arrival orders to manifest!`, 'success');
     }
 
-    // Automatically set destination office on main screen
-    if (modalSelectedHubId && modalSelectedHubId !== 'all') {
-      const selectedOffice = offices.find(o => String(o.id) === String(modalSelectedHubId));
-      if (selectedOffice) {
-        const cityName = selectedOffice.city?.CityName || selectedOffice.city?.name || (typeof selectedOffice.city === 'string' ? selectedOffice.city : '') || '';
-        const label = `${selectedOffice.name || `Office #${selectedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
-        setSelectedStation(label);
+    // Automatically sync modal filters to main screen
+    if (modalLinehaulType === '2PL') {
+      setManifestType('Station');
+      if (modalSelectedHubId && modalSelectedHubId !== 'all') {
+        const selectedOffice = offices.find(o => String(o.id) === String(modalSelectedHubId));
+        if (selectedOffice) {
+          const cityName = selectedOffice.city?.CityName || selectedOffice.city?.name || (typeof selectedOffice.city === 'string' ? selectedOffice.city : '') || '';
+          const label = `${selectedOffice.name || `Office #${selectedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
+          setSelectedStation(label);
+        }
+      } else if (parcelsToAdd.length > 0) {
+        // If 'all' was selected, check if all added parcels share a destination office or destination city
+        const firstParcel = parcelsToAdd[0];
+        const destOffId = firstParcel.destination_office?.id;
+        const destCity = firstParcel.destination_city?.CityName || firstParcel.destination_city?.name || (typeof firstParcel.destination_city === 'string' ? firstParcel.destination_city : '');
+        
+        let matchedOffice = destOffId ? offices.find(o => String(o.id) === String(destOffId)) : null;
+        if (!matchedOffice && destCity) {
+          matchedOffice = offices.find(o => {
+            const oCity = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '');
+            return oCity && oCity.toLowerCase() === destCity.toLowerCase();
+          });
+        }
+        if (matchedOffice) {
+          const cityName = matchedOffice.city?.CityName || matchedOffice.city?.name || (typeof matchedOffice.city === 'string' ? matchedOffice.city : '') || '';
+          const label = `${matchedOffice.name || `Office #${matchedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
+          setSelectedStation(label);
+        }
       }
-    } else if (parcelsToAdd.length > 0) {
-      // If 'all' was selected, check if all added parcels share a destination office or destination city
-      const firstParcel = parcelsToAdd[0];
-      const destOffId = firstParcel.destination_office?.id;
-      const destCity = firstParcel.destination_city?.CityName || firstParcel.destination_city?.name || (typeof firstParcel.destination_city === 'string' ? firstParcel.destination_city : '');
-      
-      let matchedOffice = destOffId ? offices.find(o => String(o.id) === String(destOffId)) : null;
-      if (!matchedOffice && destCity) {
-        matchedOffice = offices.find(o => {
-          const oCity = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '');
-          return oCity && oCity.toLowerCase() === destCity.toLowerCase();
-        });
-      }
-      if (matchedOffice) {
-        const cityName = matchedOffice.city?.CityName || matchedOffice.city?.name || (typeof matchedOffice.city === 'string' ? matchedOffice.city : '') || '';
-        const label = `${matchedOffice.name || `Office #${matchedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
-        setSelectedStation(label);
+    } else {
+      setManifestType('3PL Partner');
+      setSelectedTplPartnerId(modalSelectedTplPartnerId);
+      if (modalSelectedTplHub && modalSelectedTplHub !== 'all') {
+        setSelectedTplHub(modalSelectedTplHub);
+      } else if (modalCurrentTplHubs.length > 0) {
+        setSelectedTplHub(modalCurrentTplHubs[0]);
       }
     }
 
@@ -428,6 +655,11 @@ export default function OperationsManifestationPage() {
     }
     setIsSubmitting(true);
     try {
+      const is3PL = manifestType === '3PL Partner';
+      const activePartner = tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId);
+      const destinationStationValue = is3PL ? selectedTplHub : selectedStation;
+      const thirdPartyValue = is3PL ? (activePartner?.name || '3PL Partner') : null;
+
       // 1. Persist Manifest record in Strapi backend
       let savedManifestId: number | null = null;
       try {
@@ -435,8 +667,9 @@ export default function OperationsManifestationPage() {
           data: {
             manifest_number: manifestNumber,
             seal_no: sealNo,
-            manifest_type: manifestType === '3PL' ? 'TPL' : manifestType,
-            station: selectedStation,
+            manifest_type: is3PL ? 'TPL' : manifestType,
+            station: destinationStationValue,
+            third_party: thirdPartyValue,
             total_parcels: shipments.length,
             total_cash: shipments.reduce((a, s) => a + s.cashCollect, 0),
             status: 'Dispatched',
@@ -460,6 +693,8 @@ export default function OperationsManifestationPage() {
             await apiClient.put(`/parcels/${docId}`, { 
               data: { 
                 status: SHIPMENT_STATUSES.IN_TRANSIT,
+                is_3pl: is3PL,
+                ...(is3PL ? { comments: `Dispatched to 3PL: ${thirdPartyValue} (${destinationStationValue})` } : {}),
                 ...(savedManifestId ? { manifest: savedManifestId } : {})
               } 
             });
@@ -469,7 +704,7 @@ export default function OperationsManifestationPage() {
         }
       }
 
-      triggerToast(`Manifest #${manifestNumber} (Seal: ${sealNo}) dispatched! ${shipments.length} parcels marked "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
+      triggerToast(`Manifest #${manifestNumber} (${is3PL ? thirdPartyValue : 'Internal'}) dispatched! ${shipments.length} parcels marked "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
       setManifestNumber(prev => prev + 1);
       setSealNo(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
       setShipments([]);
@@ -495,15 +730,31 @@ export default function OperationsManifestationPage() {
     m.sealNo.toLowerCase().includes(modalSearch.toLowerCase())
   );
 
+  // Active 3PL Partner and its available hubs
+  const currentTplPartner = React.useMemo(() => {
+    return tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId) || tplPartners[0];
+  }, [tplPartners, selectedTplPartnerId]);
+
+  const currentTplHubs = React.useMemo(() => {
+    return currentTplPartner?.hubs || [
+      `${currentTplPartner?.name || '3PL'} - Lahore Hub`,
+      `${currentTplPartner?.name || '3PL'} - Karachi Hub`,
+      `${currentTplPartner?.name || '3PL'} - Islamabad Hub`,
+      `${currentTplPartner?.name || '3PL'} - Faisalabad Hub`,
+      `${currentTplPartner?.name || '3PL'} - Multan Hub`,
+      `${currentTplPartner?.name || '3PL'} - Peshawar Hub`
+    ];
+  }, [currentTplPartner]);
+
   return (
     <PortalLayout>
       {toast.show && (
         <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
           toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
         }`}>
-          {toast.type === 'success'
+          {toast.type === 'success' 
             ? <div className="bg-emerald-500 rounded-full p-1 text-white"><CheckCircle2 className="w-4 h-4" /></div>
-            : <div className="bg-red-500 rounded-full p-1 text-white"><AlertCircle className="w-4 h-4" /></div>
+            : <div className="bg-red-500 rounded-full p-1 text-white"><AlertTriangle className="w-4 h-4" /></div>
           }
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>
@@ -521,10 +772,10 @@ export default function OperationsManifestationPage() {
             {/* View Arrivals Button */}
             <button
               onClick={handleOpenArrivalsModal}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 border border-indigo-500"
               title="View arrived orders filtered by destination hub and add to manifest"
             >
-              <PackageCheck className="w-4 h-4" /> View Arrivals
+              <Eye className="w-4 h-4" /> View Arrivals
             </button>
 
             <button
@@ -558,7 +809,7 @@ export default function OperationsManifestationPage() {
         {/* Form Controls */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col gap-6">
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Manifest #</label>
               <input
@@ -582,31 +833,95 @@ export default function OperationsManifestationPage() {
               </select>
             </div>
 
-            {/* Destination Station / Hub populated dynamically from database */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                <Building2 className="w-3.5 h-3.5 text-primary" /> Destination Station / Hub
-              </label>
-              <select
-                value={selectedStation}
-                onChange={(e) => setSelectedStation(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-              >
-                {offices.length > 0 ? (
-                  offices.map((o: any) => {
-                    const cityName = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '';
-                    const label = `${o.name || `Office #${o.id}`}${cityName ? ` (${cityName})` : ''}`;
-                    return (
-                      <option key={o.id} value={label}>
-                        {label}
+            {/* DYNAMIC DROPDOWNS BASED ON MANIFEST TYPE */}
+            {manifestType === '3PL Partner' ? (
+              <>
+                {/* 3PL Service Partner Selection (Defaults to Preferred) */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5 text-primary" /> 3PL Service Partner
+                  </label>
+                  <select
+                    value={selectedTplPartnerId}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setSelectedTplPartnerId(newId);
+                      const partner = tplPartners.find(p => String(p.id) === String(newId) || p.provider_code === newId);
+                      if (partner?.hubs && partner.hubs.length > 0) {
+                        setSelectedTplHub(partner.hubs[0]);
+                      }
+                    }}
+                    className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    {tplPartners.map((p) => (
+                      <option key={p.id || p.provider_code} value={String(p.id || p.provider_code)}>
+                        {p.name} {p.is_preferred ? '★ (Preferred)' : ''}
                       </option>
-                    );
-                  })
-                ) : (
-                  <option value="Lahore Hub (LHE)">Lahore Hub (LHE)</option>
-                )}
-              </select>
-            </div>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3PL Destination Office Hubs */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-emerald-600" /> 3PL Office Hub / Station
+                  </label>
+                  <select
+                    value={selectedTplHub}
+                    onChange={(e) => setSelectedTplHub(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    {currentTplHubs.map((hubName: string, idx: number) => (
+                      <option key={idx} value={hubName}>
+                        {hubName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : manifestType === 'Airport' ? (
+              <div className="flex flex-col gap-1 md:col-span-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                  <Truck className="w-3.5 h-3.5 text-sky-600" /> Airport Express Cargo Terminal
+                </label>
+                <select
+                  value={selectedStation}
+                  onChange={(e) => setSelectedStation(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  <option value="LHE - Allama Iqbal Airport Cargo Terminal">LHE - Allama Iqbal Airport Cargo Terminal</option>
+                  <option value="KHI - Jinnah Intl Air Cargo Complex">KHI - Jinnah Intl Air Cargo Complex</option>
+                  <option value="ISB - Islamabad New Airport Cargo Facility">ISB - Islamabad New Airport Cargo Facility</option>
+                  <option value="PEW - Bacha Khan Airport Cargo Station">PEW - Bacha Khan Airport Cargo Station</option>
+                </select>
+              </div>
+            ) : (
+              /* Internal 2PL Destination Hub populated dynamically from database */
+              <div className="flex flex-col gap-1 md:col-span-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5 text-primary" /> Internal 2PL Destination Hub
+                </label>
+                <select
+                  value={selectedStation}
+                  onChange={(e) => setSelectedStation(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  {offices.length > 0 ? (
+                    offices.map((o: any) => {
+                      const cityName = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '';
+                      const label = `${o.name || `Office #${o.id}`}${cityName ? ` (${cityName})` : ''}`;
+                      return (
+                        <option key={o.id} value={label}>
+                          {label}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option value="Lahore Hub (LHE)">Lahore Hub (LHE)</option>
+                  )}
+                </select>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
@@ -741,54 +1056,150 @@ export default function OperationsManifestationPage() {
                 </button>
               </div>
 
-              {/* Filter Controls Bar: Office Hub Dropdown & Search */}
-              <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              {/* Filter Controls Bar: 2PL/3PL Radio Buttons, Dynamic Hub Dropdowns & Search */}
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
                 
-                {/* Destination Office / Hub Filter Dropdown */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0 flex items-center gap-1">
-                    <Building2 className="w-4 h-4 text-primary" /> Destination Hub:
-                  </span>
-                  <select
-                    value={modalSelectedHubId}
-                    onChange={(e) => setModalSelectedHubId(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer w-full sm:w-64"
-                  >
-                    <option value="all">🏢 All Destination Hubs ({offices.length} Facilities)</option>
-                    {offices.map((o: any) => {
-                      const cityName = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '';
-                      return (
-                        <option key={o.id} value={String(o.id)}>
-                          {o.name || `Office #${o.id}`} {cityName ? `(${cityName})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                {/* Left Controls: 2PL vs 3PL Radio Buttons + Dynamic Dropdowns */}
+                <div className="flex flex-wrap items-center gap-3">
+                  
+                  {/* 2PL and 3PL Radio Buttons */}
+                  <div className="inline-flex items-center bg-slate-200/90 p-1 rounded-xl border border-slate-300/80 shadow-xs">
+                    <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                      modalLinehaulType === '2PL'
+                        ? 'bg-white text-primary shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="modalLinehaulType"
+                        value="2PL"
+                        checked={modalLinehaulType === '2PL'}
+                        onChange={() => {
+                          setModalLinehaulType('2PL');
+                          setSelectedArrivalIds([]);
+                        }}
+                        className="hidden"
+                      />
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>2PL</span>
+                    </label>
 
-                {/* Search in Arrivals */}
-                <div className="relative flex-1 w-full sm:max-w-xs">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search tracking #, consignee, shipper..."
-                    value={arrivalsSearchQuery}
-                    onChange={(e) => setArrivalsSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  {arrivalsSearchQuery && (
-                    <button 
-                      onClick={() => setArrivalsSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
-                    >
-                      Clear
-                    </button>
+                    <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                      modalLinehaulType === '3PL'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="modalLinehaulType"
+                        value="3PL"
+                        checked={modalLinehaulType === '3PL'}
+                        onChange={() => {
+                          setModalLinehaulType('3PL');
+                          setSelectedArrivalIds([]);
+                        }}
+                        className="hidden"
+                      />
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>3PL</span>
+                    </label>
+                  </div>
+
+                  {/* Dynamic Dropdowns depending on 2PL vs 3PL Selection */}
+                  {modalLinehaulType === '2PL' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                        <Building2 className="w-4 h-4 text-primary" /> Destination Hub:
+                      </span>
+                      <select
+                        value={modalSelectedHubId}
+                        onChange={(e) => setModalSelectedHubId(e.target.value)}
+                        className="bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-primary cursor-pointer w-full sm:w-60 shadow-xs"
+                      >
+                        <option value="all">🏢 All Destination Hubs ({offices.length} Facilities)</option>
+                        {offices.map((o: any) => {
+                          const cityName = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '';
+                          return (
+                            <option key={o.id} value={String(o.id)}>
+                              {o.name || `Office #${o.id}`} {cityName ? `(${cityName})` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* 3PL Service Partner Selection */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                          <Truck className="w-3.5 h-3.5 text-indigo-600" /> 3PL Service:
+                        </span>
+                        <select
+                          value={modalSelectedTplPartnerId}
+                          onChange={(e) => {
+                            const newId = e.target.value;
+                            setModalSelectedTplPartnerId(newId);
+                            setModalSelectedTplHub('all');
+                          }}
+                          className="bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer shadow-xs"
+                        >
+                          {tplPartners.map((p) => (
+                            <option key={p.id || p.provider_code} value={String(p.id || p.provider_code)}>
+                              {p.name} {p.is_preferred ? '★ (Preferred)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 3PL Destination Hub Selection */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                          <Building2 className="w-3.5 h-3.5 text-emerald-600" /> Hub:
+                        </span>
+                        <select
+                          value={modalSelectedTplHub}
+                          onChange={(e) => setModalSelectedTplHub(e.target.value)}
+                          className="bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer w-full sm:w-56 shadow-xs"
+                        >
+                          <option value="all">🌐 All {modalCurrentTplPartner?.name || '3PL'} Hubs ({modalCurrentTplHubs.length})</option>
+                          {modalCurrentTplHubs.map((hubName: string, idx: number) => (
+                            <option key={idx} value={hubName}>
+                              {hubName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   )}
+
                 </div>
 
-                <div className="text-xs font-bold text-slate-500 shrink-0">
-                  {filteredArrivalParcels.length} eligible {filteredArrivalParcels.length === 1 ? 'order' : 'orders'}
+                {/* Right Controls: Search in Arrivals & Count */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 sm:w-60">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search tracking #, consignee..."
+                      value={arrivalsSearchQuery}
+                      onChange={(e) => setArrivalsSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                    />
+                    {arrivalsSearchQuery && (
+                      <button 
+                        onClick={() => setArrivalsSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="text-xs font-bold text-slate-500 shrink-0 whitespace-nowrap">
+                    {filteredArrivalParcels.length} {filteredArrivalParcels.length === 1 ? 'order' : 'orders'}
+                  </div>
                 </div>
+
               </div>
 
               {/* Arrivals Orders Grid with Checkboxes */}
@@ -802,12 +1213,14 @@ export default function OperationsManifestationPage() {
                   <div className="py-16 text-center bg-slate-50/50 rounded-2xl border border-slate-200 p-8">
                     <Boxes className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h4 className="text-base font-bold text-slate-800">
-                      {arrivalsSearchQuery || modalSelectedHubId !== 'all' ? 'No orders match the selected destination hub or search filter' : 'No pending arrived orders available'}
+                      {arrivalsSearchQuery || modalSelectedHubId !== 'all' || (modalLinehaulType === '3PL' && modalSelectedTplHub !== 'all')
+                        ? `No ${modalLinehaulType} orders match the selected filters`
+                        : `No pending ${modalLinehaulType} arrived orders available`}
                     </h4>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                      {arrivalsSearchQuery || modalSelectedHubId !== 'all'
-                        ? 'Try changing the destination hub filter to "All Destination Hubs" or clearing your search.'
-                        : 'All active parcels have either been manifested or are not yet physically checked in at the warehouse.'}
+                      {modalLinehaulType === '2PL'
+                        ? 'Try switching to 3PL or selecting "All Destination Hubs". Only parcels with status "Arrived at warehouse (Origin)" appear here.'
+                        : 'Try switching to 2PL or selecting "All Hubs". Only 3PL-flagged parcels with status "Arrived at warehouse (Origin)" appear here.'}
                     </p>
                   </div>
                 ) : (
@@ -889,7 +1302,7 @@ export default function OperationsManifestationPage() {
                               </td>
                               <td className="p-3 text-center">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <CheckCircle2 className="w-3 h-3" /> {p.status || 'Arrived'}
+                                  <CheckCircle2 className="w-3 h-3" /> {normalizeShipmentStatus(p.status)}
                                 </span>
                               </td>
                             </tr>
