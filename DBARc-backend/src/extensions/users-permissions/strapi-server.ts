@@ -459,7 +459,7 @@ export default (plugin: any) => {
 
       const users = await strapi.db.query('plugin::users-permissions.user').findMany({
         where: filters,
-        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations'],
+        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations', 'offices'],
         orderBy: { createdAt: 'desc' },
       });
 
@@ -486,7 +486,7 @@ export default (plugin: any) => {
 
       const targetUser = await strapi.db.query('plugin::users-permissions.user').findOne({
         where: queryFilters,
-        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations'],
+        populate: ['role_definition', 'tenant', 'courier', 'shipper', 'role', 'pickup_locations', 'offices'],
       });
 
       if (!targetUser) {
@@ -520,6 +520,7 @@ export default (plugin: any) => {
         courier,
         shipper,
         pickup_locations,
+        offices,
         role,
         shipperName,
         shipperAddress,
@@ -741,6 +742,7 @@ export default (plugin: any) => {
         courier: courierId,
         shipper: targetShipperIds,
         pickup_locations: Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []),
+        offices: Array.isArray(offices) ? offices.map(Number).filter(n => !isNaN(n) && n > 0) : (offices ? [Number(offices)].filter(n => !isNaN(n) && n > 0) : []),
         blocked: isenable === false,
         confirmed: isNoConfirmation,
         password: passwordHash,
@@ -749,7 +751,7 @@ export default (plugin: any) => {
 
       const newUser = await strapi.db.query('plugin::users-permissions.user').create({
         data: userData,
-        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition'],
+        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition', 'offices'],
       });
 
       if (!isNoConfirmation) {
@@ -824,6 +826,7 @@ export default (plugin: any) => {
         courier,
         shipper,
         pickup_locations,
+        offices,
         role,
       } = ctx.request.body;
 
@@ -840,6 +843,11 @@ export default (plugin: any) => {
       if (shipper_roles !== undefined) updateData.shipper_roles = shipper_roles;
       if (pickup_locations !== undefined) {
         updateData.pickup_locations = Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []);
+      }
+      if (offices !== undefined) {
+        updateData.offices = Array.isArray(offices) 
+          ? offices.map(Number).filter(n => !isNaN(n) && n > 0) 
+          : (offices ? [Number(offices)].filter(n => !isNaN(n) && n > 0) : []);
       }
       if (isenable !== undefined) updateData.blocked = isenable === false;
       
@@ -966,7 +974,7 @@ export default (plugin: any) => {
       const updatedUser = await strapi.db.query('plugin::users-permissions.user').update({
         where: { id },
         data: updateData,
-        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition'],
+        populate: ['role', 'tenant', 'courier', 'shipper', 'role_definition', 'offices'],
       });
 
       stripTenantSuffix(updatedUser);
