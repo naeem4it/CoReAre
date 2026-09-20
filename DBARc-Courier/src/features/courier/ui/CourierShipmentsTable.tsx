@@ -111,8 +111,13 @@ export const CourierShipmentsTable = ({
             const customerName = item.recipient_name || 'Customer';
             const initials = customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'CU';
             
-            const origin = (item as any).source_city?.name || 'Karachi';
-            const destination = (item as any).destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Islamabad';
+            const origin = typeof (item as any).source_city === 'string'
+              ? (item as any).source_city
+              : ((item as any).source_city?.CityName || (item as any).source_city?.name || 'Karachi');
+
+            const destination = typeof (item as any).destination_city === 'string'
+              ? (item as any).destination_city
+              : ((item as any).destination_city?.CityName || (item as any).destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Islamabad');
             
             let uiStatus: ShipmentRow['status'] = 'Booked';
             if (item.status) {

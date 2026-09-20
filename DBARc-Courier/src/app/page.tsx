@@ -5,6 +5,7 @@ import PortalLayout from '@/components/PortalLayout';
 import { CourierStats } from '@/features/courier/ui/CourierStats';
 import { LiveOperationsFeed } from '@/features/courier/ui/LiveOperationsFeed';
 import { CourierShipmentsTable } from '@/features/courier/ui/CourierShipmentsTable';
+import { TplOrderStatusSection } from '@/features/courier/ui/TplOrderStatusSection';
 import { useTenant } from '@/components/TenantProvider';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -59,7 +60,12 @@ export default function DashboardPage() {
     const cityFromTenant = user.tenant?.city || user.tenant?.address;
     const officeName = Array.isArray(user.offices) ? user.offices[0]?.name : undefined;
 
-    return cityFromShipper || addressFromShipper || cityFromTenant || officeName || 'Karachi';
+    const loc = cityFromShipper || addressFromShipper || cityFromTenant || officeName || 'Karachi';
+    if (typeof loc === 'string') return loc;
+    if (typeof loc === 'object' && loc !== null) {
+      return loc.CityName || loc.name || loc.address || 'Karachi';
+    }
+    return 'Karachi';
   }, [user]);
 
   // Selected status filter triggered by clicking tiles
@@ -123,6 +129,12 @@ export default function DashboardPage() {
         toDate={toDate} 
         selectedStatus={selectedStatus}
         onSelectStatus={setSelectedStatus}
+      />
+
+      {/* 3PL Order Status & Realtime Sync Section */}
+      <TplOrderStatusSection
+        fromDate={fromDate}
+        toDate={toDate}
       />
 
       {/* Shipments Table with Date & Status Filtering */}
