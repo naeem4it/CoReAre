@@ -575,6 +575,7 @@ function BookShipmentForm() {
 
   // Watch fields for live estimated cost calculation
   const weight = watch('weight') || 0.5;
+  const pieces = watch('pieces') || 1;
   const codAmount = watch('codAmount') || 0;
   const paymentType = watch('paymentType') || 'COD';
   const serviceType = watch('serviceType') || 'Overnight';
@@ -673,20 +674,8 @@ function BookShipmentForm() {
       weightCharge = Math.round(weightCharge * 0.85);
     }
 
-    const numCod = Math.max(0, Number(codAmount) || 0);
-    let codFee = 0;
-    if (numCod > 0) {
-      if (isCorporate) {
-        codFee = 40;
-      } else if (isVip) {
-        codFee = Math.max(20, Math.round(numCod * 0.01));
-      } else {
-        codFee = Math.max(30, Math.round(numCod * 0.015));
-      }
-    }
-
     const surcharge = 35;
-    const subtotal = weightCharge + codFee + surcharge;
+    const subtotal = weightCharge + surcharge;
     const gst = Math.round(subtotal * 0.17 * 100) / 100;
     const total = Math.round((subtotal + gst) * 100) / 100;
 
@@ -694,23 +683,26 @@ function BookShipmentForm() {
       planName: activePlanName,
       zoneName,
       weightCharge,
-      codFee,
+      codFee: 0,
       surcharge,
       gst,
       total,
     };
-  }, [weight, codAmount, serviceType, destinationCityId, destinationCityName, user]);
+  }, [weight, pieces, serviceType, destinationCityId, destinationCityName, sourceCityName, configuredZones, selectedShipperBusiness, user]);
 
-  // Auto-populate estimated cost into COD Amount when COD is active and codAmount is 0 or empty
-  const hasInitializedCodAmount = React.useRef(false);
+  // Auto-update COD Amount in textbox whenever pricing changes while paymentType is COD
+  const prevPricingTotalRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (paymentType === 'COD' && (!codAmount || codAmount === 0)) {
-      if (pricing.total > 0 && !hasInitializedCodAmount.current) {
-        setValue('codAmount', Math.round(pricing.total) || pricing.total);
-        hasInitializedCodAmount.current = true;
+    if (paymentType === 'COD') {
+      if (pricing.total > 0 && prevPricingTotalRef.current !== pricing.total) {
+        setValue('codAmount', Math.round(pricing.total) || pricing.total, { shouldValidate: true, shouldDirty: true });
+        prevPricingTotalRef.current = pricing.total;
       }
+    } else if (paymentType === 'PAID') {
+      setValue('codAmount', 0, { shouldValidate: true });
+      prevPricingTotalRef.current = null;
     }
-  }, [pricing.total, paymentType, codAmount, setValue]);
+  }, [pricing.total, paymentType, setValue]);
 
   // Dynamic 5-scenario 2PL vs 3PL Routing Calculation
   const logisticsRouting = React.useMemo(() => {
@@ -1275,17 +1267,6 @@ function BookShipmentForm() {
           {/* Header Action Buttons, Live Price Summary & Selected Business Badge */}
           <div className="flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-2.5">
-              {bookingMode === 'manual' && (
-                <div className="hidden sm:flex flex-col items-end gap-0.5">
-                  <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
-                    <span>Estimated Cost:</span>
-                    <span className="text-sm font-black font-mono">PKR {pricing.total.toFixed(2)}</span>
-                  </div>
-                  <span className="text-[10px] text-outline font-medium">
-                    {pricing.planName} • {pricing.zoneName}
-                  </span>
-                </div>
-              )}
               
               {bookingMode === 'manual' ? (
                 <button 
@@ -1582,26 +1563,13 @@ function BookShipmentForm() {
 
                 {/* Section 2: Order & Package Detail */}
                 <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-                  <div className="flex items-center justify-between gap-sm mb-md border-b border-outline-variant pb-xs">
-                    <div className="flex items-center gap-sm">
-                      <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-[20px]">inventory_2</span>
-                      </div>
-                      <div>
-                        <h2 className="font-bold text-sm text-on-surface">Order & Package Detail</h2>
-                        <p className="text-xs text-on-surface-variant">Package weight, contents, and COD details</p>
-                      </div>
+                  <div className="flex items-center gap-sm mb-md border-b border-outline-variant pb-xs">
+                    <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">inventory_2</span>
                     </div>
-
-                    {/* Live Auto-Calculating Estimated Cost Badge */}
-                    <div className="flex flex-col items-end gap-0.5">
-                      <div className="flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-xl border border-primary/20 text-xs font-bold shadow-sm">
-                        <span className="text-slate-600 font-medium hidden sm:inline">Estimated Cost:</span>
-                        <span className="text-sm font-black font-mono text-primary">PKR {pricing.total.toFixed(2)}</span>
-                      </div>
-                      <span className="text-[10px] font-semibold text-outline tracking-tight">
-                        Shipper Plan: <span className="text-on-surface font-bold">{pricing.planName}</span> ({pricing.zoneName})
-                      </span>
+                    <div>
+                      <h2 className="font-bold text-sm text-on-surface">Order & Package Detail</h2>
+                      <p className="text-xs text-on-surface-variant">Package weight, contents, and COD details</p>
                     </div>
                   </div>
 
@@ -1656,21 +1624,9 @@ function BookShipmentForm() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-700">
-                          {paymentType === 'PAID' ? 'COD Amount (Disabled for PAID)' : 'COD Amount (PKR)'}
-                        </label>
-                        {paymentType === 'COD' && pricing.total > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setValue('codAmount', Math.round(pricing.total) || pricing.total)}
-                            className="text-[10px] text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer bg-primary/5 px-2 py-0.5 rounded-md border border-primary/20"
-                            title="Set COD amount to estimated delivery total"
-                          >
-                            <span>Use Est: PKR {pricing.total.toFixed(2)}</span>
-                          </button>
-                        )}
-                      </div>
+                      <label className="text-xs font-bold text-slate-700">
+                        {paymentType === 'PAID' ? 'COD Amount (Disabled for PAID)' : 'COD Amount (PKR)'}
+                      </label>
                       <TextBox<BookingFormValues>
                         name="codAmount"
                         placeholder="0"

@@ -40,7 +40,7 @@ export default function CustomerServiceRidersSummaryPage() {
   const [summaryData, setSummaryData] = React.useState<RiderSummaryRow[]>([]);
   const [selectedRiderDetail, setSelectedRiderDetail] = React.useState<RiderSummaryRow | null>(null);
   const [riderParcelsList, setRiderParcelsList] = React.useState<any[]>([]);
-  const [availableRiders, setAvailableRiders] = React.useState<Array<{ id: number | string; riderCode: string; riderName: string; phone?: string }>>([]);
+  const [availableRiders, setAvailableRiders] = React.useState<Array<{ id: number | string; riderCode: string; riderName: string; phone?: string; dbRiderId?: number | string | undefined }>>([]);
   const [parcelRiderMap, setParcelRiderMap] = React.useState<{ [tracking: string]: string }>({});
   const [bulkRiderSelection, setBulkRiderSelection] = React.useState<string>('');
   const [isSavingAssignments, setIsSavingAssignments] = React.useState<boolean>(false);
@@ -71,7 +71,7 @@ export default function CustomerServiceRidersSummaryPage() {
     const tokensA = a.split(/\s+/).filter(t => t.length > 2);
     const tokensB = b.split(/\s+/).filter(t => t.length > 2);
     const shared = tokensA.filter(t => tokensB.includes(t));
-    return shared.length >= 2 || (tokensA.some(t => ['rider1', 'ginjeeerider', 'dispatcher'].includes(t)) && tokensB.some(t => ['rider1', 'ginjeeerider', 'dispatcher'].includes(t)));
+    return shared.length >= 1 || (tokensA.some(t => ['rider1', 'ginjeeerider', 'dispatcher'].includes(t)) && tokensB.some(t => ['rider1', 'ginjeeerider', 'dispatcher'].includes(t)));
   }, []);
 
   const fetchRiderSummary = React.useCallback(async () => {
@@ -163,6 +163,7 @@ export default function CustomerServiceRidersSummaryPage() {
         username: string;
         phone: string;
         altIds: Set<string>;
+        dbRiderId?: number | string;
         parcels: Map<string, any>;
       }>();
 
@@ -204,6 +205,7 @@ export default function CustomerServiceRidersSummaryPage() {
           ) {
             entry.altIds.add(dbrId);
             if (dbr.documentId) entry.altIds.add(String(dbr.documentId));
+            entry.dbRiderId = dbr.id;
             matched = true;
             break;
           }
@@ -219,6 +221,7 @@ export default function CustomerServiceRidersSummaryPage() {
             username: dbr.rider_code || '',
             phone: dbr.phone || '',
             altIds: new Set([dbrId, String(dbr.documentId || '')]),
+            dbRiderId: dbr.id,
             parcels: new Map(),
           });
         }
@@ -229,27 +232,25 @@ export default function CustomerServiceRidersSummaryPage() {
         id: r.riderId,
         riderCode: r.riderCode,
         riderName: r.riderName,
-        phone: r.phone
+        phone: r.phone,
+        dbRiderId: r.dbRiderId
       }));
       setAvailableRiders(allRiderOptions);
 
       const findRiderEntry = (riderRef?: any, nameRef?: string, codeRef?: string) => {
-        if (riderRef && typeof riderRef === 'object' && riderRef !== null) {
-          const rId = String(riderRef.id || riderRef.documentId || '');
-          for (const val of riderMap.values()) {
-            if (val.altIds.has(rId) || String(val.riderId) === rId) {
-              return val;
-            }
-          }
-        } else if (riderRef && (typeof riderRef === 'string' || typeof riderRef === 'number')) {
-          const strId = String(riderRef);
-          for (const val of riderMap.values()) {
-            if (val.altIds.has(strId) || String(val.riderId) === strId) {
-              return val;
+        // 1. By ID or altIds
+        if (riderRef) {
+          const rId = String(typeof riderRef === 'object' ? (riderRef.id || riderRef.documentId || '') : riderRef);
+          if (rId) {
+            for (const val of riderMap.values()) {
+              if (val.altIds.has(rId) || String(val.riderId) === rId) {
+                return val;
+              }
             }
           }
         }
 
+        // 2. By rider code or username
         const objCode = (riderRef && typeof riderRef === 'object' && riderRef !== null)
           ? (riderRef.rider_code || riderRef.username || riderRef.riderCode || '')
           : '';
@@ -268,13 +269,19 @@ export default function CustomerServiceRidersSummaryPage() {
           }
         }
 
+        // 3. By rider name or partial words
         const objName = (riderRef && typeof riderRef === 'object' && riderRef !== null)
           ? (riderRef.name || riderRef.fullName || riderRef.username || '')
           : '';
         const cleanName = (nameRef || objName || '').toLowerCase().trim();
         if (cleanName) {
           for (const val of riderMap.values()) {
-            if (matchRiderNames(val.riderName, cleanName) || (val.phone && cleanName.includes(val.phone))) {
+            if (
+              matchRiderNames(val.riderName, cleanName) ||
+              (val.username && cleanName.includes(val.username.toLowerCase())) ||
+              (val.riderCode && cleanName.includes(val.riderCode.toLowerCase())) ||
+              (val.phone && cleanName.includes(val.phone))
+            ) {
               return val;
             }
           }
@@ -305,7 +312,7 @@ export default function CustomerServiceRidersSummaryPage() {
       // 2. Associate parcels through direct rider assignments table
       assignmentsList.forEach((asn: any) => {
         if (!isDateInRange(asn.assigned_at || asn.createdAt)) return;
-        const targetEntry = findRiderEntry(asn.rider);
+        const targetEntry = findRiderEntry(asn.rider, asn.custom_name, asn.route_code);
         if (targetEntry && asn.parcel) {
           const p = resolveParcel(asn.parcel);
           if (p) {
@@ -319,7 +326,7 @@ export default function CustomerServiceRidersSummaryPage() {
       // 3. Associate parcels through delivery attempts
       attemptsList.forEach((att: any) => {
         if (!isDateInRange(att.attempt_time || att.createdAt)) return;
-        const targetEntry = findRiderEntry(att.rider);
+        const targetEntry = findRiderEntry(att.rider, att.custom_name);
         if (targetEntry && att.parcel) {
           const p = resolveParcel(att.parcel);
           if (p) {
@@ -345,7 +352,7 @@ export default function CustomerServiceRidersSummaryPage() {
         }
       });
 
-      // 5. Associate parcels directly linked to rider (parcel.rider or load_sheet.rider)
+      // 5. Associate parcels directly linked to rider (parcel.rider or load_sheet.rider or comments)
       rawParcels.forEach((p: any) => {
         if (!isDateInRange(p.arrival_date || p.delivered_date || p.createdAt || p.updatedAt)) return;
 
@@ -353,7 +360,12 @@ export default function CustomerServiceRidersSummaryPage() {
         if (p.rider) {
           targetEntry = findRiderEntry(p.rider);
         } else if (p.load_sheet?.rider) {
-          targetEntry = findRiderEntry(p.load_sheet.rider);
+          targetEntry = findRiderEntry(p.load_sheet.rider, p.load_sheet?.custom_name);
+        } else if (p.comments && p.comments.includes('Assigned for delivery to rider:')) {
+          const matchedName = p.comments.split('Assigned for delivery to rider:')[1]?.trim();
+          if (matchedName) {
+            targetEntry = findRiderEntry(null, matchedName, matchedName);
+          }
         }
 
         if (targetEntry) {
@@ -558,50 +570,84 @@ export default function CustomerServiceRidersSummaryPage() {
   const handleSaveAssignments = async () => {
     setIsSavingAssignments(true);
     try {
-      let assignedCount = 0;
+      // Group parcels to assign by target rider
+      const assignmentsByRider: { [riderIdStr: string]: any[] } = {};
+
       for (const p of riderParcelsList) {
         const trk = String(p.tracking_number || p.shipmentNumber || `#${p.id}`).toUpperCase().trim();
         const targetRiderId = parcelRiderMap[trk];
         if (!targetRiderId) continue;
 
-        const pId = p.id;
-        const targetDocId = p.documentId || p.id;
-
-        // 1. Create or update rider-assignment record
-        try {
-          await apiClient.post('/rider-assignments', {
-            data: {
-              rider: Number(targetRiderId) || targetRiderId,
-              parcel: pId,
-              status: 'assigned',
-              assigned_at: new Date().toISOString()
-            }
-          });
-        } catch (asnErr) {
-          console.warn('Assignment notice:', asnErr);
+        if (!assignmentsByRider[targetRiderId]) {
+          assignmentsByRider[targetRiderId] = [];
         }
-
-        // 2. Update parcel status to Out for Delivery and associate rider
-        try {
-          await apiClient.put(`/parcels/${targetDocId}`, {
-            data: {
-              status: SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
-              ...(targetRiderId ? { rider: Number(targetRiderId) || targetRiderId } : {})
-            }
-          });
-        } catch (putErr) {
-          console.warn('Parcel update notice:', putErr);
-        }
-
-        assignedCount++;
+        assignmentsByRider[targetRiderId].push(p);
       }
 
-      if (assignedCount > 0) {
-        triggerToast(`Successfully assigned and updated ${assignedCount} shipments!`, 'success');
+      let totalUpdated = 0;
+
+      for (const [riderIdStr, parcels] of Object.entries(assignmentsByRider)) {
+        const riderObj = availableRiders.find(r => String(r.id) === riderIdStr);
+        const riderDisplayName = riderObj?.riderName || riderObj?.riderCode || `Rider #${riderIdStr}`;
+        const dbRiderId = riderObj?.dbRiderId || (typeof riderObj?.id === 'number' ? riderObj.id : null);
+        const parcelIds = parcels.map(p => p.id).filter(Boolean);
+
+        // 1. Update individual parcels in backend
+        for (const p of parcels) {
+          const targetDocId = p.documentId || p.id;
+          try {
+            await apiClient.put(`/parcels/${targetDocId}`, {
+              data: {
+                status: SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
+                comments: `Assigned for delivery to rider: ${riderDisplayName}`
+              }
+            });
+          } catch (pErr) {
+            console.warn('Parcel update notice:', pErr);
+          }
+
+          // 2. Create rider-assignment record if dbRiderId exists
+          if (dbRiderId) {
+            try {
+              await apiClient.post('/rider-assignments', {
+                data: {
+                  rider: Number(dbRiderId),
+                  parcel: p.id,
+                  status: 'assigned',
+                  assigned_at: new Date().toISOString()
+                }
+              });
+            } catch (asnErr) {
+              // ignore duplicate
+            }
+          }
+
+          totalUpdated++;
+        }
+
+        // 3. Persist / update Delivery Sheet for this rider
+        try {
+          const sheetNum = `DS-${Math.floor(1000000 + Math.random() * 9000000)}`;
+          await DeliverySheetService.create({
+            sheet_number: sheetNum,
+            sheet_date: new Date().toISOString().slice(0, 10),
+            route_code: riderObj?.riderCode || 'DELIVERY',
+            custom_name: riderDisplayName,
+            status: 'Out For Delivery',
+            ...(dbRiderId ? { rider: Number(dbRiderId) } : {}),
+            parcels: parcelIds
+          });
+        } catch (sheetErr) {
+          console.warn('Delivery sheet save notice:', sheetErr);
+        }
+      }
+
+      if (totalUpdated > 0) {
+        triggerToast(`Successfully assigned and saved ${totalUpdated} shipments!`, 'success');
         setSelectedRiderDetail(null);
         await fetchRiderSummary();
       } else {
-        triggerToast('No rider selections found to save.', 'error');
+        triggerToast('No rider changes selected.', 'error');
       }
     } catch (err: any) {
       console.error('Error saving assignments:', err);
