@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -233,12 +234,7 @@ function EmployeeManagementContent() {
   const [formConfirmationType, setFormConfirmationType] = React.useState<'no_confirmation' | 'email_confirmation'>('no_confirmation');
   const [formPassword, setFormPassword] = React.useState('');
 
-  // Modals for Shipper Business / Office
-  const [isOfficeModalOpen, setIsOfficeModalOpen] = React.useState(false);
-  const [isAddOfficeMode, setIsAddOfficeMode] = React.useState(false);
-  const [newOfficeName, setNewOfficeName] = React.useState('');
-  const [newOfficeAddress, setNewOfficeAddress] = React.useState('');
-  
+  // Modals for Shipper Business
   const [isAddBusinessModalOpen, setIsAddBusinessModalOpen] = React.useState(false);
   const [newBusinessName, setNewBusinessName] = React.useState('');
   const [newBusinessAddress, setNewBusinessAddress] = React.useState('');
@@ -322,9 +318,9 @@ function EmployeeManagementContent() {
 
       // 5. Fetch offices
       try {
-        const tenantId = JSON.parse(localStorage.getItem('user') || '{}')?.tenant?.id;
-        const filters = isLoggedShipper ? { type: 'shipper' } : { type: 'courier', courier: tenantId };
-        const officesRes = await apiClient.get('/offices', { params: { filters } });
+        const tenantId = loggedInUser?.tenant?.id || loggedInUser?.tenantId || JSON.parse(localStorage.getItem('user') || '{}')?.tenant?.id;
+        const filters = isLoggedShipper ? { type: 'shipper' } : { type: 'courier', tenant: tenantId };
+        const officesRes = await apiClient.get('/offices', { params: { filters, pagination: { limit: 100 } } });
         const rawOffices = officesRes.data?.data || [];
         const mappedOffices = rawOffices.map((item: any) => ({
           id: item.id,
@@ -1112,35 +1108,6 @@ function EmployeeManagementContent() {
     }
   };
 
-  // Office Modal Submit
-  const handleSaveOffice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isAddOfficeMode) {
-      if (!newOfficeName.trim()) return;
-      try {
-        const payload = {
-          name: newOfficeName.trim(),
-          address: newOfficeAddress.trim(),
-          type: formEmployeeType === 'shipper' ? 'shipper' : 'courier'
-        };
-        const res = await apiClient.post('/offices', { data: payload });
-        const createdOffice = res.data.data;
-        
-        const newOfficeObj = { id: createdOffice.id, name: createdOffice.attributes?.name || newOfficeName };
-        setOffices(prev => [...prev, newOfficeObj]);
-        setAssignedOfficeIds([newOfficeObj.id]);
-        
-        setIsOfficeModalOpen(false);
-        setNewOfficeName('');
-        setNewOfficeAddress('');
-      } catch (err: any) {
-        alert(err.response?.data?.error?.message || 'Failed to add office.');
-      }
-    } else {
-      setIsOfficeModalOpen(false);
-    }
-  };
-
   return (
     <PortalLayout>
       <div className="flex flex-col gap-lg animate-in fade-in duration-200">
@@ -1804,39 +1771,53 @@ function EmployeeManagementContent() {
 
               {/* Office Selector - For Courier Employees */}
               {formEmployeeType === 'courier' && effectiveType !== 'shipper' && !isLoggedShipper && (
-                <div className="flex flex-col gap-1 border border-outline-variant rounded-xl p-3.5 bg-slate-50">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Office Address</label>
+                <div className="flex flex-col gap-1.5 border border-outline-variant rounded-xl p-3.5 bg-slate-50">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                      <span>Office / Hub Location</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <Link
+                      href="/administration/offices"
+                      target="_blank"
+                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-0.5"
+                    >
+                      <span>Manage in Office Hub</span>
+                      <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                    </Link>
                   </div>
-                  
-                  <div className="flex items-center justify-between bg-white border border-outline-variant p-3 rounded-lg">
-                    <div className="flex flex-col">
-                      {assignedOfficeIds.length > 0 ? (
-                        <>
-                          <span className="font-semibold text-xs text-slate-900">{offices.find(o => o.id === assignedOfficeIds[0])?.name || `Office #${assignedOfficeIds[0]}`}</span>
-                          <span className="text-[11px] text-slate-400">Selected Office</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">No office selected</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        type="button" 
-                        onClick={() => { setIsAddOfficeMode(false); setIsOfficeModalOpen(true); }}
-                        className="text-primary font-bold text-xs hover:bg-primary-container/20 px-3 py-1 rounded-lg border border-primary/20 transition-all cursor-pointer"
-                      >
-                        Change
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => { setIsAddOfficeMode(true); setIsOfficeModalOpen(true); }}
-                        className="bg-primary text-white font-bold text-xs hover:bg-primary/90 px-3 py-1 rounded-lg transition-all cursor-pointer"
-                      >
-                        Add new
-                      </button>
-                    </div>
+
+                  <div className="relative">
+                    <select
+                      value={assignedOfficeIds[0] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAssignedOfficeIds(val ? [Number(val)] : []);
+                      }}
+                      className="w-full bg-white border border-outline-variant rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none transition-all cursor-pointer text-slate-900"
+                    >
+                      <option value="">-- Select Office Hub Location --</option>
+                      {offices.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  {offices.length === 0 ? (
+                    <p className="text-[11px] text-amber-600 font-medium">
+                      No offices found. Please add offices in{' '}
+                      <Link href="/administration/offices" target="_blank" className="underline font-bold">
+                        Office Hub
+                      </Link>{' '}
+                      first.
+                    </p>
+                  ) : assignedOfficeIds.length === 0 ? (
+                    <p className="text-[11px] text-slate-500">
+                      Select which office/hub branch this courier employee belongs to.
+                    </p>
+                  ) : null}
                 </div>
               )}
 
@@ -2344,52 +2325,7 @@ function EmployeeManagementContent() {
         </div>
       )}
 
-      {/* CENTERED POPUP MODAL: Office Management */}
-      {isOfficeModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsOfficeModalOpen(false)} />
-          <div className="relative z-10 bg-white rounded-3xl shadow-2xl w-[520px] max-w-[90vw] shrink-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-900 text-white rounded-t-3xl">
-              <h3 className="font-bold text-base">{isAddOfficeMode ? 'Add New Office' : 'Select Office'}</h3>
-              <button onClick={() => setIsOfficeModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-            <form onSubmit={handleSaveOffice} className="p-6 flex flex-col gap-4">
-              {isAddOfficeMode ? (
-                <>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">Office Name / Identifier</label>
-                    <input required type="text" placeholder="e.g. Lahore Head Office" value={newOfficeName} onChange={e => setNewOfficeName(e.target.value)} className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">Office Address</label>
-                    <input required type="text" placeholder="e.g. 12-B Main Boulevard Gulberg" value={newOfficeAddress} onChange={e => setNewOfficeAddress(e.target.value)} className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none" />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">Choose from existing offices</label>
-                  <select 
-                    value={assignedOfficeIds[0] || ''} 
-                    onChange={e => setAssignedOfficeIds([Number(e.target.value)])}
-                    className="w-full bg-slate-50 border border-outline-variant rounded-xl p-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none"
-                  >
-                    <option value="" disabled>Select an office</option>
-                    {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setIsOfficeModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer">
-                  {isAddOfficeMode ? 'Create & Assign' : 'Save Selection'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* CENTERED POPUP MODAL: Change Tariff Plan for Shipper Business */}
       {isChangePlanModalOpen && targetShipperForPlanChange && (

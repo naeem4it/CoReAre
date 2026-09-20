@@ -67,13 +67,27 @@ export default function CustomerServiceArrivalSummaryPage() {
   const [riders, setRiders] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
 
-  // Fetch dropdown metadata (Shippers, Offices, Riders)
+  // Fetch dropdown metadata (Shippers, Offices, Riders) isolated to current tenant
   React.useEffect(() => {
     const fetchMetadata = async () => {
       try {
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = storedUser?.tenant?.id || storedUser?.tenant;
+
+        const filters: any = { type: 'courier' };
+        if (tenantId) {
+          filters.tenant = tenantId;
+        }
+
         const [shippersRes, officesRes, ridersRes] = await Promise.allSettled([
           apiClient.get('/shippers?populate=*&pagination[pageSize]=500'),
-          apiClient.get('/offices?populate=*&pagination[pageSize]=100'),
+          apiClient.get('/offices', {
+            params: {
+              filters,
+              populate: ['city', 'tenant'],
+              pagination: { limit: 100 }
+            }
+          }),
           apiClient.get('/users?populate=role_definition,role&pagination[pageSize]=200')
         ]);
 
@@ -81,7 +95,14 @@ export default function CustomerServiceArrivalSummaryPage() {
           setAllShippers(shippersRes.value.data?.data || []);
         }
         if (officesRes.status === 'fulfilled') {
-          setOffices(officesRes.value.data?.data || []);
+          const rawOffices = officesRes.value.data?.data || [];
+          const tenantOffices = rawOffices.filter((item: any) => {
+            if (!tenantId) return true;
+            const attrs = item.attributes || item;
+            const offTenantId = attrs.tenant?.data?.id || attrs.tenant?.id || attrs.tenant;
+            return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
+          });
+          setOffices(tenantOffices);
         }
         if (ridersRes.status === 'fulfilled') {
           const rawUsers = ridersRes.value.data || [];

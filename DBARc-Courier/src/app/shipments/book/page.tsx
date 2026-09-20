@@ -478,7 +478,7 @@ function BookShipmentForm() {
         const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null);
         const res = await apiClient.get('/offices', {
           params: {
-            filters: tenantId ? { courier: tenantId } : {},
+            filters: tenantId ? { tenant: tenantId } : {},
             populate: ['city'],
             pagination: { limit: 50 }
           }

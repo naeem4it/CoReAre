@@ -10,6 +10,8 @@ import {
   getDbStatusQueryValues
 } from '@/shared/constants/shipment-statuses';
 
+import { useAuth } from '@/components/AuthProvider';
+
 interface DeManifestItem {
   id: string;
   documentId?: string;
@@ -25,19 +27,34 @@ interface DeManifestItem {
 }
 
 export default function OperationsDeManifestationPage() {
-  const [manifestNumber, setManifestNumber] = React.useState<string>('');
-  const [sealNo, setSealNo] = React.useState<string>('');
-  const [selectedOffice, setSelectedOffice] = React.useState<string>('all');
+  const { user } = useAuth();
+  const [selectedOfficeId, setSelectedOfficeId] = React.useState<string>('all');
   const [offices, setOffices] = React.useState<any[]>([]);
-  const [scanBarcode, setScanBarcode] = React.useState<string>('');
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [isLoadingManifest, setIsLoadingManifest] = React.useState(false);
-
-  // Incoming Manifest Parcels List
+  const [manifestNumber, setManifestNumber] = React.useState('');
+  const [sealNo, setSealNo] = React.useState('');
+  const [activeManifestObj, setActiveManifestObj] = React.useState<any>(null);
+  
+  // Parcels on the manifest
   const [manifestParcels, setManifestParcels] = React.useState<DeManifestItem[]>([]);
-  const [activeManifestObj, setActiveManifestObj] = React.useState<any | null>(null);
+  const [isLoadingManifest, setIsLoadingManifest] = React.useState(false);
+  const [isFinalizing, setIsFinalizing] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
+  // Barcode scanning states
+  const [scanBarcode, setScanBarcode] = React.useState('');
+  const [scanFlash, setScanFlash] = React.useState<'success' | 'error' | null>(null);
+
+  // Modal for History
+  const [isListModalOpen, setIsListModalOpen] = React.useState(false);
+  const [historyList, setHistoryList] = React.useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+
+  // Toast
+  const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+    show: false,
+    msg: '',
+    type: 'success',
+  });
 
   const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ show: true, msg, type });
@@ -46,12 +63,38 @@ export default function OperationsDeManifestationPage() {
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Load facilities/offices
+  // Load facilities/offices isolated to current tenant
   React.useEffect(() => {
-    apiClient.get('/offices?populate=*&pagination[pageSize]=100')
-      .then(res => setOffices(res.data?.data || []))
+    const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+    const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+    const filters: any = { type: 'courier' };
+    if (tenantId) {
+      filters.tenant = tenantId;
+    }
+
+    apiClient.get('/offices', {
+      params: {
+        filters,
+        populate: ['city', 'tenant'],
+        pagination: { limit: 100 }
+      }
+    })
+      .then(res => {
+        const rawOffices = res.data?.data || [];
+        const tenantOffices = rawOffices.filter((item: any) => {
+          if (!tenantId) return true;
+          const attrs = item.attributes || item;
+          const offTenantId = attrs.tenant?.data?.id || attrs.tenant?.id || attrs.tenant;
+          return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
+        });
+        setOffices(tenantOffices);
+        if (tenantOffices.length > 0) {
+          setSelectedOfficeId(String(tenantOffices[0].id));
+        }
+      })
       .catch(err => console.warn('Could not load offices:', err));
-  }, []);
+  }, [user]);
 
   // Fetch Manifest and its associated In Transit parcels
   const handleLoadManifest = async (mNum?: string) => {

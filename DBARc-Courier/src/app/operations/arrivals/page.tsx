@@ -133,23 +133,45 @@ export default function OperationsArrivalsPage() {
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Fetch offices and active riders
+  // Fetch offices and active riders strictly isolated to the current tenant
   React.useEffect(() => {
     const fetchMetadata = async () => {
       try {
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+        const filters: any = { type: 'courier' };
+        if (tenantId) {
+          filters.tenant = tenantId;
+        }
+
         const [ridersRes, officesRes] = await Promise.allSettled([
-          RiderService.getAll('?filters[status][$ne]=inactive&pagination[pageSize]=100'),
-          apiClient.get('/offices?populate=*&pagination[pageSize]=100')
+          RiderService.getAll(`?filters[status][$ne]=inactive${tenantId ? `&filters[tenant][$eq]=${tenantId}` : ''}&pagination[pageSize]=100`),
+          apiClient.get('/offices', {
+            params: {
+              filters,
+              populate: ['city', 'tenant'],
+              pagination: { limit: 100 }
+            }
+          })
         ]);
         
         if (ridersRes.status === 'fulfilled') {
           setRiders(ridersRes.value.data || []);
         }
         if (officesRes.status === 'fulfilled') {
-          const loadedOffices = officesRes.value.data?.data || [];
-          setOffices(loadedOffices);
-          if (loadedOffices.length > 0) {
-            setSelectedOfficeId(String(loadedOffices[0].id));
+          const rawOffices = officesRes.value.data?.data || [];
+          const tenantOffices = rawOffices.filter((item: any) => {
+            if (!tenantId) return true;
+            const attrs = item.attributes || item;
+            const offTenantId = attrs.tenant?.data?.id || attrs.tenant?.id || attrs.tenant;
+            return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
+          });
+          setOffices(tenantOffices);
+          if (tenantOffices.length > 0) {
+            setSelectedOfficeId(String(tenantOffices[0].id));
+          } else {
+            setSelectedOfficeId('all');
           }
         }
       } catch (err) {
@@ -159,51 +181,87 @@ export default function OperationsArrivalsPage() {
 
     fetchMetadata();
     barcodeInputRef.current?.focus();
-  }, []);
+  }, [user]);
 
   // Fetch Expected Shipments based on warehouse and arrival operation
   const fetchExpectedQueue = React.useCallback(async () => {
     setIsLoadingExpected(true);
     try {
-      // For Origin warehouse: expected shipments are 'Picked up by rider' or 'Not Arrived'
-      // For Destination warehouse: expected shipments are 'In Transit'
+      // For Origin warehouse: expected shipments are 'Booked', 'Picked up by rider', or 'Not Arrived'
+      // For Destination warehouse: expected shipments are 'In Transit' / 'Manifested'
       let queryStatuses: string[] = [];
       if (arrivalStage === 'Origin') {
         queryStatuses = [
+          'Booked',
+          'booked',
+          'Total Booking',
+          'Pending',
+          'Order Created',
+          'Picked up by rider',
+          'picked up by rider',
+          'Not Arrived',
+          'not arrived',
+          ...getDbStatusQueryValues(SHIPMENT_STATUSES.BOOKED),
           ...getDbStatusQueryValues(SHIPMENT_STATUSES.PICKED_UP_BY_RIDER),
-          ...getDbStatusQueryValues(SHIPMENT_STATUSES.NOT_ARRIVED)
+          ...getDbStatusQueryValues(SHIPMENT_STATUSES.NOT_ARRIVED),
         ];
       } else {
-        queryStatuses = getDbStatusQueryValues(SHIPMENT_STATUSES.IN_TRANSIT);
+        queryStatuses = [
+          'In Transit',
+          'in transit',
+          'Manifested',
+          'manifested',
+          ...getDbStatusQueryValues(SHIPMENT_STATUSES.IN_TRANSIT)
+        ];
       }
+
+      // Deduplicate statuses
+      queryStatuses = Array.from(new Set(queryStatuses));
 
       const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
-      let url = `/parcels?populate[shipper]=true&populate[destination_city]=true&populate[source_city]=true&populate[origin_office]=true&populate[rider]=true&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
+      
+      const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+      const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
-      if (selectedRiderId !== 'all') {
-        url += `&filters[rider][id][$eq]=${selectedRiderId}`;
-      }
+      const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
 
       const res = await apiClient.get(url);
       const allParcels: any[] = res.data?.data || [];
 
-      // Filter by selected warehouse/office city if applicable
+      // Filter by selected warehouse/office city and tenant isolation
       const selectedOffice = offices.find(o => String(o.id) === String(selectedOfficeId));
-      const officeCity = selectedOffice?.city?.CityName || selectedOffice?.city?.name || '';
+      const officeCity = selectedOffice?.city?.CityName || selectedOffice?.city?.name || (typeof selectedOffice?.city === 'string' ? selectedOffice.city : '');
 
       const filtered = allParcels.filter(p => {
+        // Tenant isolation check
+        if (tenantId) {
+          const offTenantId = p.origin_office?.tenant?.id || p.origin_office?.tenant;
+          const shipTenantId = p.shipper?.tenant?.id || p.shipper?.tenant;
+          if (offTenantId && Number(offTenantId) !== Number(tenantId)) return false;
+          if (shipTenantId && Number(shipTenantId) !== Number(tenantId)) return false;
+        }
+
+        // Rider filter if rider selected
+        if (selectedRiderId !== 'all') {
+          const rId = p.rider?.id || p.rider || p.load_sheet?.rider?.id || p.load_sheet?.rider;
+          if (rId && String(rId) !== String(selectedRiderId)) return false;
+        }
+
+        // Show all if all facilities is selected or no specific office matched
         if (!selectedOffice || selectedOfficeId === 'all') return true;
         
         if (arrivalStage === 'Origin') {
           // Check origin office or source city
           if (p.origin_office?.id && String(p.origin_office.id) === String(selectedOfficeId)) return true;
-          const src = p.source_city?.CityName || p.source_city?.name || '';
-          if (officeCity && src.toLowerCase() === officeCity.toLowerCase()) return true;
-          return !p.origin_office; // Include unassigned origin
+          const src = p.source_city?.CityName || p.source_city?.name || (typeof p.source_city === 'string' ? p.source_city : '');
+          if (officeCity && src && src.toLowerCase() === officeCity.toLowerCase()) return true;
+          // Include unassigned origin
+          if (!p.origin_office) return true;
+          return false;
         } else {
           // Destination warehouse: check destination city
-          const dest = p.destination_city?.CityName || p.destination_city?.name || p.destination_city || '';
-          if (officeCity && dest.toLowerCase() === officeCity.toLowerCase()) return true;
+          const dest = p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '');
+          if (officeCity && dest && dest.toLowerCase() === officeCity.toLowerCase()) return true;
           return true;
         }
       });
@@ -214,7 +272,7 @@ export default function OperationsArrivalsPage() {
     } finally {
       setIsLoadingExpected(false);
     }
-  }, [arrivalStage, selectedOfficeId, selectedRiderId, offices]);
+  }, [arrivalStage, selectedOfficeId, selectedRiderId, offices, user]);
 
   React.useEffect(() => {
     fetchExpectedQueue();

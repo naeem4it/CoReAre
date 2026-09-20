@@ -6,6 +6,7 @@ import { Download, Upload, FileSpreadsheet, Trash2, Save, RefreshCw, CheckCircle
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, ArrivalService } from '@/services/api';
 import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
+import { useAuth } from '@/components/AuthProvider';
 
 interface BulkShipmentItem {
   id: string;
@@ -24,6 +25,7 @@ interface BulkShipmentItem {
 }
 
 export default function OperationsBulkArrivalsPage() {
+  const { user } = useAuth();
   const [batchId, setBatchId] = React.useState<string>(`BAR-${Math.floor(100000 + Math.random() * 900000)}`);
   
   // Arrival Stage: Origin vs Destination Warehouse
@@ -53,28 +55,45 @@ export default function OperationsBulkArrivalsPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
-  // Fetch active riders and actual courier warehouses/offices
+  // Fetch active riders and actual courier warehouses/offices isolated to current tenant
   React.useEffect(() => {
     const fetchData = async () => {
       try {
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+        const filters: any = { type: 'courier' };
+        if (tenantId) {
+          filters.tenant = tenantId;
+        }
+
         const [ridersRes, officesRes] = await Promise.allSettled([
-          RiderService.getAll('?filters[status][$ne]=inactive&pagination[pageSize]=100'),
-          apiClient.get('/offices?filters[type][$eq]=courier&populate=*&pagination[pageSize]=100')
+          RiderService.getAll(`?filters[status][$ne]=inactive${tenantId ? `&filters[tenant][$eq]=${tenantId}` : ''}&pagination[pageSize]=100`),
+          apiClient.get('/offices', {
+            params: {
+              filters,
+              populate: ['city', 'tenant'],
+              pagination: { limit: 100 }
+            }
+          })
         ]);
         
         if (ridersRes.status === 'fulfilled') {
           setRiders(ridersRes.value.data || []);
         }
         if (officesRes.status === 'fulfilled') {
-          let loadedOffices = officesRes.value.data?.data || [];
-          // If no courier-specific offices found, fallback to all offices
-          if (loadedOffices.length === 0) {
-            const allOfficesRes = await apiClient.get('/offices?populate=*&pagination[pageSize]=100');
-            loadedOffices = allOfficesRes.data?.data || [];
-          }
-          setOffices(loadedOffices);
-          if (loadedOffices.length > 0) {
-            setSelectedOfficeId(String(loadedOffices[0].id));
+          const rawOffices = officesRes.value.data?.data || [];
+          const tenantOffices = rawOffices.filter((item: any) => {
+            if (!tenantId) return true;
+            const attrs = item.attributes || item;
+            const offTenantId = attrs.tenant?.data?.id || attrs.tenant?.id || attrs.tenant;
+            return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
+          });
+          setOffices(tenantOffices);
+          if (tenantOffices.length > 0) {
+            setSelectedOfficeId(String(tenantOffices[0].id));
+          } else {
+            setSelectedOfficeId('all');
           }
         }
       } catch (err) {
@@ -82,7 +101,7 @@ export default function OperationsBulkArrivalsPage() {
       }
     };
     fetchData();
-  }, []);
+  }, [user]);
 
   // Download template matching Arrivals grid exactly:
   // Tracking #, Consignee Name, Origin City, Destination City, COD Amount, Pieces, Weight
