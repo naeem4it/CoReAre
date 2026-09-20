@@ -31,6 +31,25 @@
     },
     "total_weight": {
       "type": "decimal"
+    },
+    "batch_id": {
+      "type": "string"
+    },
+    "total_shipments": {
+      "type": "integer"
+    },
+    "scanned_items": {
+      "type": "json"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
+    "office": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::office.office"
     }
   }
 }

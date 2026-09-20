@@ -399,6 +399,8 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
         <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
           <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
           <NavLink href="/reports/dispatch" icon="local_shipping" label="Dispatch Report" />
+          <NavLink href="/reports/profit-loss" icon="balance" label="Profit & Loss Statement" />
+          <NavLink href="/reports/expenses" icon="query_stats" label="Executive Expense Report" />
           <NavLink href="/reports/monthly-invoice" icon="receipt_long" label="Monthly Invoice" />
           <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoice" />
           <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />

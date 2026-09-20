@@ -485,6 +485,7 @@ export interface ApiArrivalArrival extends Struct.CollectionTypeSchema {
   };
   attributes: {
     arrival_date: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    batch_id: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -494,10 +495,14 @@ export interface ApiArrivalArrival extends Struct.CollectionTypeSchema {
       'api::arrival.arrival'
     > &
       Schema.Attribute.Private;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
     parcels: Schema.Attribute.Relation<'manyToMany', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
     rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    scanned_items: Schema.Attribute.JSON;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
     total_pieces: Schema.Attribute.Integer;
+    total_shipments: Schema.Attribute.Integer;
     total_weight: Schema.Attribute.Decimal;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &

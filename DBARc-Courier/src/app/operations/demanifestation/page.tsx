@@ -2,12 +2,11 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { List, Save, Printer, RefreshCw, Barcode, Shield, CheckCircle2, PackageCheck, AlertTriangle, Search, X } from 'lucide-react';
+import { List, Save, Printer, RefreshCw, Barcode, Shield, CheckCircle2, PackageCheck, AlertTriangle, Search, X, Check, Eye } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { 
   SHIPMENT_STATUSES, 
-  normalizeShipmentStatus,
-  getDbStatusQueryValues
+  normalizeShipmentStatus 
 } from '@/shared/constants/shipment-statuses';
 
 import { useAuth } from '@/components/AuthProvider';
@@ -37,17 +36,16 @@ export default function OperationsDeManifestationPage() {
   // Parcels on the manifest
   const [manifestParcels, setManifestParcels] = React.useState<DeManifestItem[]>([]);
   const [isLoadingManifest, setIsLoadingManifest] = React.useState(false);
-  const [isFinalizing, setIsFinalizing] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Barcode scanning states
   const [scanBarcode, setScanBarcode] = React.useState('');
-  const [scanFlash, setScanFlash] = React.useState<'success' | 'error' | null>(null);
 
-  // Modal for History
-  const [isListModalOpen, setIsListModalOpen] = React.useState(false);
-  const [historyList, setHistoryList] = React.useState<any[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+  // Modal for Browse Dispatched Manifests
+  const [isBrowseModalOpen, setIsBrowseModalOpen] = React.useState(false);
+  const [pastManifestsList, setPastManifestsList] = React.useState<any[]>([]);
+  const [modalSearch, setModalSearch] = React.useState('');
+  const [isLoadingPastManifests, setIsLoadingPastManifests] = React.useState(false);
 
   // Toast
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
@@ -98,13 +96,49 @@ export default function OperationsDeManifestationPage() {
 
   // Fetch Manifest and its associated In Transit parcels
   const handleLoadManifest = async (mNum?: string) => {
-    const cleanNum = (mNum || manifestNumber).trim();
+    let cleanNum = (mNum || manifestNumber).trim();
     if (!cleanNum) return;
+
+    // Strip leading hash symbol and extra spaces if user entered e.g. "#6897" or "# 6897"
+    cleanNum = cleanNum.replace(/^#\s*/, '').trim();
 
     setIsLoadingManifest(true);
     try {
-      const mRes = await apiClient.get(`/manifests?filters[manifest_number][$eq]=${encodeURIComponent(cleanNum)}&populate[parcels][populate]=*`);
-      const manifest = mRes.data?.data?.[0];
+      let manifest: any = null;
+
+      // 1. Try direct filter by manifest_number
+      try {
+        const mRes = await apiClient.get(`/manifests?filters[manifest_number][$eq]=${encodeURIComponent(cleanNum)}&populate=*`);
+        if (mRes.data?.data?.length > 0) {
+          manifest = mRes.data.data[0];
+        }
+      } catch (e) {
+        console.warn('Filter query by manifest_number notice:', e);
+      }
+
+      // 2. Fallback: Search all recent manifests (matching manifest_number, seal_no, documentId, id)
+      if (!manifest) {
+        try {
+          const listRes = await apiClient.get('/manifests?populate=*&sort[0]=createdAt:desc&pagination[limit]=100');
+          const allManifests: any[] = listRes.data?.data || [];
+          manifest = allManifests.find((m: any) => {
+            const mNo = String(m.manifest_number ?? m.id ?? '').trim();
+            const sNo = String(m.seal_no || '').trim().toLowerCase();
+            const docId = String(m.documentId || '').trim();
+            const id = String(m.id || '').trim();
+            const searchLower = cleanNum.toLowerCase();
+
+            return (
+              mNo === cleanNum ||
+              sNo === searchLower ||
+              docId === cleanNum ||
+              id === cleanNum
+            );
+          });
+        } catch (e) {
+          console.warn('Fallback search notice:', e);
+        }
+      }
 
       if (!manifest) {
         triggerToast(`Manifest #${cleanNum} not found in database.`, 'error');
@@ -114,26 +148,43 @@ export default function OperationsDeManifestationPage() {
       }
 
       setActiveManifestObj(manifest);
+      setManifestNumber(String(manifest.manifest_number || manifest.id || cleanNum));
       setSealNo(manifest.seal_no || '');
 
       // Load associated parcels
-      const parcelsList: any[] = manifest.parcels || [];
-      const mapped: DeManifestItem[] = parcelsList.map((p: any) => ({
-        id: String(p.id),
-        documentId: p.documentId,
-        shipmentNumber: p.tracking_number,
-        shipper: p.shipper?.name || 'Shipper',
-        consignee: p.recipient_name || 'Customer',
-        destination: p.destination_city?.CityName || p.destination_city?.name || 'Destination',
-        pieces: p.pieces || 1,
-        weight: Number(p.weight) || 1.0,
-        codAmount: Number(p.cod_amount) || 0,
-        status: normalizeShipmentStatus(p.status),
-        isVerified: normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.ARRIVED_DEST,
-      }));
+      let parcelsList: any[] = manifest.parcels || [];
+
+      // If parcels array on manifest is empty, fallback to querying parcels table by manifest id
+      if (parcelsList.length === 0) {
+        try {
+          const pRes = await apiClient.get(`/parcels?filters[manifest][id][$eq]=${manifest.id}&populate=*`);
+          if (pRes.data?.data?.length > 0) {
+            parcelsList = pRes.data.data;
+          }
+        } catch (e) {
+          console.warn('Fallback querying parcels by manifest id notice:', e);
+        }
+      }
+
+      const mapped: DeManifestItem[] = parcelsList.map((p: any) => {
+        const normStatus = normalizeShipmentStatus(p.status);
+        return {
+          id: String(p.id),
+          documentId: p.documentId,
+          shipmentNumber: p.tracking_number,
+          shipper: p.shipper?.name || 'Shipper',
+          consignee: p.recipient_name || 'Customer',
+          destination: p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || 'Destination',
+          pieces: p.pieces || 1,
+          weight: Number(p.weight) || 1.0,
+          codAmount: Number(p.cod_amount) || 0,
+          status: normStatus,
+          isVerified: normStatus === SHIPMENT_STATUSES.ARRIVED_DEST,
+        };
+      });
 
       setManifestParcels(mapped);
-      triggerToast(`Manifest #${cleanNum} loaded (${mapped.length} parcels). Verified destination seal: ${manifest.seal_no || 'None'}`, 'success');
+      triggerToast(`Manifest #${manifest.manifest_number || cleanNum} loaded (${mapped.length} parcels). Seal: ${manifest.seal_no || 'None'}`, 'success');
       barcodeInputRef.current?.focus();
     } catch (err: any) {
       console.error('Error fetching manifest:', err);
@@ -219,6 +270,86 @@ export default function OperationsDeManifestationPage() {
     }
   };
 
+  // Single Item Manual Verify Toggle
+  const handleVerifyItem = async (code: string) => {
+    const existingIndex = manifestParcels.findIndex(p => p.shipmentNumber === code);
+    if (existingIndex === -1) return;
+
+    const item = manifestParcels[existingIndex];
+    const targetId = item.documentId || item.id;
+
+    try {
+      await apiClient.put(`/parcels/${targetId}`, {
+        data: {
+          status: SHIPMENT_STATUSES.ARRIVED_DEST,
+          arrival_date: new Date().toISOString()
+        }
+      });
+
+      setManifestParcels(prev => prev.map((p, idx) => 
+        idx === existingIndex 
+          ? { ...p, isVerified: true, status: SHIPMENT_STATUSES.ARRIVED_DEST } 
+          : p
+      ));
+
+      triggerToast(`Shipment #${code} verified!`, 'success');
+    } catch (err: any) {
+      triggerToast(`Failed to verify #${code}: ${err.message}`, 'error');
+    }
+  };
+
+  // Verify All shipments on active manifest
+  const handleVerifyAll = async () => {
+    const unverified = manifestParcels.filter(p => !p.isVerified);
+    if (unverified.length === 0) {
+      triggerToast('All shipments on this manifest are already verified.', 'success');
+      return;
+    }
+
+    try {
+      for (const item of unverified) {
+        const targetId = item.documentId || item.id;
+        await apiClient.put(`/parcels/${targetId}`, {
+          data: {
+            status: SHIPMENT_STATUSES.ARRIVED_DEST,
+            arrival_date: new Date().toISOString()
+          }
+        });
+      }
+
+      setManifestParcels(prev => prev.map(p => ({
+        ...p,
+        isVerified: true,
+        status: SHIPMENT_STATUSES.ARRIVED_DEST
+      })));
+
+      triggerToast(`All ${unverified.length} shipments verified!`, 'success');
+    } catch (err: any) {
+      triggerToast(`Error verifying shipments: ${err.message}`, 'error');
+    }
+  };
+
+  // Browse Past Dispatched Manifests Modal
+  const handleOpenBrowseModal = async () => {
+    setIsBrowseModalOpen(true);
+    setIsLoadingPastManifests(true);
+    try {
+      const res = await apiClient.get('/manifests?sort[0]=createdAt:desc&pagination[limit]=50&populate=*');
+      setPastManifestsList(res.data?.data || []);
+    } catch (e) {
+      console.warn('Could not load manifests list:', e);
+    } finally {
+      setIsLoadingPastManifests(false);
+    }
+  };
+
+  const handleSelectManifestFromModal = (m: any) => {
+    setIsBrowseModalOpen(false);
+    const mNum = String(m.manifest_number || m.id);
+    setManifestNumber(mNum);
+    handleLoadManifest(mNum);
+  };
+
   // Finalize De-Manifestation
   const handleSave = async () => {
     const verifiedItems = manifestParcels.filter(p => p.isVerified);
@@ -285,6 +416,17 @@ export default function OperationsDeManifestationPage() {
   const verifiedCount = manifestParcels.filter(p => p.isVerified).length;
   const pendingCount = manifestParcels.length - verifiedCount;
 
+  const filteredPastManifests = React.useMemo(() => {
+    if (!modalSearch.trim()) return pastManifestsList;
+    const q = modalSearch.toLowerCase();
+    return pastManifestsList.filter((m: any) => {
+      const num = String(m.manifest_number || m.id || '').toLowerCase();
+      const st = String(m.station || '').toLowerCase();
+      const sl = String(m.seal_no || '').toLowerCase();
+      return num.includes(q) || st.includes(q) || sl.includes(q);
+    });
+  }, [pastManifestsList, modalSearch]);
+
   return (
     <PortalLayout>
       {toast.show && (
@@ -309,6 +451,12 @@ export default function OperationsDeManifestationPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleOpenBrowseModal}
+              className="bg-primary hover:bg-primary-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <List className="w-4 h-4" /> Browse Dispatched Manifests
+            </button>
             <button
               onClick={handleSave}
               disabled={isSubmitting || verifiedCount === 0}
@@ -340,7 +488,7 @@ export default function OperationsDeManifestationPage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Enter Manifest # (e.g. 1001)..."
+                  placeholder="Enter Manifest # (e.g. 6897)..."
                   value={manifestNumber}
                   onChange={(e) => setManifestNumber(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleLoadManifest()}
@@ -417,9 +565,20 @@ export default function OperationsDeManifestationPage() {
             <span className="flex items-center gap-2">
               <PackageCheck className="w-4 h-4 text-emerald-400" /> Incoming Manifest Shipments ({manifestParcels.length})
             </span>
-            <span className="text-xs text-amber-400 font-bold">
-              Target Status on Save: {SHIPMENT_STATUSES.ARRIVED_DEST}
-            </span>
+            <div className="flex items-center gap-3">
+              {manifestParcels.length > 0 && pendingCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleVerifyAll}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" /> Verify All ({pendingCount})
+                </button>
+              )}
+              <span className="text-xs text-amber-400 font-bold hidden sm:inline">
+                Target Status: {SHIPMENT_STATUSES.ARRIVED_DEST}
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -431,14 +590,14 @@ export default function OperationsDeManifestationPage() {
                   <th className="px-6 py-3.5">Consignee</th>
                   <th className="px-6 py-3.5 text-center">Destination</th>
                   <th className="px-6 py-3.5 text-center">Pcs • Wt</th>
-                  <th className="px-6 py-3.5 text-center">Verification</th>
+                  <th className="px-6 py-3.5 text-center">Verification Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
                 {manifestParcels.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                      No incoming manifest loaded. Enter manifest number above and click Fetch.
+                      No incoming manifest loaded. Enter manifest number (e.g. 6897) above or click &quot;Browse Dispatched Manifests&quot;.
                     </td>
                   </tr>
                 ) : (
@@ -453,13 +612,17 @@ export default function OperationsDeManifestationPage() {
                       <td className="px-6 py-3.5 text-center">{s.pieces} pc • {s.weight.toFixed(1)} kg</td>
                       <td className="px-6 py-3.5 text-center">
                         {s.isVerified ? (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                            <CheckCircle2 className="w-3 h-3" /> Verified (Arrived Dest)
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-[11px] font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Verified (Arrived Dest)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                            Pending Scan
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyItem(s.shipmentNumber)}
+                            className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Verify Shipment
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -469,6 +632,90 @@ export default function OperationsDeManifestationPage() {
             </table>
           </div>
         </div>
+
+        {/* BROWSE PAST DISPATCHED MANIFESTS MODAL */}
+        {isBrowseModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
+              
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
+                <div className="flex items-center gap-2">
+                  <List className="w-5 h-5 text-primary" />
+                  <h2 className="text-base font-bold">Dispatched Manifests (Select to De-Manifest)</h2>
+                </div>
+                <button onClick={() => setIsBrowseModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-4">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search manifest #, station, or seal..."
+                    value={modalSearch}
+                    onChange={(e) => setModalSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <span className="text-xs font-bold text-slate-500">Showing {filteredPastManifests.length} manifests</span>
+              </div>
+
+              <div className="p-6 overflow-y-auto custom-scrollbar">
+                {isLoadingPastManifests ? (
+                  <div className="p-8 text-center text-slate-500 font-semibold text-xs">Loading manifests...</div>
+                ) : filteredPastManifests.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 font-semibold text-xs">No dispatched manifests found.</div>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">Manifest #</th>
+                        <th className="p-3">Date</th>
+                        <th className="p-3">Destination Station</th>
+                        <th className="p-3">Seal No</th>
+                        <th className="p-3 text-center">Parcels</th>
+                        <th className="p-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                      {filteredPastManifests.map((m: any) => {
+                        const mNumber = m.manifest_number || m.id;
+                        const dateStr = m.date ? new Date(m.date).toLocaleString() : (m.createdAt ? new Date(m.createdAt).toLocaleString() : '-');
+                        const pCount = m.parcels?.length || m.total_parcels || 0;
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 font-bold text-primary font-mono text-sm">{mNumber}</td>
+                            <td className="p-3 text-slate-600">{dateStr}</td>
+                            <td className="p-3 font-bold text-slate-900">{m.station || '-'}</td>
+                            <td className="p-3 text-slate-600 font-mono">{m.seal_no || '-'}</td>
+                            <td className="p-3 text-center font-bold text-slate-700">{pCount}</td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectManifestFromModal(m)}
+                                className="px-3 py-1.5 bg-primary hover:bg-primary-600 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Load Manifest
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+                <button onClick={() => setIsBrowseModalOpen(false)} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </PortalLayout>

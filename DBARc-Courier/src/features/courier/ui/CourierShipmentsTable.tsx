@@ -20,6 +20,7 @@ type ShipmentRow = {
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
 interface CourierShipmentsTableProps {
   fromDate?: string;
@@ -64,7 +65,10 @@ export const CourierShipmentsTable = ({
     const fetchParcels = async () => {
       try {
         setIsLoading(true);
-        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=200';
         const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
         let parcels = response.data?.data || [];
         
@@ -73,6 +77,14 @@ export const CourierShipmentsTable = ({
             if (!item.shipper && !item.pickup_location?.shipper) return true;
             const itemShipperId = item.shipper?.id || item.pickup_location?.shipper?.id;
             return itemShipperId === shipperId;
+          });
+        } else if (tenantId && parcels.length > 0) {
+          parcels = parcels.filter((item: any) => {
+            const shipTenant = item.shipper?.tenant?.id || item.shipper?.tenant;
+            const offTenant = item.origin_office?.tenant?.id || item.origin_office?.tenant;
+            if (shipTenant && Number(shipTenant) !== Number(tenantId)) return false;
+            if (offTenant && Number(offTenant) !== Number(tenantId)) return false;
+            return true;
           });
         }
         
@@ -143,7 +155,7 @@ export const CourierShipmentsTable = ({
     };
 
     fetchParcels();
-  }, [isShipper, shipperId, fromDate, toDate]);
+  }, [isShipper, shipperId, fromDate, toDate, user]);
 
   // Filter based on selectedStatus tile and search query
   React.useEffect(() => {
@@ -151,14 +163,28 @@ export const CourierShipmentsTable = ({
 
     if (selectedStatus && selectedStatus !== 'all') {
       result = result.filter((row) => {
-        const s = (row.status || '').toLowerCase();
-        if (selectedStatus === 'not-arrived') return s === 'not arrived' || s === 'booked' || s === 'total booking';
-        if (selectedStatus === 'arrived') return s === 'arrived' || s === 'arrived at destination';
-        if (selectedStatus === 'out-for-delivery') return s.includes('out for delivery');
-        if (selectedStatus === 'delivered') return s === 'delivered';
-        if (selectedStatus === 'ready-to-return') return s.includes('ready') && s.includes('return');
-        if (selectedStatus === 'return-to-shipper') return s.includes('return') && !s.includes('ready');
-        if (selectedStatus === 'shipper-advice') return s.includes('failed');
+        const norm = normalizeShipmentStatus(row.status);
+        if (selectedStatus === 'not-arrived') {
+          return norm === SHIPMENT_STATUSES.BOOKED || norm === SHIPMENT_STATUSES.PICKED_UP_BY_RIDER || norm === SHIPMENT_STATUSES.NOT_ARRIVED || ['Booked', 'Total Booking', 'Order Created', 'Pending'].includes(row.status as string);
+        }
+        if (selectedStatus === 'arrived') {
+          return norm === SHIPMENT_STATUSES.ARRIVED_ORIGIN || norm === SHIPMENT_STATUSES.ARRIVED_DEST || norm === SHIPMENT_STATUSES.IN_TRANSIT;
+        }
+        if (selectedStatus === 'out-for-delivery') {
+          return norm === SHIPMENT_STATUSES.OUT_FOR_DELIVERY;
+        }
+        if (selectedStatus === 'delivered') {
+          return norm === SHIPMENT_STATUSES.DELIVERED;
+        }
+        if (selectedStatus === 'shipper-advice') {
+          return norm === SHIPMENT_STATUSES.DELIVERY_FAILED;
+        }
+        if (selectedStatus === 'ready-to-return') {
+          return norm === SHIPMENT_STATUSES.READY_FOR_RETURN;
+        }
+        if (selectedStatus === 'return-to-shipper') {
+          return norm === SHIPMENT_STATUSES.RETURN_TO_SHIPPER || norm === SHIPMENT_STATUSES.LOST_DAMAGE;
+        }
         return true;
       });
     }

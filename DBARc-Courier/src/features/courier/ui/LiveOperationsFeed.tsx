@@ -15,16 +15,59 @@ type FeedItem = {
   textColor: string;
 };
 
+import { useAuth } from '@/components/AuthProvider';
+
 export const LiveOperationsFeed = () => {
+  const { user, activeBusinessId } = useAuth();
   const [feedItems, setFeedItems] = React.useState<FeedItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+
+  const isShipper = React.useMemo(() => {
+    if (!user) return false;
+    const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
+    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
+    return hasShipperRelation || hasShipperRoles;
+  }, [user]);
+
+  const shipperId = React.useMemo(() => {
+    if (user?.shipper) {
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) {
+        const matching = user.shipper.find((s: any) => s.id === activeBusinessId);
+        return matching ? matching.id : user.shipper[0].id;
+      } else if (typeof user.shipper === 'object' && user.shipper.id) {
+        return user.shipper.id;
+      }
+    }
+    return activeBusinessId || null;
+  }, [user, activeBusinessId]);
 
   React.useEffect(() => {
     const fetchRecentActivities = async () => {
       try {
         setIsLoading(true);
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?sort[0]=updatedAt:desc&pagination[limit]=8');
-        const parcels = response.data?.data || [];
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels?populate=*&sort[0]=updatedAt:desc&pagination[limit]=25');
+        let parcels = response.data?.data || [];
+        
+        if (isShipper && shipperId && parcels.length > 0) {
+          parcels = parcels.filter((item: any) => {
+            if (!item.shipper && !item.pickup_location?.shipper) return true;
+            const itemShipperId = item.shipper?.id || item.pickup_location?.shipper?.id;
+            return itemShipperId === shipperId;
+          });
+        } else if (tenantId && parcels.length > 0) {
+          parcels = parcels.filter((item: any) => {
+            const shipTenant = item.shipper?.tenant?.id || item.shipper?.tenant;
+            const offTenant = item.origin_office?.tenant?.id || item.origin_office?.tenant;
+            if (shipTenant && Number(shipTenant) !== Number(tenantId)) return false;
+            if (offTenant && Number(offTenant) !== Number(tenantId)) return false;
+            return true;
+          });
+        }
+
+        parcels = parcels.slice(0, 8);
         
         if (parcels.length > 0) {
           const dynamicItems: FeedItem[] = parcels.map((p: Parcel) => {
@@ -66,7 +109,7 @@ export const LiveOperationsFeed = () => {
     };
 
     fetchRecentActivities();
-  }, []);
+  }, [isShipper, shipperId, user]);
 
   return (
     <div className="bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-[500px]">

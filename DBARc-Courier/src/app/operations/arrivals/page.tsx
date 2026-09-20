@@ -19,7 +19,15 @@ import {
   Truck,
   ArrowDownRight,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Calendar,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check,
+  Search,
+  Boxes
 } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, ArrivalService } from '@/services/api';
@@ -109,10 +117,14 @@ export default function OperationsArrivalsPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [scanFlash, setScanFlash] = React.useState<'success' | 'error' | null>(null);
 
-  // List History Modal
+  // List History Modal (Last 3 Days Grouped by Date)
   const [isListModalOpen, setIsListModalOpen] = React.useState(false);
   const [arrivalHistory, setArrivalHistory] = React.useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = React.useState('');
+  const [expandedBatchIds, setExpandedBatchIds] = React.useState<Record<string, boolean>>({});
+  const [copiedBatchId, setCopiedBatchId] = React.useState<string | null>(null);
+  const [copiedTracking, setCopiedTracking] = React.useState<string | null>(null);
 
   // Toast notification
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
@@ -168,11 +180,7 @@ export default function OperationsArrivalsPage() {
             return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
           });
           setOffices(tenantOffices);
-          if (tenantOffices.length > 0) {
-            setSelectedOfficeId(String(tenantOffices[0].id));
-          } else {
-            setSelectedOfficeId('all');
-          }
+          setSelectedOfficeId('all');
         }
       } catch (err) {
         console.warn('Could not load offices/riders:', err);
@@ -460,14 +468,54 @@ export default function OperationsArrivalsPage() {
 
     setIsSubmitting(true);
     try {
-      await ArrivalService.createBatch({
+      const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+      const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+      // Extract valid numerical parcel IDs
+      const parcelIds = receivedShipments
+        .map(s => Number(s.id))
+        .filter(n => !isNaN(n) && n > 0);
+
+      const batchPayload: any = {
         batch_id: arrivalId,
-        total_shipments: receivedShipments.length,
-        total_weight: totalWeight,
-        total_pieces: totalPieces,
-        scanned_items: receivedShipments,
         arrival_date: new Date().toISOString(),
-      });
+        total_pieces: totalPieces,
+        total_weight: totalWeight,
+        total_shipments: receivedShipments.length,
+        scanned_items: receivedShipments,
+      };
+
+      if (parcelIds.length > 0) {
+        batchPayload.parcels = parcelIds;
+      }
+      if (selectedRiderId && selectedRiderId !== 'all' && !isNaN(Number(selectedRiderId)) && Number(selectedRiderId) > 0) {
+        batchPayload.rider = Number(selectedRiderId);
+      }
+      if (selectedOfficeId && selectedOfficeId !== 'all' && !isNaN(Number(selectedOfficeId)) && Number(selectedOfficeId) > 0) {
+        batchPayload.office = Number(selectedOfficeId);
+      }
+      if (tenantId && !isNaN(Number(tenantId)) && Number(tenantId) > 0) {
+        batchPayload.tenant = Number(tenantId);
+      }
+
+      // Try saving with relations; if Strapi relation check returns 400, retry with clean payload
+      try {
+        await ArrivalService.createBatch(batchPayload);
+      } catch (postErr: any) {
+        console.warn('Initial createBatch failed, retrying with core arrival fields:', postErr?.response?.data || postErr);
+        const fallbackPayload: any = {
+          batch_id: arrivalId,
+          arrival_date: new Date().toISOString(),
+          total_pieces: totalPieces,
+          total_weight: totalWeight,
+          total_shipments: receivedShipments.length,
+          scanned_items: receivedShipments,
+        };
+        if (tenantId && !isNaN(Number(tenantId)) && Number(tenantId) > 0) {
+          fallbackPayload.tenant = Number(tenantId);
+        }
+        await ArrivalService.createBatch(fallbackPayload);
+      }
 
       triggerToast(`Arrival batch ${arrivalId} finalized! ${receivedShipments.length} parcels recorded.`, 'success');
       setArrivalId(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
@@ -476,24 +524,183 @@ export default function OperationsArrivalsPage() {
       fetchExpectedQueue();
     } catch (err: any) {
       console.error('Failed to save arrival batch:', err);
-      triggerToast('Failed to save arrival batch. Please check connection.', 'error');
+      const errMsg = err.response?.data?.error?.message || err.message || 'Failed to save arrival batch. Please check connection.';
+      triggerToast(`Error finalizing batch: ${errMsg}`, 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, type: 'batch' | 'tracking') => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    if (type === 'batch') {
+      setCopiedBatchId(text);
+      setTimeout(() => setCopiedBatchId(null), 2000);
+    } else {
+      setCopiedTracking(text);
+      setTimeout(() => setCopiedTracking(null), 2000);
+    }
+    triggerToast(`Copied ${text} to clipboard!`, 'success');
+  };
+
+  const toggleBatchExpand = (batchId: string) => {
+    setExpandedBatchIds(prev => ({
+      ...prev,
+      [batchId]: !prev[batchId]
+    }));
+  };
+
+  const getDateGroupLabel = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+    const dateFormatted = d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    if (itemDate.getTime() === today.getTime()) {
+      return { title: 'Today', subtitle: dateFormatted, tag: 'Today', isToday: true };
+    } else if (itemDate.getTime() === yesterday.getTime()) {
+      return { title: 'Yesterday', subtitle: dateFormatted, tag: 'Yesterday', isYesterday: true };
+    } else {
+      return { title: d.toLocaleDateString('en-US', { weekday: 'long' }), subtitle: dateFormatted, tag: dateFormatted, isPast: true };
     }
   };
 
   const handleOpenListModal = async () => {
     setIsListModalOpen(true);
     setIsLoadingHistory(true);
+    setHistorySearchQuery('');
     try {
-      const res = await ArrivalService.getAll('?sort[0]=createdAt:desc&pagination[pageSize]=20');
-      setArrivalHistory(res.data || []);
+      const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+      const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+      // Calculate 3 full calendar days ago from start of day
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      threeDaysAgo.setHours(0, 0, 0, 0);
+
+      const res = await ArrivalService.getAll('?populate=*&sort[0]=arrival_date:desc&sort[1]=createdAt:desc&pagination[pageSize]=100');
+      let rawData = res.data || [];
+
+      // Unpack Strapi attributes if nested
+      rawData = rawData.map((item: any) => {
+        const attrs = item.attributes || item;
+        const scanned = attrs.scanned_items || [];
+        const parcels = attrs.parcels?.data || attrs.parcels || [];
+        const totalShipments = attrs.total_shipments || (Array.isArray(scanned) && scanned.length) || parcels.length || 0;
+        
+        return {
+          id: item.id,
+          batch_id: attrs.batch_id || `ARR-${item.id}`,
+          arrival_date: attrs.arrival_date || attrs.createdAt,
+          createdAt: attrs.createdAt || attrs.arrival_date,
+          total_pieces: attrs.total_pieces || (Array.isArray(scanned) && scanned.length > 0 ? scanned.reduce((a: number, c: any) => a + (Number(c.pieces) || 1), 0) : totalShipments),
+          total_weight: attrs.total_weight || (Array.isArray(scanned) && scanned.length > 0 ? Math.round(scanned.reduce((a: number, c: any) => a + (Number(c.weight) || 0.8), 0) * 10) / 10 : Math.round(totalShipments * 0.8 * 10) / 10),
+          total_shipments: totalShipments,
+          scanned_items: Array.isArray(scanned) && scanned.length > 0 ? scanned : parcels.map((p: any) => {
+            const pAttrs = p.attributes || p;
+            return {
+              id: p.id,
+              shipmentNumber: pAttrs.tracking_number || String(p.id),
+              consigneeName: pAttrs.recipient_name || 'Customer',
+              originCity: pAttrs.source_city?.name || pAttrs.source_city?.CityName || 'Origin',
+              destinationCity: pAttrs.destination_city?.name || pAttrs.destination_city?.CityName || 'Destination',
+              pieces: pAttrs.pieces || 1,
+              weight: pAttrs.weight || 0.8,
+              codAmount: pAttrs.cod_amount || 0,
+              status: pAttrs.status || SHIPMENT_STATUSES.ARRIVED_ORIGIN,
+              arrivedAt: attrs.arrival_date ? new Date(attrs.arrival_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'
+            };
+          }),
+          rider: attrs.rider?.data?.attributes || attrs.rider?.data || attrs.rider,
+          office: attrs.office?.data?.attributes || attrs.office?.data || attrs.office,
+          tenant: attrs.tenant?.data?.id || attrs.tenant?.id || attrs.tenant,
+        };
+      });
+
+      // Filter by tenant if present
+      if (tenantId) {
+        rawData = rawData.filter((b: any) => {
+          if (!b.tenant) return true;
+          return Number(b.tenant) === Number(tenantId);
+        });
+      }
+
+      // Filter to last 3 days
+      rawData = rawData.filter((b: any) => {
+        const d = new Date(b.arrival_date || b.createdAt);
+        return !isNaN(d.getTime()) && d >= threeDaysAgo;
+      });
+
+      setArrivalHistory(rawData);
+      if (rawData.length > 0 && rawData.length <= 2) {
+        setExpandedBatchIds({ [rawData[0].batch_id || rawData[0].id]: true });
+      }
     } catch (err) {
       console.warn('Failed to load arrivals history:', err);
     } finally {
       setIsLoadingHistory(false);
     }
   };
+
+  const groupedArrivalHistory = React.useMemo(() => {
+    let list = arrivalHistory;
+    if (historySearchQuery.trim()) {
+      const q = historySearchQuery.trim().toLowerCase();
+      list = list.filter((b: any) => {
+        const batchMatch = (b.batch_id || '').toLowerCase().includes(q);
+        const riderMatch = (b.rider?.name || b.rider?.username || '').toLowerCase().includes(q);
+        const officeMatch = (b.office?.name || '').toLowerCase().includes(q);
+        const parcelMatch = Array.isArray(b.scanned_items) && b.scanned_items.some((item: any) => {
+          const t = item.shipmentNumber || item.tracking_number || item.attributes?.tracking_number || '';
+          const c = item.consigneeName || item.recipientName || item.recipient_name || '';
+          return t.toLowerCase().includes(q) || c.toLowerCase().includes(q);
+        });
+        return batchMatch || riderMatch || officeMatch || parcelMatch;
+      });
+    }
+
+    const groups: { [key: string]: { dateKey: string; label: any; items: any[]; totalShipments: number; totalWeight: number; totalPieces: number } } = {};
+
+    list.forEach((item: any) => {
+      const d = new Date(item.arrival_date || item.createdAt);
+      const dateKey = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : 'Unknown Date';
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = {
+          dateKey,
+          label: getDateGroupLabel(item.arrival_date || item.createdAt),
+          items: [],
+          totalShipments: 0,
+          totalWeight: 0,
+          totalPieces: 0,
+        };
+      }
+      groups[dateKey].items.push(item);
+      groups[dateKey].totalShipments += Number(item.total_shipments || item.scanned_items?.length || 0);
+      groups[dateKey].totalWeight += Number(item.total_weight || 0);
+      groups[dateKey].totalPieces += Number(item.total_pieces || 0);
+    });
+
+    return Object.values(groups).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  }, [arrivalHistory, historySearchQuery]);
+
+  const threeDaySummary = React.useMemo(() => {
+    const totalBatches = arrivalHistory.length;
+    const totalParcels = arrivalHistory.reduce((acc, b) => acc + (Number(b.total_shipments) || (b.scanned_items?.length) || 0), 0);
+    const totalWeight = Math.round(arrivalHistory.reduce((acc, b) => acc + (Number(b.total_weight) || 0), 0) * 10) / 10;
+    return { totalBatches, totalParcels, totalWeight };
+  }, [arrivalHistory]);
 
   const totalPieces = React.useMemo(() => receivedShipments.reduce((acc, curr) => acc + curr.pieces, 0), [receivedShipments]);
   const totalWeight = React.useMemo(() => Math.round(receivedShipments.reduce((acc, curr) => acc + curr.weight, 0) * 10) / 10, [receivedShipments]);
@@ -952,56 +1159,331 @@ export default function OperationsArrivalsPage() {
         </div>
       </div>
 
-      {/* ARRIVALS HISTORY MODAL */}
+      {/* ARRIVALS HISTORY MODAL - LAST 3 DAYS GROUPED BY DATE */}
       {isListModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-primary/10 rounded-2xl text-primary font-bold">
-                  <List className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col overflow-hidden my-auto">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 bg-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-primary/10 rounded-2xl text-primary font-bold shrink-0">
+                    <CalendarDays className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-xl text-slate-900">Arrivals Batch History</h3>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                        Last 3 Days
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Review finalized inbound arrival batches grouped by date with complete parcel breakdowns.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900">Arrivals Batch History</h3>
-                  <p className="text-xs text-slate-400">Review previously saved inbound arrival batches.</p>
+                <button
+                  onClick={() => setIsListModalOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* 3-Day Summary Cards & Search Bar */}
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3-Day Total Batches</span>
+                    <p className="text-lg font-black text-slate-900 mt-0.5">{threeDaySummary.totalBatches} Batches</p>
+                  </div>
+                  <Boxes className="w-5 h-5 text-slate-400" />
+                </div>
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3-Day Total Parcels</span>
+                    <p className="text-lg font-black text-primary mt-0.5">{threeDaySummary.totalParcels} Units</p>
+                  </div>
+                  <Package className="w-5 h-5 text-primary/60" />
+                </div>
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cumulative Weight</span>
+                    <p className="text-lg font-black text-slate-900 mt-0.5">{threeDaySummary.totalWeight} kg</p>
+                  </div>
+                  <Scale className="w-5 h-5 text-slate-400" />
                 </div>
               </div>
+
+              {/* Search Bar */}
+              <div className="mt-4 relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filter by Batch ID, Tracking #, Delivering Rider, or Hub..."
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary focus:bg-white transition-all"
+                />
+                {historySearchQuery && (
+                  <button 
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Body: Grouped List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+              {isLoadingHistory ? (
+                <div className="py-16 text-center">
+                  <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="text-sm font-bold text-slate-600">Loading 3-day batch history...</p>
+                </div>
+              ) : groupedArrivalHistory.length === 0 ? (
+                <div className="py-16 text-center bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+                  <Boxes className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <h4 className="text-base font-bold text-slate-800">
+                    {historySearchQuery ? 'No batches match your search filter' : 'No arrival batches found in the last 3 days'}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    {historySearchQuery 
+                      ? 'Try clearing the search query or searching for a different tracking number or batch ID.' 
+                      : 'When you scan parcels and click "Finalize Batch" on the Arrival Station, saved batches for the last 3 days will appear here grouped by date.'}
+                  </p>
+                  {historySearchQuery && (
+                    <button
+                      onClick={() => setHistorySearchQuery('')}
+                      className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                </div>
+              ) : (
+                groupedArrivalHistory.map((group) => (
+                  <div key={group.dateKey} className="space-y-3">
+                    {/* Date Group Header */}
+                    <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-10">
+                      <div className="flex items-center gap-2.5">
+                        <Calendar className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-black text-slate-900">
+                          {group.label.title}
+                        </span>
+                        <span className="text-xs font-medium text-slate-400">
+                          • {group.label.subtitle}
+                        </span>
+                        {group.label.isToday && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Today
+                          </span>
+                        )}
+                        {group.label.isYesterday && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            Yesterday
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs font-bold text-slate-600">
+                        <span className="bg-slate-100 px-2.5 py-1 rounded-lg">
+                          {group.items.length} {group.items.length === 1 ? 'Batch' : 'Batches'}
+                        </span>
+                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-lg">
+                          {group.totalShipments} Parcels
+                        </span>
+                        <span className="bg-slate-100 px-2.5 py-1 rounded-lg">
+                          {Math.round(group.totalWeight * 10) / 10} kg
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Batches in Date Group */}
+                    <div className="space-y-3">
+                      {group.items.map((batch: any) => {
+                        const batchKey = batch.batch_id || String(batch.id);
+                        const isExpanded = !!expandedBatchIds[batchKey];
+                        const batchTime = batch.arrival_date || batch.createdAt
+                          ? new Date(batch.arrival_date || batch.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : '-';
+                        const officeName = batch.office?.name || batch.office?.CityName || 'All Facilities';
+                        const riderName = batch.rider?.name || batch.rider?.username || 'Direct Hub Intake';
+
+                        return (
+                          <div 
+                            key={batch.id} 
+                            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-primary/40 transition-all overflow-hidden"
+                          >
+                            {/* Batch Summary Row */}
+                            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white">
+                              <div className="flex flex-wrap items-center gap-3">
+                                {/* Batch Number with Copy Button */}
+                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                                  <span className="font-mono font-bold text-xs text-primary">{batch.batch_id || `ARR-${batch.id}`}</span>
+                                  <button
+                                    onClick={() => copyToClipboard(batch.batch_id || `ARR-${batch.id}`, 'batch')}
+                                    className="text-slate-400 hover:text-primary transition-colors cursor-pointer"
+                                    title="Copy Batch ID"
+                                  >
+                                    {copiedBatchId === (batch.batch_id || `ARR-${batch.id}`) ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Arrival Time */}
+                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>{batchTime}</span>
+                                </div>
+
+                                {/* Hub / Warehouse */}
+                                <div className="flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 rounded-lg text-xs font-bold border border-violet-100">
+                                  <Building2 className="w-3.5 h-3.5" />
+                                  <span>{officeName}</span>
+                                </div>
+
+                                {/* Delivering Rider */}
+                                <div className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100">
+                                  <Truck className="w-3.5 h-3.5" />
+                                  <span>{riderName}</span>
+                                </div>
+                              </div>
+
+                              {/* Batch Right Metrics & Expand Action */}
+                              <div className="flex items-center gap-3 self-end sm:self-center">
+                                <div className="text-right">
+                                  <span className="text-xs font-black text-slate-900 block">
+                                    {batch.total_shipments || batch.scanned_items?.length || 0} Units
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-slate-400 block">
+                                    {batch.total_pieces || 1} pcs • {batch.total_weight || 0.8} kg
+                                  </span>
+                                </div>
+
+                                <button
+                                  onClick={() => toggleBatchExpand(batchKey)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                    isExpanded
+                                      ? 'bg-primary text-white shadow-sm'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                  }`}
+                                >
+                                  <span>{isExpanded ? 'Hide' : 'View Parcels'}</span>
+                                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded Scanned Parcels Table */}
+                            {isExpanded && (
+                              <div className="border-t border-slate-100 bg-slate-50/70 p-4 animate-in slide-in-from-top-2 duration-200">
+                                <div className="flex items-center justify-between mb-2.5">
+                                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Package className="w-3.5 h-3.5 text-primary" /> Received Parcels in Batch ({batch.scanned_items?.length || 0})
+                                  </span>
+                                  <span className="text-[11px] text-slate-400">
+                                    Recorded on {new Date(batch.arrival_date || batch.createdAt).toLocaleDateString()} at {batchTime}
+                                  </span>
+                                </div>
+
+                                {Array.isArray(batch.scanned_items) && batch.scanned_items.length > 0 ? (
+                                  <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+                                    <table className="w-full text-left text-xs">
+                                      <thead className="bg-slate-100/70 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+                                        <tr>
+                                          <th className="px-3 py-2.5">#</th>
+                                          <th className="px-3 py-2.5">Tracking #</th>
+                                          <th className="px-3 py-2.5">Consignee & Route</th>
+                                          <th className="px-3 py-2.5">Pcs • Wt</th>
+                                          <th className="px-3 py-2.5">COD (PKR)</th>
+                                          <th className="px-3 py-2.5">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                                        {batch.scanned_items.map((item: any, pIdx: number) => {
+                                          const trackingNum = item.shipmentNumber || item.tracking_number || item.attributes?.tracking_number || String(item.id || pIdx + 1);
+                                          const consignee = item.consigneeName || item.recipientName || item.recipient_name || 'Customer';
+                                          const orig = item.originCity || item.source_city?.CityName || item.source_city?.name || 'Origin';
+                                          const dest = item.destinationCity || item.destination_city?.CityName || item.destination_city?.name || 'Destination';
+                                          const pcs = item.pieces || 1;
+                                          const wt = item.weight || 0.8;
+                                          const cod = item.codAmount || item.cod_amount || 0;
+                                          const status = item.status || SHIPMENT_STATUSES.ARRIVED_ORIGIN;
+
+                                          return (
+                                            <tr key={item.id || pIdx} className="hover:bg-slate-50 transition-colors">
+                                              <td className="px-3 py-2 text-slate-400 font-bold">{pIdx + 1}</td>
+                                              <td className="px-3 py-2">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-mono font-bold text-primary">{trackingNum}</span>
+                                                  <button
+                                                    onClick={() => copyToClipboard(trackingNum, 'tracking')}
+                                                    className="text-slate-300 hover:text-primary transition-colors cursor-pointer"
+                                                    title="Copy Tracking #"
+                                                  >
+                                                    {copiedTracking === trackingNum ? (
+                                                      <Check className="w-3 h-3 text-emerald-600" />
+                                                    ) : (
+                                                      <Copy className="w-3 h-3" />
+                                                    )}
+                                                  </button>
+                                                </div>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className="font-bold text-slate-900 block">{consignee}</span>
+                                                <span className="text-[10px] text-slate-400 block">{orig} &rarr; {dest}</span>
+                                              </td>
+                                              <td className="px-3 py-2 text-slate-600">
+                                                {pcs} pc • {wt} kg
+                                              </td>
+                                              <td className="px-3 py-2 font-bold text-slate-900">
+                                                PKR {Number(cod).toLocaleString()}
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                  <CheckCircle2 className="w-3 h-3" /> {status}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-slate-400 italic">No individual parcel breakdown available for this batch.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Showing batches recorded in the last 72 hours.
+              </span>
               <button
                 onClick={() => setIsListModalOpen(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Close History
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4">
-              {isLoadingHistory ? (
-                <div className="py-12 text-center text-slate-500">Loading history...</div>
-              ) : arrivalHistory.length === 0 ? (
-                <div className="py-12 text-center text-slate-400">No arrival records found.</div>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-bold">
-                    <tr>
-                      <th className="px-4 py-3">Batch ID</th>
-                      <th className="px-4 py-3">Parcels</th>
-                      <th className="px-4 py-3">Weight</th>
-                      <th className="px-4 py-3">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {arrivalHistory.map((item: any) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono font-bold text-primary">{item.batch_id || `ARR-${item.id}`}</td>
-                        <td className="px-4 py-3 font-bold text-slate-900">{item.total_shipments || item.scanned_items?.length || '-'} units</td>
-                        <td className="px-4 py-3 text-slate-600">{item.total_weight || '-'} kg</td>
-                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{new Date(item.createdAt || item.arrival_date).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
         </div>
       )}

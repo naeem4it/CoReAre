@@ -8,6 +8,8 @@ import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import { useAuth } from '@/components/AuthProvider';
 
+import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
+
 type StatsData = {
   totalShipments: number;
   notArrived: number;
@@ -78,15 +80,32 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
     const fetchStats = async () => {
       try {
         setIsLoading(true);
-        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
-        let parcels = response.data?.data || [];
+        const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+        const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
+
+        // 1. Fetch Parcels for stats
+        const parcelsRes = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels', {
+          params: {
+            populate: '*',
+            pagination: { pageSize: 200 },
+            sort: ['createdAt:desc']
+          }
+        }).catch(() => null);
+        let parcels = parcelsRes?.data?.data || [];
         
         if (isShipper && shipperId && parcels.length > 0) {
           parcels = parcels.filter((item: any) => {
             if (!item.shipper && !item.pickup_location?.shipper) return true;
             const itemShipperId = item.shipper?.id || item.pickup_location?.shipper?.id;
             return itemShipperId === shipperId;
+          });
+        } else if (tenantId && parcels.length > 0) {
+          parcels = parcels.filter((item: any) => {
+            const shipTenant = item.shipper?.tenant?.id || item.shipper?.tenant;
+            const offTenant = item.origin_office?.tenant?.id || item.origin_office?.tenant;
+            if (shipTenant && Number(shipTenant) !== Number(tenantId)) return false;
+            if (offTenant && Number(offTenant) !== Number(tenantId)) return false;
+            return true;
           });
         }
 
@@ -109,17 +128,53 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
           });
         }
 
-        const totalShipments = parcels.length;
-        const notArrived = parcels.filter((p: any) => p.status === 'Booked' || p.status === 'Total Booking' || p.status === 'Not Arrived' || p.status === 'booked').length;
-        const arrived = parcels.filter((p: any) => ['Arrived', 'Arrived At Destination'].includes(p.status || '')).length;
-        const outForDelivery = parcels.filter((p: any) => ['Out For delivery', 'Out for Delivery'].includes(p.status || '')).length;
-        const delivered = parcels.filter((p: any) => p.status === 'Delivered').length;
-        const readyToReturn = parcels.filter((p: any) => ['Ready To Return', 'Ready for Return'].includes(p.status || '')).length;
-        const returnToShipper = parcels.filter((p: any) => ['Return to Shipper', 'Return Dispatched'].includes(p.status || '')).length;
-        const shipperAdvice = parcels.filter((p: any) => ['Delivery Failed', 'Failed Attempt'].includes(p.status || '')).length;
+        let notArrived = 0;
+        let arrived = 0;
+        let outForDelivery = 0;
+        let delivered = 0;
+        let readyToReturn = 0;
+        let returnToShipper = 0;
+        let shipperAdvice = 0;
+
+        parcels.forEach((p: any) => {
+          const norm = normalizeShipmentStatus(p.status);
+          switch (norm) {
+            case SHIPMENT_STATUSES.BOOKED:
+            case SHIPMENT_STATUSES.PICKED_UP_BY_RIDER:
+            case SHIPMENT_STATUSES.NOT_ARRIVED:
+              notArrived++;
+              break;
+            case SHIPMENT_STATUSES.ARRIVED_ORIGIN:
+            case SHIPMENT_STATUSES.ARRIVED_DEST:
+            case SHIPMENT_STATUSES.IN_TRANSIT:
+              arrived++;
+              break;
+            case SHIPMENT_STATUSES.OUT_FOR_DELIVERY:
+              outForDelivery++;
+              break;
+            case SHIPMENT_STATUSES.DELIVERED:
+              delivered++;
+              break;
+            case SHIPMENT_STATUSES.DELIVERY_FAILED:
+              shipperAdvice++;
+              break;
+            case SHIPMENT_STATUSES.READY_FOR_RETURN:
+              readyToReturn++;
+              break;
+            case SHIPMENT_STATUSES.RETURN_TO_SHIPPER:
+            case SHIPMENT_STATUSES.LOST_DAMAGE:
+              returnToShipper++;
+              break;
+            default:
+              if (['Booked', 'Total Booking', 'Order Created', 'Pending'].includes(p.status)) {
+                notArrived++;
+              }
+              break;
+          }
+        });
 
         setStats({
-          totalShipments,
+          totalShipments: parcels.length,
           notArrived,
           arrived,
           outForDelivery,
@@ -129,29 +184,42 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
           shipperAdvice,
         });
 
-        // Fetch Total Shippers count for Courier
+        // 2. Fetch Total Shippers count isolated to tenant
         try {
-          const shippersRes = await apiClient.get('/shippers?pagination[pageSize]=1').catch(() => null);
-          const count = shippersRes?.data?.meta?.pagination?.total ?? (shippersRes?.data?.data?.length || 0);
-          setTotalShippers(count);
+          const shipperFilters: any = {};
+          if (tenantId) {
+            shipperFilters.tenant = tenantId;
+          }
+          const shippersRes = await apiClient.get('/shippers', {
+            params: { filters: shipperFilters, pagination: { limit: 100 } }
+          }).catch(() => null);
+          const rawShippers = shippersRes?.data?.data || [];
+          setTotalShippers(rawShippers.length);
         } catch {
           setTotalShippers(0);
         }
 
-        // Fetch Enrolled Riders
+        // 3. Fetch Enrolled Riders isolated to tenant
         try {
-          const ridersRes = await RiderService.getAll().catch(() => null);
-          const rCount = ridersRes?.data?.length || 0;
-          setTotalRiders(rCount);
+          const riderParams = `?filters[status][$ne]=inactive${tenantId ? `&filters[tenant][$eq]=${tenantId}` : ''}&pagination[pageSize]=100`;
+          const ridersRes = await RiderService.getAll(riderParams).catch(() => null);
+          const rawRiders = ridersRes?.data || [];
+          setTotalRiders(rawRiders.length);
         } catch {
           setTotalRiders(0);
         }
 
-        // Fetch Offices / Hubs
+        // 4. Fetch Courier Offices / Hubs strictly isolated to tenant
         try {
-          const officesRes = await apiClient.get('/offices?pagination[pageSize]=1').catch(() => null);
-          const oCount = officesRes?.data?.meta?.pagination?.total ?? (officesRes?.data?.data?.length || 0);
-          setTotalOffices(oCount);
+          const officeFilters: any = { type: 'courier' };
+          if (tenantId) {
+            officeFilters.tenant = tenantId;
+          }
+          const officesRes = await apiClient.get('/offices', {
+            params: { filters: officeFilters, pagination: { limit: 100 } }
+          }).catch(() => null);
+          const rawOffices = officesRes?.data?.data || [];
+          setTotalOffices(rawOffices.length);
         } catch {
           setTotalOffices(0);
         }
@@ -163,7 +231,7 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
     };
 
     fetchStats();
-  }, [isShipper, shipperId, fromDate, toDate]);
+  }, [isShipper, shipperId, fromDate, toDate, user]);
 
   const deliveryRate = React.useMemo(() => {
     if (!stats.totalShipments || stats.totalShipments === 0) return 0;
