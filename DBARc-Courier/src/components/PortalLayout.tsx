@@ -348,18 +348,30 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (pathname.startsWith('/reports') || pathname.startsWith('/invoices')) {
+    if (pathname.startsWith('/invoices/cod-settlement')) {
+      setExpandedMenu('financials');
+    } else if (
+      pathname.startsWith('/reports') || 
+      pathname.startsWith('/invoices') || 
+      pathname.startsWith('/customer-service')
+    ) {
       setExpandedMenu('reports');
     } else if (pathname.startsWith('/order-api') || pathname.startsWith('/stitch-unified') || pathname.startsWith('/velocity-corporate')) {
       setExpandedMenu('interfaces');
     } else if (pathname.startsWith('/shipments/book') || pathname.startsWith('/orders') || pathname.startsWith('/bulk-shipment') || pathname.startsWith('/cargo-distribution')) {
       setExpandedMenu('shipment');
+    } else if (
+      pathname === '/operations/de-runsheet' || 
+      pathname === '/administration/expenses' || 
+      pathname === '/administration/plans' ||
+      pathname.startsWith('/administration/plans') ||
+      pathname.startsWith('/financials')
+    ) {
+      setExpandedMenu('financials');
     } else if (pathname.startsWith('/administration')) {
       setExpandedMenu('admin');
     } else if (pathname.startsWith('/operations')) {
       setExpandedMenu('operations');
-    } else if (pathname.startsWith('/customer-service')) {
-      setExpandedMenu('customerservice');
     }
   }, [pathname]);
 
@@ -391,7 +403,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
       <button onClick={() => toggleMenu('reports')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
         <div className="flex items-center gap-md">
           <span className="material-symbols-outlined">bar_chart</span>
-          <span className="font-label-md text-label-md">Reports & Invoices</span>
+          <span className="font-label-md text-label-md">Reports</span>
         </div>
         <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'reports' ? 'rotate(180deg)' : '' }}>expand_more</span>
       </button>
@@ -399,11 +411,13 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
         <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
           <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
           <NavLink href="/reports/dispatch" icon="local_shipping" label="Dispatch Report" />
+          <NavLink href="/customer-service/arrival-summary" icon="table_chart" label="Arrival Summary" />
+          <NavLink href="/customer-service/riders-summary" icon="badge" label="Riders Summary" />
+          <NavLink href="/customer-service/order-report" icon="analytics" label="Order Report" />
           <NavLink href="/reports/profit-loss" icon="balance" label="Profit & Loss Statement" />
           <NavLink href="/reports/expenses" icon="query_stats" label="Executive Expense Report" />
           <NavLink href="/reports/monthly-invoice" icon="receipt_long" label="Monthly Invoice" />
           <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoice" />
-          <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />
         </div>
       )}
     </div>
@@ -424,18 +438,6 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
           <div className="flex items-center p-xs font-bold text-outline uppercase tracking-wider text-[10px] select-none">
             Courier Management
           </div>
-          
-          <Link
-            href="/administration/plans"
-            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-              pathname === '/administration/plans'
-                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[20px]">assignment</span>
-            <span className="font-label-md text-label-md">Tariff Plans</span>
-          </Link>
 
           <Link
             href="/administration/zones"
@@ -475,19 +477,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             </Link>
           )}
 
-          {isCourierAdmin && (
-            <Link
-              href="/administration/expenses"
-              className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
-                pathname === '/administration/expenses'
-                  ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
-                  : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[20px]">payments</span>
-              <span className="font-label-md text-label-md">Expense Management</span>
-            </Link>
-          )}
+
 
           {isCourierAdmin && (
             <Link
@@ -663,25 +653,32 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 <NavLink href="/operations/manifestation" icon="inventory" label="Manifestation" />
                 <NavLink href="/operations/demanifestation" icon="unarchive" label="DeManifestation" />
                 <NavLink href="/operations/delivery-sheet" icon="assignment" label="Delivery Sheet" />
-                <NavLink href="/operations/de-runsheet" icon="payments" label="De-Runsheet (Cashier)" />
               </div>
             )}
           </div>
 
-          {/* 3. Customer Services */}
+          {/* 3. Financials */}
           <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-            <button onClick={() => toggleMenu('customerservice')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
+            <button onClick={() => toggleMenu('financials')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">
               <div className="flex items-center gap-md">
-                <span className="material-symbols-outlined">support_agent</span>
-                <span className="font-label-md text-label-md">Customer Services</span>
+                <span className="material-symbols-outlined">account_balance</span>
+                <span className="font-label-md text-label-md">Financials</span>
               </div>
-              <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'customerservice' ? 'rotate(180deg)' : '' }}>expand_more</span>
+              <span className="material-symbols-outlined text-[18px] transition-transform duration-200" style={{ transform: expandedMenu === 'financials' ? 'rotate(180deg)' : '' }}>expand_more</span>
             </button>
-            {expandedMenu === 'customerservice' && (
+            {expandedMenu === 'financials' && (
               <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
-                <NavLink href="/customer-service/arrival-summary" icon="table_chart" label="Arrival Summary" />
-                <NavLink href="/customer-service/riders-summary" icon="badge" label="Riders Summary" />
-                <NavLink href="/customer-service/order-report" icon="analytics" label="Order Report" />
+                {isCourierAdmin && (
+                  <NavLink href="/financials/shipper-invoices" icon="receipt_long" label="Shipper Invoices" />
+                )}
+                {isCourierAdmin && (
+                  <NavLink href="/administration/plans" icon="assignment" label="Tariff Plans" />
+                )}
+                <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />
+                <NavLink href="/operations/de-runsheet" icon="payments" label="De-Runsheet (Cashier)" />
+                {isCourierAdmin && (
+                  <NavLink href="/administration/expenses" icon="receipt" label="Expense Management" />
+                )}
               </div>
             )}
           </div>

@@ -176,6 +176,24 @@
       "relation": "manyToOne",
       "target": "api::manifest.manifest",
       "inversedBy": "parcels"
+    },
+    "is_invoiced": {
+      "type": "boolean",
+      "default": false
+    },
+    "settlement_status": {
+      "type": "enumeration",
+      "enum": [
+        "Pending",
+        "Invoiced",
+        "Settled"
+      ],
+      "default": "Pending"
+    },
+    "invoice": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::invoice.invoice"
     }
   }
 }

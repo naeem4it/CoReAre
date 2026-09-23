@@ -1116,9 +1116,15 @@ export interface ApiInvoiceInvoice extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    excluded_parcel_count: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    ibft_charges: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<100>;
+    included_parcel_count: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
     invoice_date: Schema.Attribute.Date & Schema.Attribute.Required;
     invoice_number: Schema.Attribute.String &
       Schema.Attribute.Required &
@@ -1129,12 +1135,15 @@ export interface ApiInvoiceInvoice extends Struct.CollectionTypeSchema {
       'api::invoice.invoice'
     > &
       Schema.Attribute.Private;
+    net_payable: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
     period_end: Schema.Attribute.Date;
     period_start: Schema.Attribute.Date;
     publishedAt: Schema.Attribute.DateTime;
     shipper: Schema.Attribute.Relation<'manyToOne', 'api::shipper.shipper'>;
     status: Schema.Attribute.Enumeration<['Paid', 'Pending', 'Overdue']> &
       Schema.Attribute.DefaultTo<'Pending'>;
+    target_payment_amount: Schema.Attribute.Decimal;
     total_charges: Schema.Attribute.Decimal & Schema.Attribute.Required;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1335,7 +1344,9 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     delivered_date: Schema.Attribute.DateTime;
     delivery_charges: Schema.Attribute.Decimal & Schema.Attribute.Required;
     destination_city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
+    invoice: Schema.Attribute.Relation<'manyToOne', 'api::invoice.invoice'>;
     is_3pl: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    is_invoiced: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     load_sheet: Schema.Attribute.Relation<
       'manyToOne',
       'api::load-sheet.load-sheet'
@@ -1364,6 +1375,10 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
       ['Overnight', 'Second Day', 'Rush', 'Detained']
     > &
       Schema.Attribute.DefaultTo<'Overnight'>;
+    settlement_status: Schema.Attribute.Enumeration<
+      ['Pending', 'Invoiced', 'Settled']
+    > &
+      Schema.Attribute.DefaultTo<'Pending'>;
     shipment_type: Schema.Attribute.Enumeration<
       ['Parcel', 'Document', 'Flyer']
     > &
@@ -1859,6 +1874,11 @@ export interface ApiShipperPlanShipperPlan extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    faf_rate: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<20>;
+    gst_rate: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<15>;
+    holding_tax_rate: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<2>;
+    ibft_charge: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<100>;
+    income_tax_rate: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<2>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1932,9 +1952,14 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
   };
   attributes: {
     account_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    account_number: Schema.Attribute.String;
+    account_title: Schema.Attribute.String;
     address: Schema.Attribute.Text;
     api_key: Schema.Attribute.String & Schema.Attribute.Unique;
+    bank_name: Schema.Attribute.String;
     business_type: Schema.Attribute.String;
+    cheque_number: Schema.Attribute.String;
+    cheque_title: Schema.Attribute.String;
     city: Schema.Attribute.String;
     couriers: Schema.Attribute.Relation<'manyToMany', 'api::courier.courier'>;
     createdAt: Schema.Attribute.DateTime;

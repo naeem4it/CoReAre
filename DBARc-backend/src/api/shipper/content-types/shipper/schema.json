@@ -104,6 +104,21 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
+    },
+    "bank_name": {
+      "type": "string"
+    },
+    "account_number": {
+      "type": "string"
+    },
+    "account_title": {
+      "type": "string"
+    },
+    "cheque_number": {
+      "type": "string"
+    },
+    "cheque_title": {
+      "type": "string"
     }
   }
 }

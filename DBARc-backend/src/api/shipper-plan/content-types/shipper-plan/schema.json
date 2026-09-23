@@ -84,6 +84,26 @@
       "type": "boolean",
       "default": false
     },
+    "faf_rate": {
+      "type": "decimal",
+      "default": 20.0
+    },
+    "gst_rate": {
+      "type": "decimal",
+      "default": 15.0
+    },
+    "income_tax_rate": {
+      "type": "decimal",
+      "default": 2.0
+    },
+    "holding_tax_rate": {
+      "type": "decimal",
+      "default": 2.0
+    },
+    "ibft_charge": {
+      "type": "decimal",
+      "default": 100.0
+    },
     "courier": {
       "type": "relation",
       "relation": "manyToOne",

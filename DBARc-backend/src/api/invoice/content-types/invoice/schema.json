@@ -40,10 +40,39 @@
       ],
       "default": "Pending"
     },
+    "cod_amount": {
+      "type": "decimal",
+      "default": 0
+    },
+    "ibft_charges": {
+      "type": "decimal",
+      "default": 100
+    },
+    "net_payable": {
+      "type": "decimal",
+      "default": 0
+    },
+    "target_payment_amount": {
+      "type": "decimal"
+    },
+    "included_parcel_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "excluded_parcel_count": {
+      "type": "integer",
+      "default": 0
+    },
     "shipper": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::shipper.shipper"
+    },
+    "parcels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::parcel.parcel",
+      "mappedBy": "invoice"
     }
   }
 }
