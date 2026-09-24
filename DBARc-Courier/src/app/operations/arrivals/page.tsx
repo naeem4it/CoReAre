@@ -292,8 +292,14 @@ export default function OperationsArrivalsPage() {
     }
 
     const normDest = dest.trim().toLowerCase();
+    const origin = (p.source_city || p.origin_city || '').trim().toLowerCase();
 
-    // 3. Dynamic check against courier's active office/hub coverage in the database
+    // Within City check (Origin == Destination is 2PL)
+    if (origin && normDest && (origin === normDest || origin.includes(normDest) || normDest.includes(origin))) {
+      return '2PL';
+    }
+
+    // 3. Dynamic check against courier's active office/hub coverage in the database (Home Zone is 2PL)
     if (offices && offices.length > 0) {
       const hasCourierOffice = offices.some((o: any) => {
         // City relation or city string from database

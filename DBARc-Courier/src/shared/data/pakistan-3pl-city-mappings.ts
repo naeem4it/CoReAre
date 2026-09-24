@@ -594,36 +594,57 @@ export async function verify3PLCredentials(
 
 export interface RoutingDecision {
   fulfillmentType: '2PL' | '3PL';
+  subCategory?: 'Within City' | 'Home Zone' | string;
+  is3PL: boolean;
   serviceType: string;
   scenario: 1 | 2 | 3 | 4 | 5;
   partner?: TPLPartnerModel | null;
   partnerCityCode?: string;
+  matchedZoneName?: string;
   message: string;
   allowed: boolean;
 }
 
 /**
- * 5-Scenario Delivery Routing Engine:
- * 1. Destination in courier's 2PL self-service areas -> In-House 2PL.
- * 2. Outside 2PL -> check Shipper's preferred 3PL. If covered -> route.
- * 3. If Shipper's preferred doesn't cover -> fallback to Courier's preferred 3PL.
- * 4. If Courier's preferred doesn't cover -> check other active configured 3PLs.
- * 5. If NO configured 3PL covers -> reject booking: "Sorry, we don't have delivery service in that area."
+ * 4-Step Logistics & 3PL Routing Engine:
+ * 
+ * 2PL Sections (Strictly Excluded from 3PL):
+ * - Section 1: Within City (sourceCity === destinationCity) -> In-House Local Fleet.
+ * - Section 2: Home Zone (destinationCity in courier's office/hub network) -> In-House Linehaul Fleet.
+ * 
+ * 3PL Zone Assignment (When outside 2PL):
+ * - Step 1: Resolve destination city's zone (Zone A, Zone B, Zone C, Zone D).
+ * - Step 2: Check Assigned 3PL Partner for that zone from zone-to-3PL assignments.
+ * - Step 3: Verify if assigned 3PL partner covers the destination city.
+ * 
+ * Step 4 (Cascading Fallback if assigned partner has no service in that city):
+ * - Step 4A: Check Courier's Primary Preferred 3PL.
+ * - Step 4B: Check one-by-one all other configured active 3PL partners with coverage.
+ * - Step 4C: If NO configured 3PL covers the area -> Reject booking with:
+ *            "Sorry, we don't have delivery service in that area."
  */
 export function evaluateLogisticsRouting({
+  sourceCity,
   destinationCity,
   selfServiceCities = [],
+  configuredZones = [],
+  zone3plAssignments = {},
   shipperPreferredTplId,
   courierTplPartners = [],
 }: {
+  sourceCity?: string;
   destinationCity: string | number;
   selfServiceCities: string[];
+  configuredZones?: any[];
+  zone3plAssignments?: Record<string, { partnerId: number | string; partnerName: string; providerCode?: string }>;
   shipperPreferredTplId?: string | number | null;
   courierTplPartners: TPLPartnerModel[];
 }): RoutingDecision {
   if (!destinationCity) {
     return {
       fulfillmentType: '2PL',
+      subCategory: 'Within City',
+      is3PL: false,
       serviceType: 'Unspecified',
       scenario: 1,
       message: 'Please specify destination city.',
@@ -635,27 +656,77 @@ export function evaluateLogisticsRouting({
   const matchedLoc = findPakistanLocation(destinationCity);
   const canonicalCity = matchedLoc?.cityName || String(destinationCity).trim();
   const normDest = canonicalCity.toLowerCase();
+  const normSource = String(sourceCity || '').trim().toLowerCase();
 
-  // Scenario 1: Destination in Courier's 2PL self-service areas
-  const is2PL = (selfServiceCities || []).some(c => {
-    const normC = c.trim().toLowerCase();
-    return normC === normDest || normDest.includes(normC) || normC.includes(normDest);
-  });
-
-  if (is2PL) {
+  // --- 2PL SECTION 1: Within City (Same Origin and Destination) ---
+  const isWithinCity = Boolean(normSource && normDest && (normSource === normDest || normSource.includes(normDest) || normDest.includes(normSource)));
+  if (isWithinCity) {
     return {
       fulfillmentType: '2PL',
-      serviceType: 'In-House Courier Delivery (2PL)',
+      subCategory: 'Within City',
+      is3PL: false,
+      serviceType: 'In-House Courier Delivery (Within City)',
       scenario: 1,
-      message: `Destination ${canonicalCity} is in your 2PL service coverage. Handled by in-house fleet.`,
+      message: `Destination ${canonicalCity} is within originating city (${sourceCity || 'local'}). Handled in-house by local station fleet.`,
       allowed: true
     };
   }
 
-  // 3PL Partner routing
+  // --- 2PL SECTION 2: Home Zone (In Courier's Station / Hub Branch Coverage) ---
+  const isHomeZone = (selfServiceCities || []).some(c => {
+    const normC = c.trim().toLowerCase();
+    return normC === normDest || normDest.includes(normC) || normC.includes(normDest);
+  });
+
+  if (isHomeZone) {
+    return {
+      fulfillmentType: '2PL',
+      subCategory: 'Home Zone',
+      is3PL: false,
+      serviceType: 'In-House Courier Delivery (Home Zone)',
+      scenario: 1,
+      message: `Destination ${canonicalCity} is in your 2PL Home Zone branch coverage. Handled in-house by linehaul & station.`,
+      allowed: true
+    };
+  }
+
+  // ========================================================
+  // 3PL IDENTIFICATION (EXCLUDED FROM 2PL)
+  // ========================================================
   const activePartners = (courierTplPartners || []).filter(p => p.status !== 'inactive');
 
-  // Scenario 2: Check Shipper's Preferred 3PL
+  // Step 1: Resolve Zone for Destination City
+  let matchedZoneName = 'Zone D';
+  if (configuredZones && configuredZones.length > 0) {
+    for (const reg of configuredZones) {
+      const attrs = reg.attributes || reg;
+      const regName = attrs.name || '';
+      if (regName.toLowerCase().includes('within')) continue;
+
+      const regCities = attrs.cities?.data || attrs.cities || [];
+      const isMatched = regCities.some((c: any) => {
+        const cName = (c.attributes?.CityName || c.attributes?.name || c.CityName || c.name || '').toLowerCase().trim();
+        return cName && (normDest === cName || normDest.includes(cName) || cName.includes(normDest));
+      });
+      if (isMatched) {
+        matchedZoneName = regName;
+        break;
+      }
+    }
+  } else {
+    // Heuristic zone resolution fallback
+    if (normDest.includes('karachi') || normDest.includes('lahore') || normDest.includes('islamabad') || normDest.includes('rawalpindi')) {
+      matchedZoneName = 'Zone A';
+    } else if (normDest.includes('faisalabad') || normDest.includes('multan') || normDest.includes('peshawar') || normDest.includes('gujranwala') || normDest.includes('sialkot') || normDest.includes('hyderabad')) {
+      matchedZoneName = 'Zone B';
+    } else if (normDest.includes('quetta') || normDest.includes('sukkur') || normDest.includes('bahawalpur') || normDest.includes('sargodha') || normDest.includes('abbottabad')) {
+      matchedZoneName = 'Zone C';
+    } else {
+      matchedZoneName = 'Zone D';
+    }
+  }
+
+  // Shipper Specific Preference (if explicitly contracted)
   if (shipperPreferredTplId) {
     const shipperPartner = activePartners.find(p => String(p.id) === String(shipperPreferredTplId));
     if (shipperPartner) {
@@ -664,18 +735,49 @@ export function evaluateLogisticsRouting({
         const codeRes = resolve3PLCityCode(shipperPartner.provider_code, canonicalCity, shipperPartner.city_mappings);
         return {
           fulfillmentType: '3PL',
+          subCategory: matchedZoneName,
+          is3PL: true,
           serviceType: `3PL Partner (${shipperPartner.name})`,
           scenario: 2,
           partner: shipperPartner,
           partnerCityCode: codeRes.code,
-          message: `Destination outside 2PL. Routed via Shipper's preferred partner: ${shipperPartner.name}.`,
+          matchedZoneName,
+          message: `Destination outside 2PL (${matchedZoneName}). Routed via Shipper's contracted partner: ${shipperPartner.name}.`,
           allowed: true
         };
       }
     }
   }
 
-  // Scenario 3: Fallback to Courier's Preferred 3PL
+  // Step 2 & 3: Check Assigned 3PL Partner for that Zone and verify coverage
+  const assignedMeta = zone3plAssignments ? (
+    zone3plAssignments[matchedZoneName] ||
+    Object.entries(zone3plAssignments).find(([k]) => k.toLowerCase() === matchedZoneName.toLowerCase())?.[1]
+  ) : null;
+
+  if (assignedMeta?.partnerId) {
+    const assignedPartner = activePartners.find(p => String(p.id) === String(assignedMeta.partnerId));
+    if (assignedPartner) {
+      const coverage = check3PLPartnerCoverage(assignedPartner, canonicalCity);
+      if (coverage.covers) {
+        const codeRes = resolve3PLCityCode(assignedPartner.provider_code, canonicalCity, assignedPartner.city_mappings);
+        return {
+          fulfillmentType: '3PL',
+          subCategory: matchedZoneName,
+          is3PL: true,
+          serviceType: `3PL Partner (${assignedPartner.name})`,
+          scenario: 2,
+          partner: assignedPartner,
+          partnerCityCode: codeRes.code,
+          matchedZoneName,
+          message: `Destination outside 2PL. Routed via assigned ${matchedZoneName} partner: ${assignedPartner.name}.`,
+          allowed: true
+        };
+      }
+    }
+  }
+
+  // Step 4A: Fallback to Courier's Primary Preferred 3PL if assigned partner has no coverage
   const courierPreferred = activePartners.find(p => p.is_preferred);
   if (courierPreferred) {
     const coverage = check3PLPartnerCoverage(courierPreferred, canonicalCity);
@@ -683,40 +785,53 @@ export function evaluateLogisticsRouting({
       const codeRes = resolve3PLCityCode(courierPreferred.provider_code, canonicalCity, courierPreferred.city_mappings);
       return {
         fulfillmentType: '3PL',
+        subCategory: matchedZoneName,
+        is3PL: true,
         serviceType: `3PL Partner (${courierPreferred.name})`,
         scenario: 3,
         partner: courierPreferred,
         partnerCityCode: codeRes.code,
-        message: `Destination outside 2PL. Routed via Courier's primary 3PL: ${courierPreferred.name}.`,
+        matchedZoneName,
+        message: assignedMeta?.partnerName 
+          ? `${assignedMeta.partnerName} has no service in ${canonicalCity}. Routed via Preferred 3PL: ${courierPreferred.name}.`
+          : `Destination outside 2PL (${matchedZoneName}). Routed via Preferred 3PL: ${courierPreferred.name}.`,
         allowed: true
       };
     }
   }
 
-  // Scenario 4: Check other active configured 3PLs for coverage
+  // Step 4B: Check other active configured 3PLs one by one
   for (const altPartner of activePartners) {
     if (courierPreferred && String(altPartner.id) === String(courierPreferred.id)) continue;
+    if (assignedMeta && String(altPartner.id) === String(assignedMeta.partnerId)) continue;
+
     const coverage = check3PLPartnerCoverage(altPartner, canonicalCity);
     if (coverage.covers) {
       const codeRes = resolve3PLCityCode(altPartner.provider_code, canonicalCity, altPartner.city_mappings);
       return {
         fulfillmentType: '3PL',
+        subCategory: matchedZoneName,
+        is3PL: true,
         serviceType: `3PL Partner (${altPartner.name})`,
         scenario: 4,
         partner: altPartner,
         partnerCityCode: codeRes.code,
-        message: `Routed via Alternate 3PL partner: ${altPartner.name}.`,
+        matchedZoneName,
+        message: `Routed via Alternate 3PL partner covering ${canonicalCity}: ${altPartner.name}.`,
         allowed: true
       };
     }
   }
 
-  // Scenario 5: NO configured 3PL covers the area
+  // Step 4C: NO configured 3PL partner covers this area -> reject booking
   return {
     fulfillmentType: '3PL',
+    subCategory: matchedZoneName,
+    is3PL: true,
     serviceType: 'None',
     scenario: 5,
     partner: null,
+    matchedZoneName,
     message: "Sorry, we don't have delivery service in that area.",
     allowed: false
   };

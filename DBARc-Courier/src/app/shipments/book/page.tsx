@@ -461,6 +461,7 @@ function BookShipmentForm() {
   const [courierSelfServiceCities, setCourierSelfServiceCities] = React.useState<string[]>([]);
   const [courierTplPartners, setCourierTplPartners] = React.useState<TPLPartnerModel[]>([]);
   const [shipperPreferredTplId, setShipperPreferredTplId] = React.useState<string | number | null>(null);
+  const [zone3plAssignments, setZone3plAssignments] = React.useState<Record<string, any>>({});
 
   // Fetch courier 2PL self-service areas and configured 3PL partners
   React.useEffect(() => {
@@ -518,6 +519,37 @@ function BookShipmentForm() {
         } catch {}
       }
     }
+
+    // 4. Load zone 3PL assignments
+    let localZoneMap: any = {};
+    const savedZoneMap = localStorage.getItem(`zone_3pl_assignments_${tenantId}`);
+    if (savedZoneMap) {
+      try {
+        localZoneMap = JSON.parse(savedZoneMap);
+        setZone3plAssignments(localZoneMap);
+      } catch {}
+    }
+
+    apiClient.get('/region-coverage-rules?populate=*', {
+      params: { filters: { tenant: tenantId } }
+    }).then(res => {
+      const rules = res.data?.data || [];
+      const loaded: Record<string, any> = { ...localZoneMap };
+      for (const rule of rules) {
+        const attrs = rule.attributes || rule;
+        const regionName = attrs.region?.data?.attributes?.name || attrs.region?.name;
+        const partner = attrs.preferred_tpl_partner?.data || attrs.preferred_tpl_partner;
+        if (regionName && partner) {
+          const pAttrs = partner.attributes || partner;
+          loaded[regionName] = {
+            partnerId: partner.id,
+            partnerName: pAttrs.name || '3PL Partner',
+            providerCode: pAttrs.provider_code || '3pl'
+          };
+        }
+      }
+      setZone3plAssignments(loaded);
+    }).catch(() => null);
   }, [user]);
 
   // Fetch configured zones (tenant-specific or global defaults)
@@ -784,17 +816,20 @@ function BookShipmentForm() {
     }
   }, [pricing.total, paymentType, setValue]);
 
-  // Dynamic 5-scenario 2PL vs 3PL Routing Calculation
+  // Dynamic 4-step 2PL vs 3PL Routing Calculation
   const logisticsRouting = React.useMemo(() => {
     const dest = destinationCityName || destinationCityId;
     if (!dest) return null;
     return evaluateLogisticsRouting({
+      sourceCity: sourceCityName,
       destinationCity: dest,
       selfServiceCities: courierSelfServiceCities,
+      configuredZones,
+      zone3plAssignments,
       shipperPreferredTplId,
       courierTplPartners,
     });
-  }, [destinationCityName, destinationCityId, courierSelfServiceCities, shipperPreferredTplId, courierTplPartners]);
+  }, [sourceCityName, destinationCityName, destinationCityId, courierSelfServiceCities, configuredZones, zone3plAssignments, shipperPreferredTplId, courierTplPartners]);
 
   // Search Reference Order
   React.useEffect(() => {
@@ -886,7 +921,7 @@ function BookShipmentForm() {
           comments: data.comments || data.productDescription || '',
           shipper: shipperId || null,
           origin_office: originOfficeId,
-          is_3pl: (logisticsRouting?.fulfillmentType as string) === '3PL' || (logisticsRouting?.fulfillmentType as string) === '3PL Partner',
+          is_3pl: Boolean(logisticsRouting?.is3PL),
         }
       });
 
@@ -1757,7 +1792,10 @@ function BookShipmentForm() {
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                                 : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                             }`}>
-                              {logisticsRouting.fulfillmentType} Active
+                              {logisticsRouting.fulfillmentType === '2PL' 
+                                ? `2PL: ${logisticsRouting.subCategory || 'In-House'}`
+                                : `3PL: ${logisticsRouting.matchedZoneName || 'Partner'}`
+                              }
                             </span>
                           </div>
                         )}

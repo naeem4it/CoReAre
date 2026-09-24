@@ -673,8 +673,14 @@ export default function OperationsManifestationPage() {
     const dest = getDestinationLocation(p);
     if (!dest || dest === 'Destination' || dest === 'Dest') return false;
     const normDest = dest.trim().toLowerCase();
+    const origin = (p.source_city || p.origin_city || '').trim().toLowerCase();
 
-    // 3. Dynamic check against courier offices loaded from database
+    // Within City check (Origin == Destination is 2PL)
+    if (origin && normDest && (origin === normDest || origin.includes(normDest) || normDest.includes(origin))) {
+      return false;
+    }
+
+    // 3. Dynamic check against courier offices loaded from database (Home Zone is 2PL)
     if (offices && offices.length > 0) {
       const hasCourierOffice = offices.some((o: any) => {
         const oCity = (o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '').trim().toLowerCase();
