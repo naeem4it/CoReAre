@@ -52,6 +52,8 @@ interface ArrivalItem {
   weight: number;
   codAmount: number;
   status: string;
+  is3PL?: boolean;
+  tplServiceName?: string | undefined;
   arrivedAt: string;
 }
 
@@ -87,7 +89,7 @@ const playScannerBeep = (type: 'success' | 'error' = 'success') => {
 };
 
 export default function OperationsArrivalsPage() {
-  const { user } = useAuth();
+  const { user, activeOfficeId } = useAuth();
   const [arrivalId, setArrivalId] = React.useState<string>(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
   
   // Arrival Type / Stage: Origin Warehouse or Destination Warehouse
@@ -98,6 +100,7 @@ export default function OperationsArrivalsPage() {
   const [offices, setOffices] = React.useState<any[]>([]);
   const [riders, setRiders] = React.useState<any[]>([]);
   const [selectedRiderId, setSelectedRiderId] = React.useState<string>('all');
+  const [tplPartners, setTplPartners] = React.useState<any[]>([]);
 
   // Active Tab: Expected vs. Physically Received
   const [activeTab, setActiveTab] = React.useState<'received' | 'expected'>('received');
@@ -145,6 +148,218 @@ export default function OperationsArrivalsPage() {
 
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Helper to determine the Hub location where the system is currently operated
+  const getCurrentHubLocation = React.useCallback((parcel?: any): string => {
+    // 1. If user specifically selected a Warehouse/Office in the dropdown on this page
+    if (selectedOfficeId && selectedOfficeId !== 'all') {
+      const selected = offices.find(o => String(o.id) === String(selectedOfficeId));
+      if (selected) {
+        const cityName = selected.city?.CityName || selected.city?.name;
+        if (cityName) return cityName;
+        if (selected.name) {
+          const cleaned = selected.name.replace(/(Head Office|Office|Hub|Warehouse)/gi, '').trim();
+          if (cleaned) return cleaned;
+          return selected.name;
+        }
+      }
+    }
+
+    // 2. Active office from Auth Context or activeOfficeId in localStorage
+    const currentActiveOfficeId = activeOfficeId || (typeof window !== 'undefined' ? Number(localStorage.getItem('activeOfficeId')) : null);
+    if (currentActiveOfficeId) {
+      const activeOffice = offices.find(o => Number(o.id) === Number(currentActiveOfficeId)) ||
+        (Array.isArray(user?.offices) ? user.offices.find((o: any) => Number(o.id) === Number(currentActiveOfficeId)) : null);
+      if (activeOffice) {
+        const cityName = activeOffice.city?.CityName || activeOffice.city?.name;
+        if (cityName) return cityName;
+        if (activeOffice.name) {
+          const cleaned = activeOffice.name.replace(/(Head Office|Office|Hub|Warehouse)/gi, '').trim();
+          if (cleaned) return cleaned;
+          return activeOffice.name;
+        }
+      }
+    }
+
+    // 3. First user assigned office
+    if (Array.isArray(user?.offices) && user.offices.length > 0) {
+      const uOffice = user.offices[0];
+      const cityName = uOffice.city?.CityName || uOffice.city?.name;
+      if (cityName) return cityName;
+      if (uOffice.name) {
+        const cleaned = uOffice.name.replace(/(Head Office|Office|Hub|Warehouse)/gi, '').trim();
+        if (cleaned) return cleaned;
+        return uOffice.name;
+      }
+    }
+
+    // 4. Parcel's own origin office or source city if present
+    if (parcel) {
+      const pSource = parcel.source_city?.CityName || parcel.source_city?.name;
+      if (pSource && pSource !== 'Origin') return pSource;
+      const pOriginOff = parcel.origin_office?.city?.CityName || parcel.origin_office?.city?.name;
+      if (pOriginOff) return pOriginOff;
+      if (parcel.origin_office?.name) {
+        const cleaned = parcel.origin_office.name.replace(/(Head Office|Office|Hub|Warehouse)/gi, '').trim();
+        if (cleaned) return cleaned;
+        return parcel.origin_office.name;
+      }
+    }
+
+    // 5. First office loaded in the system for this courier tenant
+    if (offices && offices.length > 0) {
+      const primaryOffice = offices[0];
+      const cityName = primaryOffice.city?.CityName || primaryOffice.city?.name;
+      if (cityName) return cityName;
+      if (primaryOffice.name) {
+        const cleaned = primaryOffice.name.replace(/(Head Office|Office|Hub|Warehouse)/gi, '').trim();
+        if (cleaned) return cleaned;
+        return primaryOffice.name;
+      }
+    }
+
+    return 'Origin Hub';
+  }, [selectedOfficeId, offices, activeOfficeId, user]);
+
+  // Helper to resolve destination city/location from parcel or order data
+  const getDestinationLocation = React.useCallback((parcel: any): string => {
+    if (!parcel) return 'Dest';
+
+    // 1. Relational destination city
+    const destCity = parcel.destination_city?.CityName || parcel.destination_city?.name || parcel.destination_city?.city_name;
+    if (destCity && typeof destCity === 'string' && destCity.trim() && destCity.trim().toLowerCase() !== 'dest') {
+      return destCity.trim();
+    }
+
+    // 2. Direct destination field
+    if (parcel.destination && typeof parcel.destination === 'string' && parcel.destination.trim() && parcel.destination.trim().toLowerCase() !== 'dest') {
+      return parcel.destination.trim();
+    }
+
+    // 3. Courier city
+    const courierCity = parcel.courier_city?.CityName || parcel.courier_city?.name;
+    if (courierCity && typeof courierCity === 'string' && courierCity.trim()) {
+      return courierCity.trim();
+    }
+
+    // 4. Extract from recipient_address (e.g., "House 123 Street 4 Block B20, Sailkot" => "Sailkot")
+    const addr = parcel.recipient_address || parcel.consigneeAddress || parcel.delivery_address || '';
+    if (addr && typeof addr === 'string') {
+      const parts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.toLowerCase() !== 'pakistan') {
+          return lastPart;
+        } else if (parts.length > 1) {
+          return parts[parts.length - 2];
+        }
+      }
+    }
+
+    return 'Dest';
+  }, []);
+
+  // Helper to resolve whether a shipment is 2PL or 3PL dynamically based on database records
+  const getShipmentType = React.useCallback((p: any): '2PL' | '3PL' => {
+    if (!p) return '2PL';
+
+    // 1. Check parcel's explicit data attributes in database
+    if (
+      p.is_3pl === true || 
+      p.is_3pl === 'true' || 
+      p.is_3pl === 1 || 
+      p.fulfillment_type === '3PL' ||
+      p.service_provider === '3PL' ||
+      (p.courier && p.courier?.name && p.courier.name !== 'IN-HOUSE' && p.courier.name !== '2PL')
+    ) {
+      return '3PL';
+    }
+
+    if (
+      p.is_3pl === false || 
+      p.is_3pl === 'false' || 
+      p.is_3pl === 0 || 
+      p.fulfillment_type === '2PL' ||
+      p.service_provider === 'IN-HOUSE' ||
+      p.service_provider === '2PL'
+    ) {
+      return '2PL';
+    }
+
+    // 2. Resolve destination location from parcel data
+    const dest = getDestinationLocation(p);
+    if (!dest || dest === 'Dest') {
+      return '2PL';
+    }
+
+    const normDest = dest.trim().toLowerCase();
+
+    // 3. Dynamic check against courier's active office/hub coverage in the database
+    if (offices && offices.length > 0) {
+      const hasCourierOffice = offices.some((o: any) => {
+        // City relation or city string from database
+        const oCity = (o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '').trim().toLowerCase();
+        if (oCity && (normDest === oCity || normDest.includes(oCity) || oCity.includes(normDest))) {
+          return true;
+        }
+
+        // Office branch name (e.g. "Lahore Hub", "Karachi Central Hub", "Lahore Raiwind Office")
+        const oName = (o.name || '').replace(/(Head Office|Office|Hub|Warehouse|Central)/gi, '').trim().toLowerCase();
+        if (oName && (normDest === oName || normDest.includes(oName) || oName.includes(normDest))) {
+          return true;
+        }
+
+        return false;
+      });
+
+      return hasCourierOffice ? '2PL' : '3PL';
+    }
+
+    return '2PL';
+  }, [getDestinationLocation, offices]);
+
+  // Helper to resolve 3PL service/partner name (e.g. "TRAX Logistics", "Leopards Courier", "TCS")
+  const get3PLServiceName = React.useCallback((p: any): string => {
+    if (!p) return 'Partner';
+
+    // 1. Direct courier relation or name
+    const courierObj = p.courier?.data?.attributes || p.courier?.data || p.courier;
+    const cName = courierObj?.name || (typeof p.courier === 'string' ? p.courier : '');
+    if (cName && cName !== 'IN-HOUSE' && cName !== '2PL') {
+      return cName.replace(/\(Sandbox\)/gi, '').trim();
+    }
+
+    // 2. Explicit provider field
+    if (p.service_provider && p.service_provider !== '3PL' && p.service_provider !== '2PL') {
+      return p.service_provider.replace(/\(Sandbox\)/gi, '').trim();
+    }
+    if (p.tpl_provider) {
+      return p.tpl_provider.replace(/\(Sandbox\)/gi, '').trim();
+    }
+    const partnerObj = p.tpl_partner?.data?.attributes || p.tpl_partner?.data || p.tpl_partner;
+    if (partnerObj?.name) {
+      return partnerObj.name.replace(/\(Sandbox\)/gi, '').trim();
+    }
+
+    // 3. Extract from comments if e.g. "Dispatched to 3PL: TRAX Logistics (Sandbox)..."
+    if (p.comments && typeof p.comments === 'string' && p.comments.includes('3PL:')) {
+      const match = p.comments.match(/3PL:\s*([^(]+)/);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    // 4. Preferred or first TPL partner configured in database
+    if (tplPartners && tplPartners.length > 0) {
+      const preferred = tplPartners.find((tp: any) => tp.is_preferred) || tplPartners[0];
+      const partnerName = preferred?.name || preferred?.attributes?.name;
+      if (partnerName) {
+        return partnerName.replace(/\(Sandbox\)/gi, '').trim();
+      }
+    }
+
+    return 'TRAX Logistics';
+  }, [tplPartners]);
+
   // Fetch offices and active riders strictly isolated to the current tenant
   React.useEffect(() => {
     const fetchMetadata = async () => {
@@ -157,7 +372,7 @@ export default function OperationsArrivalsPage() {
           filters.tenant = tenantId;
         }
 
-        const [ridersRes, officesRes] = await Promise.allSettled([
+        const [ridersRes, officesRes, tplRes] = await Promise.allSettled([
           RiderService.getAll(`?filters[status][$ne]=inactive${tenantId ? `&filters[tenant][$eq]=${tenantId}` : ''}&pagination[pageSize]=100`),
           apiClient.get('/offices', {
             params: {
@@ -165,11 +380,15 @@ export default function OperationsArrivalsPage() {
               populate: ['city', 'tenant'],
               pagination: { limit: 100 }
             }
-          })
+          }),
+          apiClient.get('/tpl-partners')
         ]);
         
         if (ridersRes.status === 'fulfilled') {
           setRiders(ridersRes.value.data || []);
+        }
+        if (tplRes.status === 'fulfilled') {
+          setTplPartners(tplRes.value.data?.data || []);
         }
         if (officesRes.status === 'fulfilled') {
           const rawOffices = officesRes.value.data?.data || [];
@@ -180,7 +399,13 @@ export default function OperationsArrivalsPage() {
             return offTenantId ? Number(offTenantId) === Number(tenantId) : true;
           });
           setOffices(tenantOffices);
-          setSelectedOfficeId('all');
+          const storedOfficeId = typeof window !== 'undefined' ? localStorage.getItem('activeOfficeId') : null;
+          const targetOfficeId = activeOfficeId ? String(activeOfficeId) : (storedOfficeId ? String(storedOfficeId) : null);
+          if (targetOfficeId && tenantOffices.some((o: any) => String(o.id) === targetOfficeId)) {
+            setSelectedOfficeId(targetOfficeId);
+          } else {
+            setSelectedOfficeId('all');
+          }
         }
       } catch (err) {
         console.warn('Could not load offices/riders:', err);
@@ -268,7 +493,7 @@ export default function OperationsArrivalsPage() {
           return false;
         } else {
           // Destination warehouse: check destination city
-          const dest = p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '');
+          const dest = getDestinationLocation(p);
           if (officeCity && dest && dest.toLowerCase() === officeCity.toLowerCase()) return true;
           return true;
         }
@@ -411,20 +636,27 @@ export default function OperationsArrivalsPage() {
         : (foundParcel.rider?.name || foundParcel.rider?.username || '-');
 
       // Add to physically received list with the order's exact pieces & weight
+      const hubLocation = getCurrentHubLocation(foundParcel);
+      const destLocation = getDestinationLocation(foundParcel);
+      const is3PL = getShipmentType(foundParcel) === '3PL';
+      const tplServiceName = is3PL ? get3PLServiceName(foundParcel) : undefined;
+
       const newItem: ArrivalItem = {
         id: foundParcel.id.toString(),
         documentId: targetIdentifier,
         shipmentNumber: tracking,
         recipientName: foundParcel.recipient_name || 'Customer',
         consigneeName: foundParcel.recipient_name || 'Customer',
-        originCity: foundParcel.source_city?.CityName || foundParcel.source_city?.name || 'Origin',
-        destinationCity: foundParcel.destination_city?.CityName || foundParcel.destination_city?.name || 'Destination',
+        originCity: hubLocation,
+        destinationCity: destLocation,
         shipperName: foundParcel.shipper?.name || 'Shipper',
         riderName: riderDisplayName,
         pieces: orderPieces,
         weight: orderWeight,
         codAmount: foundParcel.cod_amount || 0,
         status: targetStatus,
+        is3PL,
+        tplServiceName,
         arrivedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       };
 
@@ -1021,7 +1253,9 @@ export default function OperationsArrivalsPage() {
                     <tr>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
-                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Consignee & Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipper / Consignee</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Rider</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">COD (PKR)</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
@@ -1032,56 +1266,75 @@ export default function OperationsArrivalsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {receivedShipments.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={10} className="px-6 py-12 text-center text-slate-400 font-medium">
                           No shipments received yet in this batch. Scan tracking barcode or receive from Expected queue below.
                         </td>
                       </tr>
                     ) : (
-                      receivedShipments.map((item, idx) => (
-                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-5 py-3.5 text-xs font-bold text-slate-400">{idx + 1}</td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-sm font-bold font-mono text-primary">{item.shipmentNumber}</span>
-                            <span className="block text-[10px] text-slate-400 font-mono">Scanned at {item.arrivedAt}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs font-bold text-slate-800">{item.consigneeName}</span>
-                            <span className="block text-[11px] text-slate-500">{item.originCity} &rarr; {item.destinationCity}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            {item.riderName && item.riderName !== '-' && item.riderName !== 'Rider' ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
-                                  <Truck className="w-3 h-3 text-indigo-600" />
-                                </span>
-                                <span className="text-xs font-bold text-slate-800">{item.riderName}</span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400 italic">Unassigned</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
-                            PKR {item.codAmount?.toLocaleString() || 0}
-                          </td>
-                          <td className="px-5 py-3.5 text-xs font-semibold text-slate-700">
-                            {item.pieces} pc • {item.weight} kg
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3" /> {item.status}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5 text-right">
-                            <button
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Remove from current batch"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      receivedShipments.map((item, idx) => {
+                        const originHub = item.originCity || getCurrentHubLocation();
+                        const destCity = item.destinationCity || 'Dest';
+                        const is3PL = Boolean(item.is3PL);
+                        const serviceName = item.tplServiceName || (is3PL ? get3PLServiceName(item) : '');
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-400">{idx + 1}</td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-bold font-mono text-primary">{item.shipmentNumber}</span>
+                              <span className="block text-[10px] text-slate-400 font-mono">Scanned at {item.arrivedAt}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-xs font-bold text-slate-800">{item.shipperName || 'Shipper'}</span>
+                              <span className="block text-[11px] text-slate-500">&rarr; {item.consigneeName || item.recipientName || 'Customer'}</span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-medium text-slate-700">
+                              <span className="font-semibold text-slate-800">{originHub}</span> &rarr; <span className="font-semibold text-slate-800">{destCity}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                                is3PL
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {is3PL ? `3PL (${serviceName})` : '2PL'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              {item.riderName && item.riderName !== '-' && item.riderName !== 'Rider' ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+                                    <Truck className="w-3 h-3 text-indigo-600" />
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-800">{item.riderName}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">Unassigned</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-900">
+                              PKR {item.codAmount?.toLocaleString() || 0}
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-semibold text-slate-700">
+                              {item.pieces} pc • {item.weight} kg
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3" /> {item.status}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-right">
+                              <button
+                                onClick={() => handleRemoveItem(item.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Remove from current batch"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -1115,6 +1368,7 @@ export default function OperationsArrivalsPage() {
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Tracking #</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Shipper / Consignee</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Route</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Rider</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Current Status</th>
                       <th className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Pcs • Wt</th>
@@ -1124,19 +1378,24 @@ export default function OperationsArrivalsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {isLoadingExpected ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                           Loading expected shipments...
                         </td>
                       </tr>
                     ) : expectedShipments.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                           No pending expected shipments for this warehouse. All dispatched cargo has been physically arrived!
                         </td>
                       </tr>
                     ) : (
                       expectedShipments.map((p) => {
                         const isNotArrived = normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.NOT_ARRIVED;
+                        const originHub = getCurrentHubLocation(p);
+                        const destCity = getDestinationLocation(p);
+                        const is3PL = getShipmentType(p) === '3PL';
+                        const serviceName = is3PL ? get3PLServiceName(p) : '';
+
                         return (
                           <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-5 py-3.5">
@@ -1147,7 +1406,16 @@ export default function OperationsArrivalsPage() {
                               <span className="block text-[11px] text-slate-500">&rarr; {p.recipient_name || 'Customer'}</span>
                             </td>
                             <td className="px-5 py-3.5 text-xs font-medium text-slate-700">
-                              {(p.source_city?.CityName || p.source_city?.name || 'Origin')} &rarr; {(p.destination_city?.CityName || p.destination_city?.name || 'Dest')}
+                              <span className="font-semibold text-slate-800">{originHub}</span> &rarr; <span className="font-semibold text-slate-800">{destCity}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                                is3PL
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {is3PL ? `3PL (${serviceName})` : '2PL'}
+                              </span>
                             </td>
                             <td className="px-5 py-3.5">
                               {p.rider?.name ? (
@@ -1448,6 +1716,7 @@ export default function OperationsArrivalsPage() {
                                           <th className="px-3 py-2.5">#</th>
                                           <th className="px-3 py-2.5">Tracking #</th>
                                           <th className="px-3 py-2.5">Consignee & Route</th>
+                                          <th className="px-3 py-2.5">Type</th>
                                           <th className="px-3 py-2.5">Pcs • Wt</th>
                                           <th className="px-3 py-2.5">COD (PKR)</th>
                                           <th className="px-3 py-2.5">Status</th>
@@ -1457,8 +1726,10 @@ export default function OperationsArrivalsPage() {
                                         {batch.scanned_items.map((item: any, pIdx: number) => {
                                           const trackingNum = item.shipmentNumber || item.tracking_number || item.attributes?.tracking_number || String(item.id || pIdx + 1);
                                           const consignee = item.consigneeName || item.recipientName || item.recipient_name || 'Customer';
-                                          const orig = item.originCity || item.source_city?.CityName || item.source_city?.name || 'Origin';
-                                          const dest = item.destinationCity || item.destination_city?.CityName || item.destination_city?.name || 'Destination';
+                                          const orig = item.originCity || getCurrentHubLocation(item);
+                                          const dest = item.destinationCity || getDestinationLocation(item);
+                                          const is3PL = item.is3PL !== undefined ? Boolean(item.is3PL) : (getShipmentType(item) === '3PL');
+                                          const serviceName = item.tplServiceName || (is3PL ? get3PLServiceName(item) : '');
                                           const pcs = item.pieces || 1;
                                           const wt = item.weight || 0.8;
                                           const cod = item.codAmount || item.cod_amount || 0;
@@ -1486,6 +1757,15 @@ export default function OperationsArrivalsPage() {
                                               <td className="px-3 py-2">
                                                 <span className="font-bold text-slate-900 block">{consignee}</span>
                                                 <span className="text-[10px] text-slate-400 block">{orig} &rarr; {dest}</span>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                  is3PL
+                                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                }`}>
+                                                  {is3PL ? `3PL (${serviceName})` : '2PL'}
+                                                </span>
                                               </td>
                                               <td className="px-3 py-2 text-slate-600">
                                                 {pcs} pc • {wt} kg

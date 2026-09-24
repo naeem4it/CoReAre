@@ -55,10 +55,26 @@ interface ManifestShipment {
   consigneeContact: string;
   consigneeAddress: string;
   destinationCity: string;
+  destinationStation?: string;
+  is3PL?: boolean;
   pieces?: number;
   weight?: number;
   cashCollect: number;
   status: string;
+}
+
+interface ManifestGroup {
+  key: string;
+  destinationCity: string;
+  destinationStation: string;
+  manifestNumber: number;
+  sealNo: string;
+  is3PL: boolean;
+  tplPartnerName?: string;
+  shipments: ManifestShipment[];
+  totalCash: number;
+  totalPieces: number;
+  totalWeight: number;
 }
 
 export default function OperationsManifestationPage() {
@@ -373,6 +389,161 @@ export default function OperationsManifestationPage() {
 
   const [shipments, setShipments] = React.useState<ManifestShipment[]>([]);
 
+  // Active 3PL Partner and its available hubs
+  const currentTplPartner = React.useMemo(() => {
+    return tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId) || tplPartners[0];
+  }, [tplPartners, selectedTplPartnerId]);
+
+  const currentTplHubs = React.useMemo(() => {
+    return currentTplPartner?.hubs || [
+      `${currentTplPartner?.name || '3PL'} - Lahore Hub`,
+      `${currentTplPartner?.name || '3PL'} - Karachi Hub`,
+      `${currentTplPartner?.name || '3PL'} - Islamabad Hub`,
+      `${currentTplPartner?.name || '3PL'} - Faisalabad Hub`,
+      `${currentTplPartner?.name || '3PL'} - Multan Hub`,
+      `${currentTplPartner?.name || '3PL'} - Peshawar Hub`
+    ];
+  }, [currentTplPartner]);
+
+  // Helper to resolve destination city/location from parcel or order data
+  const getDestinationLocation = React.useCallback((parcel: any): string => {
+    if (!parcel) return 'Destination';
+
+    // 1. Relational destination city
+    const destCity = parcel.destination_city?.CityName || parcel.destination_city?.name || parcel.destination_city?.city_name;
+    if (destCity && typeof destCity === 'string' && destCity.trim() && destCity.trim().toLowerCase() !== 'destination' && destCity.trim().toLowerCase() !== 'dest') {
+      return destCity.trim();
+    }
+
+    // 2. Direct destination field
+    if (parcel.destination && typeof parcel.destination === 'string' && parcel.destination.trim() && parcel.destination.trim().toLowerCase() !== 'destination' && parcel.destination.trim().toLowerCase() !== 'dest') {
+      return parcel.destination.trim();
+    }
+
+    // 3. Courier city
+    const courierCity = parcel.courier_city?.CityName || parcel.courier_city?.name;
+    if (courierCity && typeof courierCity === 'string' && courierCity.trim()) {
+      return courierCity.trim();
+    }
+
+    // 4. Extract from recipient_address (e.g., "House 123 Street 4 Block B20, Sailkot" => "Sailkot")
+    const addr = parcel.recipient_address || parcel.consigneeAddress || parcel.delivery_address || '';
+    if (addr && typeof addr === 'string') {
+      const parts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.toLowerCase() !== 'pakistan') {
+          return lastPart;
+        } else if (parts.length > 1) {
+          return parts[parts.length - 2];
+        }
+      }
+    }
+
+    return 'Destination';
+  }, []);
+
+  // Helper to resolve appropriate Station / Hub for a destination city
+  const getStationForDestination = React.useCallback((destCity: string, is3PLMode: boolean, defaultStationVal?: string): string => {
+    if (is3PLMode) {
+      if (currentTplHubs && currentTplHubs.length > 0) {
+        const matched = currentTplHubs.find((h: string) => h.toLowerCase().includes(destCity.toLowerCase()));
+        if (matched) return matched;
+      }
+      return `${currentTplPartner?.name || 'TRAX'} - ${destCity} Hub`;
+    }
+
+    // 2PL Station: check tenant offices
+    const matchedOffice = offices.find((o: any) => {
+      const oCity = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '';
+      const oName = (o.name || '').toLowerCase();
+      const dLower = destCity.toLowerCase();
+      return (oCity && oCity.toLowerCase() === dLower) || oName.includes(dLower);
+    });
+
+    if (matchedOffice) {
+      const cityName = matchedOffice.city?.CityName || matchedOffice.city?.name || (typeof matchedOffice.city === 'string' ? matchedOffice.city : '') || '';
+      return `${matchedOffice.name || `Office #${matchedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
+    }
+
+    if (defaultStationVal && defaultStationVal.toLowerCase().includes(destCity.toLowerCase())) {
+      return defaultStationVal;
+    }
+
+    return `${destCity} Hub`;
+  }, [currentTplHubs, currentTplPartner, offices]);
+
+  // Distinct destinations detected in current manifest shipments list
+  const distinctDestinations = React.useMemo(() => {
+    const set = new Set(shipments.map(s => s.destinationCity).filter(Boolean));
+    return Array.from(set);
+  }, [shipments]);
+
+  // Dynamic Manifest Partitioning by Destination with Auto-Assigned Manifest Numbers
+  const manifestGroups = React.useMemo<ManifestGroup[]>(() => {
+    if (shipments.length === 0) return [];
+
+    const map = new Map<string, ManifestShipment[]>();
+    for (const s of shipments) {
+      const city = (s.destinationCity && s.destinationCity.trim() && s.destinationCity.trim().toLowerCase() !== 'destination')
+        ? s.destinationCity.trim()
+        : 'Default Destination';
+      const is3PL = manifestType === '3PL Partner' || Boolean(s.is3PL);
+      const groupKey = `${city}:::${is3PL ? '3PL' : '2PL'}`;
+      if (!map.has(groupKey)) {
+        map.set(groupKey, []);
+      }
+      map.get(groupKey)!.push(s);
+    }
+
+    const activePartner = tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId);
+    const defaultPartnerName = activePartner?.name || 'TRAX Logistics';
+
+    const result: ManifestGroup[] = [];
+    const baseNum = Number(manifestNumber) || 1001;
+    let idx = 0;
+
+    map.forEach((groupShipments, groupKey) => {
+      const [destCity, typeStr] = groupKey.split(':::');
+      const is3PL = typeStr === '3PL';
+      const autoAssignedNum = baseNum + idx;
+
+      // Extract numeric portion from sealNo if present to generate sequential seals
+      const baseSealDigits = parseInt((sealNo || '').replace(/\D/g, ''), 10);
+      const groupSealNo = idx === 0 && sealNo.trim() 
+        ? sealNo.trim() 
+        : (!isNaN(baseSealDigits) ? `SL-${baseSealDigits + idx}` : `SL-${Math.floor(10000 + Math.random() * 90000)}`);
+
+      const destStation = getStationForDestination(
+        destCity,
+        is3PL,
+        is3PL ? selectedTplHub : selectedStation
+      );
+
+      const totalCash = groupShipments.reduce((acc, curr) => acc + curr.cashCollect, 0);
+      const totalPieces = groupShipments.reduce((acc, curr) => acc + (curr.pieces || 1), 0);
+      const totalWeight = groupShipments.reduce((acc, curr) => acc + (curr.weight || 0.8), 0);
+
+      result.push({
+        key: groupKey,
+        destinationCity: destCity,
+        destinationStation: destStation,
+        manifestNumber: autoAssignedNum,
+        sealNo: groupSealNo,
+        is3PL,
+        tplPartnerName: is3PL ? defaultPartnerName : undefined,
+        shipments: groupShipments,
+        totalCash,
+        totalPieces,
+        totalWeight,
+      });
+
+      idx++;
+    });
+
+    return result;
+  }, [shipments, manifestNumber, manifestType, sealNo, selectedStation, selectedTplHub, selectedTplPartnerId, tplPartners, getStationForDestination]);
+
   const barcodeInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAddShipment = async (e?: React.FormEvent) => {
@@ -416,6 +587,10 @@ export default function OperationsManifestationPage() {
         console.warn('Could not update status to In Transit immediately:', putErr);
       }
 
+      const is3PL = isParcel3PL(parcel);
+      const destCity = getDestinationLocation(parcel);
+      const destStation = getStationForDestination(destCity, is3PL, is3PL ? selectedTplHub : selectedStation);
+
       const newItem: ManifestShipment = {
         id: Date.now().toString(),
         parcelId: targetId,
@@ -426,7 +601,9 @@ export default function OperationsManifestationPage() {
         consigneeName: parcel.recipient_name || 'Unknown Consignee',
         consigneeContact: parcel.recipient_phone || '',
         consigneeAddress: parcel.recipient_address || '',
-        destinationCity: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
+        destinationCity: destCity,
+        destinationStation: destStation,
+        is3PL,
         pieces: parcel.pieces || 1,
         weight: parcel.weight || 0.8,
         cashCollect: Number(parcel.cod_amount) || 0,
@@ -434,7 +611,7 @@ export default function OperationsManifestationPage() {
       };
 
       setShipments(prev => [newItem, ...prev]);
-      triggerToast(`Added #${code} to manifest. Status updated to "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
+      triggerToast(`Added #${code} to manifest (${destCity}). Status updated to "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
       setScanBarcode('');
       barcodeInputRef.current?.focus();
     } catch (err: any) {
@@ -467,10 +644,55 @@ export default function OperationsManifestationPage() {
     return getPartnerHubs(modalCurrentTplPartner);
   }, [modalCurrentTplPartner, getPartnerHubs]);
 
-  // Helper to test if a parcel is 3PL vs 2PL
+  // Helper to test if a parcel is 3PL vs 2PL purely based on database records
   const isParcel3PL = React.useCallback((p: any) => {
-    return Boolean(p.is_3pl) || p.is_3pl === 'true' || p.service_provider === '3PL' || (p.courier && p.courier?.name && p.courier.name !== 'IN-HOUSE' && p.courier.name !== '2PL');
-  }, []);
+    // 1. Explicit database attributes on parcel
+    if (
+      p.is_3pl === true || 
+      p.is_3pl === 'true' || 
+      p.is_3pl === 1 || 
+      p.fulfillment_type === '3PL' || 
+      p.service_provider === '3PL' || 
+      (p.courier && p.courier?.name && p.courier.name !== 'IN-HOUSE' && p.courier.name !== '2PL')
+    ) {
+      return true;
+    }
+
+    if (
+      p.is_3pl === false || 
+      p.is_3pl === 'false' || 
+      p.is_3pl === 0 || 
+      p.fulfillment_type === '2PL' || 
+      p.service_provider === 'IN-HOUSE' ||
+      p.service_provider === '2PL'
+    ) {
+      return false;
+    }
+
+    // 2. Resolve destination from parcel data
+    const dest = getDestinationLocation(p);
+    if (!dest || dest === 'Destination' || dest === 'Dest') return false;
+    const normDest = dest.trim().toLowerCase();
+
+    // 3. Dynamic check against courier offices loaded from database
+    if (offices && offices.length > 0) {
+      const hasCourierOffice = offices.some((o: any) => {
+        const oCity = (o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '') || '').trim().toLowerCase();
+        if (oCity && (normDest === oCity || normDest.includes(oCity) || oCity.includes(normDest))) {
+          return true;
+        }
+        const oName = (o.name || '').replace(/(Head Office|Office|Hub|Warehouse|Central)/gi, '').trim().toLowerCase();
+        if (oName && (normDest === oName || normDest.includes(oName) || oName.includes(normDest))) {
+          return true;
+        }
+        return false;
+      });
+
+      return !hasCourierOffice;
+    }
+
+    return false;
+  }, [getDestinationLocation, offices]);
 
   // Filtered Arrivals in Modal by 2PL/3PL Linehaul Type, Destination Hub, and Search
   const filteredArrivalParcels = React.useMemo(() => {
@@ -494,8 +716,8 @@ export default function OperationsManifestationPage() {
           // Direct destination office relationship
           if (p.destination_office?.id && String(p.destination_office.id) === String(modalSelectedHubId)) return true;
           
-          // Match destination city
-          const destCity = p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || '';
+          // Match destination city using getDestinationLocation
+          const destCity = getDestinationLocation(p);
           if (officeCity && destCity && destCity.toLowerCase() === officeCity.toLowerCase()) return true;
 
           // Match recipient address mentioning city or office name
@@ -514,7 +736,7 @@ export default function OperationsManifestationPage() {
       if (modalSelectedTplHub && modalSelectedTplHub !== 'all') {
         const targetHubLower = modalSelectedTplHub.toLowerCase();
         list = list.filter(p => {
-          const destCity = (p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || '').toLowerCase();
+          const destCity = getDestinationLocation(p).toLowerCase();
           const addr = (p.recipient_address || '').toLowerCase();
           
           if (destCity && targetHubLower.includes(destCity)) return true;
@@ -534,13 +756,13 @@ export default function OperationsManifestationPage() {
         const trk = (p.tracking_number || '').toLowerCase();
         const ship = (p.shipper?.name || '').toLowerCase();
         const rec = (p.recipient_name || '').toLowerCase();
-        const dest = (p.destination_city?.CityName || p.destination_city?.name || '').toLowerCase();
+        const dest = getDestinationLocation(p).toLowerCase();
         return trk.includes(q) || ship.includes(q) || rec.includes(q) || dest.includes(q);
       });
     }
 
     return list;
-  }, [arrivalParcels, shipments, modalLinehaulType, isParcel3PL, modalSelectedHubId, offices, modalSelectedTplHub, arrivalsSearchQuery]);
+  }, [arrivalParcels, shipments, modalLinehaulType, isParcel3PL, modalSelectedHubId, offices, getDestinationLocation, modalSelectedTplHub, arrivalsSearchQuery]);
 
   // Checkbox toggle helpers
   const toggleSelectArrival = (id: string) => {
@@ -582,6 +804,10 @@ export default function OperationsManifestationPage() {
         console.warn('Could not update status for parcel:', putErr);
       }
 
+      const destCity = getDestinationLocation(parcel);
+      const is3PL = isParcel3PL(parcel);
+      const destStation = getStationForDestination(destCity, is3PL, selectedStation);
+
       newItems.push({
         id: (Date.now() + Math.random()).toString(),
         parcelId: targetId,
@@ -592,7 +818,9 @@ export default function OperationsManifestationPage() {
         consigneeName: parcel.recipient_name || 'Unknown Consignee',
         consigneeContact: parcel.recipient_phone || '',
         consigneeAddress: parcel.recipient_address || '',
-        destinationCity: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
+        destinationCity: destCity,
+        destinationStation: destStation,
+        is3PL,
         pieces: parcel.pieces || 1,
         weight: parcel.weight || 0.8,
         cashCollect: Number(parcel.cod_amount) || 0,
@@ -616,29 +844,22 @@ export default function OperationsManifestationPage() {
           setSelectedStation(label);
         }
       } else if (parcelsToAdd.length > 0) {
-        // If 'all' was selected, check if all added parcels share a destination office or destination city
+        // If 'all' was selected, set default destination station from first parcel
         const firstParcel = parcelsToAdd[0];
-        const destOffId = firstParcel.destination_office?.id;
-        const destCity = firstParcel.destination_city?.CityName || firstParcel.destination_city?.name || (typeof firstParcel.destination_city === 'string' ? firstParcel.destination_city : '');
-        
-        let matchedOffice = destOffId ? offices.find(o => String(o.id) === String(destOffId)) : null;
-        if (!matchedOffice && destCity) {
-          matchedOffice = offices.find(o => {
-            const oCity = o.city?.CityName || o.city?.name || (typeof o.city === 'string' ? o.city : '');
-            return oCity && oCity.toLowerCase() === destCity.toLowerCase();
-          });
-        }
-        if (matchedOffice) {
-          const cityName = matchedOffice.city?.CityName || matchedOffice.city?.name || (typeof matchedOffice.city === 'string' ? matchedOffice.city : '') || '';
-          const label = `${matchedOffice.name || `Office #${matchedOffice.id}`}${cityName ? ` (${cityName})` : ''}`;
-          setSelectedStation(label);
-        }
+        const destCity = getDestinationLocation(firstParcel);
+        const destStation = getStationForDestination(destCity, false, selectedStation);
+        setSelectedStation(destStation);
       }
     } else {
       setManifestType('3PL Partner');
       setSelectedTplPartnerId(modalSelectedTplPartnerId);
       if (modalSelectedTplHub && modalSelectedTplHub !== 'all') {
         setSelectedTplHub(modalSelectedTplHub);
+      } else if (parcelsToAdd.length > 0) {
+        const firstParcel = parcelsToAdd[0];
+        const destCity = getDestinationLocation(firstParcel);
+        const destStation = getStationForDestination(destCity, true, modalSelectedTplHub);
+        setSelectedTplHub(destStation);
       } else if (modalCurrentTplHubs.length > 0) {
         setSelectedTplHub(modalCurrentTplHubs[0]);
       }
@@ -649,65 +870,103 @@ export default function OperationsManifestationPage() {
   };
 
   const handleSave = async () => {
-    if (shipments.length === 0) {
+    if (shipments.length === 0 || manifestGroups.length === 0) {
       triggerToast('Please scan or select at least one shipment before creating manifest.', 'error');
       return;
     }
     setIsSubmitting(true);
     try {
-      const is3PL = manifestType === '3PL Partner';
-      const activePartner = tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId);
-      const destinationStationValue = is3PL ? selectedTplHub : selectedStation;
-      const thirdPartyValue = is3PL ? (activePartner?.name || '3PL Partner') : null;
+      const createdManifestsInfo: { num: number; station: string; count: number; is3PL: boolean }[] = [];
 
-      // 1. Persist Manifest record in Strapi backend
-      let savedManifestId: number | null = null;
-      try {
-        const manifestRes = await apiClient.post('/manifests', {
-          data: {
-            manifest_number: manifestNumber,
-            seal_no: sealNo,
-            manifest_type: is3PL ? 'TPL' : manifestType,
-            station: destinationStationValue,
-            third_party: thirdPartyValue,
-            total_parcels: shipments.length,
-            total_cash: shipments.reduce((a, s) => a + s.cashCollect, 0),
-            status: 'Dispatched',
-            date: new Date().toISOString(),
-          }
-        });
-        savedManifestId = manifestRes.data?.data?.id || null;
-      } catch (e: any) {
-        console.warn('Manifest persistence note:', e?.message || e);
-      }
-
-      // 2. Mark each parcel as In Transit and link to manifest
-      for (const item of shipments) {
+      for (const group of manifestGroups) {
+        // 1. Persist Manifest record in Strapi backend
+        let savedManifestId: number | null = null;
         try {
-          let docId = item.parcelId;
-          if (!docId || /^\d+$/.test(String(docId))) {
-            const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
-            docId = parcelRes.data?.data?.[0]?.documentId;
-          }
-          if (docId) {
-            await apiClient.put(`/parcels/${docId}`, { 
-              data: { 
-                status: SHIPMENT_STATUSES.IN_TRANSIT,
-                is_3pl: is3PL,
-                ...(is3PL ? { comments: `Dispatched to 3PL: ${thirdPartyValue} (${destinationStationValue})` } : {}),
-                ...(savedManifestId ? { manifest: savedManifestId } : {})
-              } 
-            });
-          }
-        } catch (e) {
-          console.warn(`Could not update ${item.shipmentNumber}:`, e);
+          const manifestRes = await apiClient.post('/manifests', {
+            data: {
+              manifest_number: group.manifestNumber,
+              seal_no: group.sealNo,
+              manifest_type: group.is3PL ? 'TPL' : 'Station',
+              station: group.destinationStation,
+              third_party: group.is3PL ? (group.tplPartnerName || '3PL Partner') : null,
+              total_parcels: group.shipments.length,
+              total_cash: group.totalCash,
+              status: 'Dispatched',
+              date: new Date().toISOString(),
+            }
+          });
+          savedManifestId = manifestRes.data?.data?.id || null;
+        } catch (e: any) {
+          console.warn('Manifest persistence note:', e?.message || e);
         }
+
+        // 2. Mark each parcel in this destination group as In Transit, link to this manifest, and configure 3PL metadata if 3PL
+        for (const item of group.shipments) {
+          try {
+            let docId = item.parcelId;
+            if (!docId || /^\d+$/.test(String(docId))) {
+              const parcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(item.shipmentNumber)}`);
+              docId = parcelRes.data?.data?.[0]?.documentId;
+            }
+            if (docId) {
+              await apiClient.put(`/parcels/${docId}`, { 
+                data: { 
+                  status: SHIPMENT_STATUSES.IN_TRANSIT,
+                  is_3pl: group.is3PL,
+                  ...(group.is3PL ? { 
+                    service_provider: '3PL',
+                    courier: group.tplPartnerName || 'TRAX Logistics',
+                    secondary_barcode: item.trackPolyCn || `TRX-${item.shipmentNumber}`,
+                    comments: `Dispatched to 3PL: ${group.tplPartnerName || 'TRAX'} (${group.destinationStation})`
+                  } : {}),
+                  ...(savedManifestId ? { manifest: savedManifestId } : {})
+                } 
+              });
+            }
+          } catch (e) {
+            console.warn(`Could not update ${item.shipmentNumber}:`, e);
+          }
+        }
+
+        // 3. If 3PL, forward directly to the 3PL service API endpoint
+        if (group.is3PL) {
+          try {
+            const providerCode = (group.tplPartnerName || 'trax').toLowerCase().includes('post') ? 'postex' :
+                                 (group.tplPartnerName || 'trax').toLowerCase().includes('leo') ? 'leopards' : 'trax';
+            await apiClient.post('/3pl/sync', {
+              tracking_numbers: group.shipments.map(s => s.shipmentNumber),
+              provider: providerCode
+            });
+          } catch (syncErr) {
+            console.warn('3PL service sync notice:', syncErr);
+          }
+        }
+
+        createdManifestsInfo.push({
+          num: group.manifestNumber,
+          station: group.destinationStation,
+          count: group.shipments.length,
+          is3PL: group.is3PL
+        });
       }
 
-      triggerToast(`Manifest #${manifestNumber} (${is3PL ? thirdPartyValue : 'Internal'}) dispatched! ${shipments.length} parcels marked "${SHIPMENT_STATUSES.IN_TRANSIT}".`, 'success');
-      setManifestNumber(prev => prev + 1);
+      if (createdManifestsInfo.length > 1) {
+        triggerToast(
+          `Created ${createdManifestsInfo.length} manifests by destination: ${createdManifestsInfo.map(m => `#${m.num} (${m.station}: ${m.count} pcs)`).join(', ')}. All available in DeManifestation and 3PL services!`,
+          'success'
+        );
+      } else if (createdManifestsInfo.length === 1) {
+        const m = createdManifestsInfo[0];
+        triggerToast(
+          `Manifest #${m.num} (${m.station}) created and dispatched (${m.count} parcels)! Ready in DeManifestation.`,
+          'success'
+        );
+      }
+
+      setManifestNumber(prev => prev + manifestGroups.length);
       setSealNo(`SL-${Math.floor(10000 + Math.random() * 90000)}`);
       setShipments([]);
+      fetchPastManifests();
     } catch (err) {
       triggerToast('Failed to save manifest.', 'error');
     } finally {
@@ -729,22 +988,6 @@ export default function OperationsManifestationPage() {
     m.station.toLowerCase().includes(modalSearch.toLowerCase()) ||
     m.sealNo.toLowerCase().includes(modalSearch.toLowerCase())
   );
-
-  // Active 3PL Partner and its available hubs
-  const currentTplPartner = React.useMemo(() => {
-    return tplPartners.find(p => String(p.id) === String(selectedTplPartnerId) || p.provider_code === selectedTplPartnerId) || tplPartners[0];
-  }, [tplPartners, selectedTplPartnerId]);
-
-  const currentTplHubs = React.useMemo(() => {
-    return currentTplPartner?.hubs || [
-      `${currentTplPartner?.name || '3PL'} - Lahore Hub`,
-      `${currentTplPartner?.name || '3PL'} - Karachi Hub`,
-      `${currentTplPartner?.name || '3PL'} - Islamabad Hub`,
-      `${currentTplPartner?.name || '3PL'} - Faisalabad Hub`,
-      `${currentTplPartner?.name || '3PL'} - Multan Hub`,
-      `${currentTplPartner?.name || '3PL'} - Peshawar Hub`
-    ];
-  }, [currentTplPartner]);
 
   return (
     <PortalLayout>
@@ -789,7 +1032,7 @@ export default function OperationsManifestationPage() {
               disabled={isSubmitting || shipments.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
             >
-              <Save className="w-4 h-4" /> {isSubmitting ? 'Dispatching...' : `Dispatch Manifest (${shipments.length})`}
+              <Save className="w-4 h-4" /> {isSubmitting ? 'Dispatching...' : manifestGroups.length > 1 ? `Dispatch All ${manifestGroups.length} Manifests (${shipments.length})` : `Dispatch Manifest (${shipments.length})`}
             </button>
             <button
               onClick={() => window.print()}
@@ -968,66 +1211,167 @@ export default function OperationsManifestationPage() {
 
         </div>
 
-        {/* Manifest Shipments Table */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="px-6 py-4 bg-slate-900 text-white font-bold text-sm flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Boxes className="w-4 h-4 text-primary" />
-              <span>Manifest Shipments List ({shipments.length})</span>
+        {/* Manifest Shipments Groups Partitioned by Destination with Auto-Assigned Manifest # Headings */}
+        <div className="space-y-6">
+          {manifestGroups.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-xs">
+              <Boxes className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="font-bold text-slate-700 text-sm">No shipments added to manifest yet.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Click <strong className="text-primary">"View Arrivals"</strong> above or scan tracking barcodes to add orders.
+              </p>
             </div>
-            <span className="text-xs text-amber-400 font-bold">Total Cash Collect: PKR {shipments.reduce((acc, curr) => acc + curr.cashCollect, 0).toLocaleString()}</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3.5">Shipment #</th>
-                  <th className="px-4 py-3.5">Booking Date</th>
-                  <th className="px-4 py-3.5">Shipper</th>
-                  <th className="px-4 py-3.5">Consignee & Dest</th>
-                  <th className="px-4 py-3.5 text-right">Cash Collect</th>
-                  <th className="px-4 py-3.5 text-center">Status</th>
-                  <th className="px-4 py-3.5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                {shipments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                      No shipments added to manifest yet. Click <strong>"View Arrivals"</strong> above or scan barcode.
-                    </td>
-                  </tr>
-                ) : (
-                  shipments.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3.5 font-bold font-mono text-primary">{s.shipmentNumber}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{s.bookingDate}</td>
-                      <td className="px-4 py-3.5 text-slate-900">{s.shipperName}</td>
-                      <td className="px-4 py-3.5 text-slate-900">
-                        <div>{s.consigneeName}</div>
-                        <div className="text-[10px] text-slate-500">{s.destinationCity}</div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-bold text-slate-900">PKR {s.cashCollect.toLocaleString()}</td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                          {s.status}
+          ) : (
+            <>
+              {/* Summary Bar when multiple destinations are detected */}
+              {manifestGroups.length > 1 && (
+                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-primary/20 text-primary rounded-xl shrink-0">
+                      <Boxes className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold flex items-center gap-2">
+                        <span>Multi-Destination Manifest Queue ({manifestGroups.length} Manifests)</span>
+                        <span className="bg-primary/30 text-primary-200 text-[10px] font-bold px-2 py-0.5 rounded-full border border-primary/40">
+                          Auto-Partitioned
                         </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <button
-                          onClick={() => setShipments(prev => prev.filter(item => item.id !== s.id))}
-                          className="text-rose-600 hover:text-rose-800 font-bold text-xs cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {shipments.length} total orders separated by destination. One click dispatches all {manifestGroups.length} manifests simultaneously into DeManifestation and 3PL services.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs font-bold shrink-0">
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-400 uppercase">Total Cash Collect</div>
+                      <div className="text-amber-400 text-sm font-mono">
+                        PKR {shipments.reduce((acc, curr) => acc + curr.cashCollect, 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSubmitting}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <Save className="w-4 h-4" /> {isSubmitting ? 'Creating...' : `Dispatch All ${manifestGroups.length} Manifests`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* RENDER EACH GROUP UNDER ITS AUTO-ASSIGNED MANIFEST NUMBER HEADING */}
+              {manifestGroups.map((group) => (
+                <div key={group.key} className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  
+                  {/* GROUP HEADING: Auto Assigned Manifest Number, Destination, Seal, & Metrics */}
+                  <div className="px-6 py-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-primary text-white font-mono font-black text-xs px-3 py-1 rounded-lg shadow-inner">
+                          Manifest #{group.manifestNumber}
+                        </span>
+                        <span className="text-slate-400 text-xs font-mono">• Seal: {group.sealNo}</span>
+                      </div>
+
+                      <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+                      <div className="flex items-center gap-1.5 text-sm font-bold text-white">
+                        <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>Destination: {group.destinationCity}</span>
+                        {group.destinationStation && !group.destinationStation.toLowerCase().includes(group.destinationCity.toLowerCase()) && (
+                          <span className="text-xs text-slate-400 font-normal">({group.destinationStation})</span>
+                        )}
+                      </div>
+
+                      <span className={group.is3PL 
+                        ? "bg-purple-900/80 text-purple-200 border border-purple-500/40 px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1"
+                        : "bg-blue-900/80 text-blue-200 border border-blue-500/40 px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1"
+                      }>
+                        {group.is3PL ? (
+                          <>
+                            <Truck className="w-3 h-3 text-purple-300" />
+                            <span>3PL Partner ({group.tplPartnerName || 'TRAX'})</span>
+                          </>
+                        ) : (
+                          <>
+                            <Building2 className="w-3 h-3 text-blue-300" />
+                            <span>2PL Internal Station</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs font-semibold">
+                      <span className="text-slate-300">{group.shipments.length} {group.shipments.length === 1 ? 'Shipment' : 'Shipments'}</span>
+                      <span className="text-slate-400 font-normal">{group.totalPieces} pcs • {group.totalWeight.toFixed(1)} kg</span>
+                      <span className="text-amber-400 font-bold font-mono">PKR {group.totalCash.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  {/* ORDERS IN THIS MANIFEST */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3">Shipment #</th>
+                          <th className="px-4 py-3">Booking Date</th>
+                          <th className="px-4 py-3">Shipper</th>
+                          <th className="px-4 py-3">Consignee & Destination</th>
+                          <th className="px-4 py-3">Type</th>
+                          <th className="px-4 py-3 text-right">Cash Collect</th>
+                          <th className="px-4 py-3 text-center">Status</th>
+                          <th className="px-4 py-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                        {group.shipments.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3.5 font-bold font-mono text-primary">{s.shipmentNumber}</td>
+                            <td className="px-4 py-3.5 text-slate-600">{s.bookingDate}</td>
+                            <td className="px-4 py-3.5 text-slate-900">{s.shipperName}</td>
+                            <td className="px-4 py-3.5 text-slate-900">
+                              <div className="font-bold">{s.consigneeName}</div>
+                              <div className="text-[11px] text-primary flex items-center gap-1 mt-0.5 font-medium">
+                                <MapPin className="w-3 h-3 text-primary/70 shrink-0" />
+                                <span>{s.destinationCity}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              {s.is3PL ? (
+                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  3PL ({group.tplPartnerName || 'TRAX'})
+                                </span>
+                              ) : (
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  2PL
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-bold text-slate-900 font-mono">PKR {s.cashCollect.toLocaleString()}</td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                                {s.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              <button
+                                onClick={() => setShipments(prev => prev.filter(item => item.id !== s.id))}
+                                className="text-rose-600 hover:text-rose-800 font-bold text-xs cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* VIEW ARRIVALS POPUP MODAL */}
@@ -1255,7 +1599,7 @@ export default function OperationsManifestationPage() {
                         {filteredArrivalParcels.map((p) => {
                           const pIdStr = String(p.id);
                           const isChecked = selectedArrivalIds.includes(pIdStr);
-                          const destCity = p.destination_city?.CityName || p.destination_city?.name || 'Destination';
+                          const destCity = getDestinationLocation(p);
 
                           return (
                             <tr 

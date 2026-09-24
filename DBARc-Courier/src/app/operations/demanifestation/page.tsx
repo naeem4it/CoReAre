@@ -111,6 +111,40 @@ export default function OperationsDeManifestationPage() {
       .catch(err => console.warn('Could not load offices:', err));
   }, [user]);
 
+  // Helper to extract clean destination location
+  const getDestinationLocation = React.useCallback((parcel: any): string => {
+    if (!parcel) return 'Destination';
+
+    const destCity = parcel.destination_city?.CityName || parcel.destination_city?.name || parcel.destination_city?.city_name;
+    if (destCity && typeof destCity === 'string' && destCity.trim() && destCity.trim().toLowerCase() !== 'destination' && destCity.trim().toLowerCase() !== 'dest') {
+      return destCity.trim();
+    }
+
+    if (parcel.destination && typeof parcel.destination === 'string' && parcel.destination.trim() && parcel.destination.trim().toLowerCase() !== 'destination' && parcel.destination.trim().toLowerCase() !== 'dest') {
+      return parcel.destination.trim();
+    }
+
+    const courierCity = parcel.courier_city?.CityName || parcel.courier_city?.name;
+    if (courierCity && typeof courierCity === 'string' && courierCity.trim()) {
+      return courierCity.trim();
+    }
+
+    const addr = parcel.recipient_address || parcel.consigneeAddress || parcel.delivery_address || '';
+    if (addr && typeof addr === 'string') {
+      const parts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.toLowerCase() !== 'pakistan') {
+          return lastPart;
+        } else if (parts.length > 1) {
+          return parts[parts.length - 2];
+        }
+      }
+    }
+
+    return 'Destination';
+  }, []);
+
   // Fetch Manifest and its associated In Transit parcels
   const handleLoadManifest = async (mNum?: string) => {
     let cleanNum = (mNum || manifestNumber).trim();
@@ -171,12 +205,17 @@ export default function OperationsDeManifestationPage() {
       // Load associated parcels
       let parcelsList: any[] = manifest.parcels || [];
 
-      // If parcels array on manifest is empty, fallback to querying parcels table by manifest id
+      // If parcels array on manifest is empty, fallback to querying parcels table by manifest id or manifest_number
       if (parcelsList.length === 0) {
         try {
           const pRes = await apiClient.get(`/parcels?filters[manifest][id][$eq]=${manifest.id}&populate=*`);
           if (pRes.data?.data?.length > 0) {
             parcelsList = pRes.data.data;
+          } else if (manifest.manifest_number) {
+            const pRes2 = await apiClient.get(`/parcels?filters[manifest][manifest_number][$eq]=${manifest.manifest_number}&populate=*`);
+            if (pRes2.data?.data?.length > 0) {
+              parcelsList = pRes2.data.data;
+            }
           }
         } catch (e) {
           console.warn('Fallback querying parcels by manifest id notice:', e);
@@ -192,7 +231,7 @@ export default function OperationsDeManifestationPage() {
           shipmentNumber: p.tracking_number,
           shipper: p.shipper?.name || 'Shipper',
           consignee: p.recipient_name || 'Customer',
-          destination: p.destination_city?.CityName || p.destination_city?.name || (typeof p.destination_city === 'string' ? p.destination_city : '') || 'Destination',
+          destination: getDestinationLocation(p),
           pieces: p.pieces || 1,
           weight: Number(p.weight) || 1.0,
           codAmount: Number(p.cod_amount) || 0,
@@ -270,7 +309,7 @@ export default function OperationsDeManifestationPage() {
         shipmentNumber: parcel.tracking_number,
         shipper: parcel.shipper?.name || 'Shipper',
         consignee: parcel.recipient_name || 'Customer',
-        destination: parcel.destination_city?.CityName || parcel.destination_city?.name || 'Destination',
+        destination: getDestinationLocation(parcel),
         pieces: parcel.pieces || 1,
         weight: Number(parcel.weight) || 1.0,
         codAmount: Number(parcel.cod_amount) || 0,
@@ -691,6 +730,7 @@ export default function OperationsDeManifestationPage() {
                     <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
                       <tr>
                         <th className="p-3">Manifest #</th>
+                        <th className="p-3">Type</th>
                         <th className="p-3">Date</th>
                         <th className="p-3">Destination Station</th>
                         <th className="p-3">Seal No</th>
@@ -703,9 +743,21 @@ export default function OperationsDeManifestationPage() {
                         const mNumber = m.manifest_number || m.id;
                         const dateStr = m.date ? new Date(m.date).toLocaleString() : (m.createdAt ? new Date(m.createdAt).toLocaleString() : '-');
                         const pCount = m.parcels?.length || m.total_parcels || 0;
+                        const is3PL = m.manifest_type === 'TPL' || m.manifest_type === '3PL Partner' || Boolean(m.third_party && m.third_party !== '-');
                         return (
                           <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-3 font-bold text-primary font-mono text-sm">{mNumber}</td>
+                            <td className="p-3">
+                              {is3PL ? (
+                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  3PL ({m.third_party || 'Partner'})
+                                </span>
+                              ) : (
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  2PL Station
+                                </span>
+                              )}
+                            </td>
                             <td className="p-3 text-slate-600">{dateStr}</td>
                             <td className="p-3 font-bold text-slate-900">{m.station || '-'}</td>
                             <td className="p-3 text-slate-600 font-mono">{m.seal_no || '-'}</td>

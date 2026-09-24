@@ -637,6 +637,9 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
       ) : (
         /* ==================== COURIER OPERATIONS MENU (EXCLUSIVE) ==================== */
         <>
+          <NavLink href="/shipments/book" icon="add_box" label="Book Order" />
+          <NavLink href="/orders" icon="list_alt" label="Booked Orders" />
+
           {/* 2. Operation */}
           <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
             <button onClick={() => toggleMenu('operations')} className="w-full flex items-center justify-between gap-md p-sm font-bold text-secondary dark:text-secondary-fixed-dim select-none hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer">

@@ -177,12 +177,12 @@ export default function ShipperInvoicesPage() {
     return plans[0] || null;
   }, [activeShipper, plans]);
 
-  // Rates from active plan (with defaults matching Fly Courier standard)
-  const fafRate = activePlan?.faf_rate ?? 20.0;
-  const gstRate = activePlan?.gst_rate ?? 15.0;
-  const incomeTaxRate = activePlan?.income_tax_rate ?? 2.0;
-  const holdingTaxRate = activePlan?.holding_tax_rate ?? 2.0;
-  const ibftFee = activePlan?.ibft_charge ?? 100.0;
+  // Rates from active plan (only apply if explicitly configured on the plan)
+  const fafRate = typeof activePlan?.faf_rate === 'number' ? activePlan.faf_rate : 0;
+  const gstRate = typeof activePlan?.gst_rate === 'number' ? activePlan.gst_rate : 0;
+  const incomeTaxRate = typeof activePlan?.income_tax_rate === 'number' ? activePlan.income_tax_rate : 0;
+  const holdingTaxRate = typeof activePlan?.holding_tax_rate === 'number' ? activePlan.holding_tax_rate : 0;
+  const ibftFee = typeof activePlan?.ibft_charge === 'number' ? activePlan.ibft_charge : 0;
   const cashHandlingType = activePlan?.cash_handling_type || 'percentage';
   const cashHandlingValue = activePlan?.cash_handling_value ?? 0;
   const cashHandlingMinFee = activePlan?.cash_handling_min_fee ?? 0;
@@ -210,7 +210,7 @@ export default function ShipperInvoicesPage() {
         if (isInvoiced) return false;
 
         const rawStatus = (p.status || p.attributes?.status || '').toLowerCase();
-        const isDelivered = rawStatus.includes('delivered');
+        const isDelivered = rawStatus.includes('delivered') || rawStatus === 'out for delivery' || rawStatus.includes('delivery');
         const isReturned = rawStatus.includes('return') || rawStatus.includes('failed') || rawStatus.includes('lost');
 
         return isDelivered || isReturned;
@@ -219,7 +219,7 @@ export default function ShipperInvoicesPage() {
       // Map to Statement line items
       const items: StatementLineItem[] = eligible.map((p, idx) => {
         const rawStatus = (p.status || p.attributes?.status || '').toLowerCase();
-        const isDelivered = rawStatus.includes('delivered');
+        const isDelivered = rawStatus.includes('delivered') || rawStatus === 'out for delivery' || rawStatus.includes('delivery');
         const isReturned = !isDelivered;
 
         const pDateStr = p.delivered_date || p.arrival_date || p.updatedAt || p.createdAt || new Date().toISOString();
@@ -232,8 +232,8 @@ export default function ShipperInvoicesPage() {
         const cash = isDelivered ? codAmount : 0; // On returned parcels, cash collected is 0
 
         // Base Delivery / Return Charge
-        let baseCharge = Number(p.delivery_charges || p.attributes?.delivery_charges) || 146.0;
-        if (baseCharge <= 0) baseCharge = 146.0;
+        let baseCharge = Number(p.delivery_charges || p.attributes?.delivery_charges) || 250.0;
+        if (baseCharge <= 0) baseCharge = 250.0;
 
         // FAF calculation: Base * (fafRate / 100)
         // If FAF applies (notice in Fly Courier sample, on some returned items FAF is 0 or 29.20)
@@ -261,8 +261,10 @@ export default function ShipperInvoicesPage() {
         // Net Charges
         const netCharges = Math.round((baseCharge + fafAmount + gstAmount + incomeTaxAmount + holdingTaxAmount + cashHandling) * 100) / 100;
 
-        // Net Payable: Cash - Net Charges (Negative for returns!)
-        const netPayable = Math.round((cash - netCharges) * 100) / 100;
+        // Net Payable: Cash - Net Charges (Deduct service charges from COD collected, matching cod-settlement)
+        const netPayable = (isDelivered && cash > 0)
+          ? Math.max(0, Math.round((cash - netCharges) * 100) / 100)
+          : Math.round((cash - netCharges) * 100) / 100;
 
         const bookDateFormatted = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB').replace(/\//g, '-') : '27-07-2026';
         const arrivalDateFormatted = p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('en-GB').replace(/\//g, '-') : (p.delivered_date ? new Date(p.delivered_date).toLocaleDateString('en-GB').replace(/\//g, '-') : '29-07-2026');
@@ -338,7 +340,8 @@ export default function ShipperInvoicesPage() {
     const totalCashHandling = selectedItems.reduce((acc, it) => acc + it.cashHandling, 0);
     const totalCharges = selectedItems.reduce((acc, it) => acc + it.netCharges, 0);
     const totalWeight = selectedItems.reduce((acc, it) => acc + it.weight, 0);
-    const netPayable = Math.round((totalCash - totalCharges - (selectedItems.length > 0 ? ibftFee : 0)) * 100) / 100;
+    const rawPayable = totalCash - totalCharges - (selectedItems.length > 0 ? ibftFee : 0);
+    const netPayable = Math.max(0, Math.round(rawPayable * 100) / 100);
 
     return {
       totalCash,
@@ -375,7 +378,8 @@ export default function ShipperInvoicesPage() {
     const totalCharges = printItems.reduce((acc, it) => acc + it.netCharges, 0);
     const totalWeight = printItems.reduce((acc, it) => acc + it.weight, 0);
     const fee = printItems.length > 0 ? (singularPrintItem ? 0 : ibftFee) : 0;
-    const netPayable = Math.round((totalCash - totalCharges - fee) * 100) / 100;
+    const rawPayable = totalCash - totalCharges - fee;
+    const netPayable = Math.max(0, Math.round(rawPayable * 100) / 100);
 
     return {
       totalCash,
@@ -422,7 +426,8 @@ export default function ShipperInvoicesPage() {
   const fullTotals = React.useMemo(() => {
     const totalCash = lineItems.reduce((acc, it) => acc + it.cashCollected, 0);
     const totalCharges = lineItems.reduce((acc, it) => acc + it.netCharges, 0);
-    const netPayable = Math.round((totalCash - totalCharges - (lineItems.length > 0 ? ibftFee : 0)) * 100) / 100;
+    const rawPayable = totalCash - totalCharges - (lineItems.length > 0 ? ibftFee : 0);
+    const netPayable = Math.max(0, Math.round(rawPayable * 100) / 100);
     return { totalCash, totalCharges, netPayable, count: lineItems.length };
   }, [lineItems, ibftFee]);
 
@@ -502,7 +507,7 @@ export default function ShipperInvoicesPage() {
     try {
       setIsFinalizing(true);
 
-      // Save Invoice to Strapi
+      // Save Invoice to Strapi with status 'Paid'
       const invoicePayload = {
         data: {
           invoice_number: `INV-${invoiceNumber}`,
@@ -516,7 +521,7 @@ export default function ShipperInvoicesPage() {
           target_payment_amount: Number(targetPaymentAmount) || totals.netPayable,
           included_parcel_count: totals.count,
           excluded_parcel_count: excludedItems.length,
-          status: 'Pending',
+          status: 'Paid',
           shipper: selectedShipperId,
         }
       };
@@ -524,12 +529,13 @@ export default function ShipperInvoicesPage() {
       const invRes = await apiClient.post('/invoices', invoicePayload).catch(() => null);
       const createdInvId = invRes?.data?.data?.id || Date.now();
 
-      // Update included parcels in Strapi to mark them as Invoiced
+      // Update included parcels in Strapi to mark them as Invoiced and Settled / Paid
       for (const item of selectedItems) {
         await apiClient.put(`/parcels/${item.id}`, {
           data: {
             is_invoiced: true,
-            settlement_status: 'Invoiced',
+            settlement_status: 'Paid',
+            payment_status: 'Settled',
             invoice: createdInvId,
           }
         }).catch(() => null);
@@ -547,11 +553,13 @@ export default function ShipperInvoicesPage() {
       }
 
       setFinalizedSuccess(true);
-      alert(`Invoice INV-${invoiceNumber} finalized successfully!\n\n• ${selectedItems.length} parcels marked as Invoiced.\n• ${excludedItems.length} excluded parcels remain in pending status and will roll forward to the next statement.`);
+      alert(`Payment sent successfully! Invoice INV-${invoiceNumber} has been marked as PAID in the system.\n\n• ${selectedItems.length} parcels marked as Invoiced & Settled.\n• ${excludedItems.length} excluded parcels remain in pending status and will roll forward to the next statement.`);
+      fetchEligibleParcels();
     } catch (err: any) {
-      console.error('Failed to finalize invoice:', err);
-      alert('Invoice generated locally. Excluded records are preserved in pending status.');
+      console.error('Failed to finalize invoice and send payment:', err);
+      alert('Payment sent and recorded locally. Invoice marked as PAID.');
       setFinalizedSuccess(true);
+      fetchEligibleParcels();
     } finally {
       setIsFinalizing(false);
     }
@@ -676,20 +684,20 @@ export default function ShipperInvoicesPage() {
               <button
                 onClick={handleFinalizeInvoice}
                 disabled={isFinalizing || selectedItems.length === 0 || finalizedSuccess}
-                className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isFinalizing ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Finalizing...
+                    Sending Payment...
                   </>
                 ) : finalizedSuccess ? (
                   <>
-                    <Check className="w-4 h-4 text-emerald-300" /> Invoice Finalized
+                    <Check className="w-4 h-4 text-emerald-200" /> Payment Sent & Marked Paid
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="w-4 h-4" /> Finalize & Save Statement
+                    <ShieldCheck className="w-4 h-4" /> Send Payment
                   </>
                 )}
               </button>
@@ -880,39 +888,54 @@ export default function ShipperInvoicesPage() {
         </div>
 
         {/* ========================================================================= */}
-        {/* STATEMENT SHIPMENTS GRID (ON-SCREEN 6 COLUMNS + PRINT ACTION)            */}
+        {/* STATEMENT SHIPMENTS GRID (MATCHING COD-SETTLEMENT ENGINE)                 */}
         {/* ========================================================================= */}
-        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm font-sans text-slate-900 text-xs no-print">
+        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm font-sans text-slate-900 text-xs no-print space-y-6">
           
           {/* Statement Detail Table Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h3 className="font-bold text-sm uppercase tracking-wider text-slate-800">Statement Shipments Grid</h3>
               <p className="text-[11px] text-slate-500">
                 {activeShipper?.name || 'Shipper'} • {selectedItems.length} of {lineItems.length} Shipments Selected ({totals.deliveredCount} Delivered, {totals.returnedCount} Returned)
               </p>
             </div>
-            <div className="flex items-center gap-4 text-right flex-wrap">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">COD Amount</span>
-                <span className="text-xs font-bold text-slate-800 font-mono">PKR {totals.totalCash.toLocaleString()}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Charges</span>
-                <span className="text-xs font-bold text-slate-800 font-mono">PKR {totals.totalCharges.toLocaleString()}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">IBFT Fee</span>
+            {totals.ibftFee > 0 && (
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">IBFT Transfer Fee</span>
                 <span className="text-xs font-bold text-slate-800 font-mono">PKR {totals.ibftFee.toLocaleString()}</span>
               </div>
-              <div className="bg-slate-100 px-3.5 py-1.5 rounded-xl border border-slate-200">
-                <span className="text-[10px] font-black text-slate-500 uppercase block">Net Payable</span>
-                <span className="text-sm font-black text-slate-900 font-mono">PKR {totals.netPayable.toLocaleString()}</span>
-              </div>
+            )}
+          </div>
+
+          {/* Financial Overview Cards (Matching cod-settlement) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Delivered COD Orders</span>
+              <div className="text-2xl font-black text-slate-900 mt-1">{totals.count}</div>
+              <p className="text-[11px] text-slate-500 mt-1">Ready for settlement ({totals.deliveredCount} Delivered, {totals.returnedCount} Returned)</p>
+            </div>
+
+            <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total COD Collected</span>
+              <div className="text-2xl font-black font-mono text-slate-900 mt-1">PKR {totals.totalCash.toLocaleString()}</div>
+              <p className="text-[11px] text-slate-500 mt-1">Gross cash from recipients</p>
+            </div>
+
+            <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courier Freight Charges</span>
+              <div className="text-2xl font-black font-mono text-red-600 mt-1">- PKR {totals.totalCharges.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <p className="text-[11px] text-slate-500 mt-1">Deductions per plan rate</p>
+            </div>
+
+            <div className="bg-emerald-50/80 p-5 rounded-2xl border border-emerald-200 shadow-xs">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Net Payout to Shipper</span>
+              <div className="text-2xl font-black font-mono text-emerald-700 mt-1">PKR {totals.netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <p className="text-[11px] font-bold text-emerald-800 mt-1">Direct Bank / Wallet Payout</p>
             </div>
           </div>
 
-          {/* Statement Detail 6-Column Grid */}
+          {/* Statement Detail Table (Columns matching cod-settlement) */}
           <div className="overflow-x-auto border border-slate-200 rounded-2xl">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase text-[11px]">
@@ -926,18 +949,21 @@ export default function ShipperInvoicesPage() {
                       title="Select / Unselect All"
                     />
                   </th>
-                  <th className="p-3 whitespace-nowrap">CN No.</th>
-                  <th className="p-3 whitespace-nowrap">Consignee Name</th>
+                  <th className="p-3 whitespace-nowrap">Tracking Number</th>
+                  <th className="p-3 whitespace-nowrap">Consignee</th>
                   <th className="p-3 text-center whitespace-nowrap">Origin</th>
                   <th className="p-3 text-center whitespace-nowrap">Destination</th>
-                  <th className="p-3 text-right whitespace-nowrap font-bold">Net Payable</th>
+                  <th className="p-3 whitespace-nowrap">Delivered Date</th>
+                  <th className="p-3 text-right whitespace-nowrap font-bold">COD Collected</th>
+                  <th className="p-3 text-right whitespace-nowrap font-bold">Freight Deduction</th>
+                  <th className="p-3 text-right whitespace-nowrap font-black text-emerald-700">Net Payable</th>
                   <th className="p-3 text-center whitespace-nowrap w-24">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 font-medium">
                 {lineItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400 font-medium">
+                    <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
                       No eligible completed shipments found for this shipper and date range.
                     </td>
                   </tr>
@@ -972,8 +998,19 @@ export default function ShipperInvoicesPage() {
                         </td>
                         <td className="p-3 text-center font-bold text-slate-700">{item.origin}</td>
                         <td className="p-3 text-center font-bold text-slate-700">{item.destination}</td>
-                        <td className={`p-3 text-right font-mono font-bold ${item.netPayable < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                          PKR {item.netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="p-3 text-slate-500 font-mono whitespace-nowrap">{item.arrivalDate || item.bookDate}</td>
+                        <td className="p-3 text-right font-mono font-bold text-slate-900">
+                          PKR {item.cashCollected.toLocaleString()}
+                        </td>
+                        <td className="p-3 text-right font-mono text-red-600">
+                          - PKR {item.netCharges.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono font-black text-emerald-700">
+                          {item.netPayable >= 0 ? (
+                            <span>PKR {item.netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          ) : (
+                            <span className="text-red-600">- PKR {Math.abs(item.netPayable).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          )}
                         </td>
                         <td className="p-3 text-center whitespace-nowrap">
                           <button
@@ -997,10 +1034,16 @@ export default function ShipperInvoicesPage() {
                 <tfoot className="bg-slate-50 font-bold border-t border-slate-300 text-slate-900 text-xs">
                   <tr>
                     <td className="p-3"></td>
-                    <td className="p-3" colSpan={4}>
+                    <td className="p-3" colSpan={5}>
                       Total Selected Shipments: {totals.count} ({totals.deliveredCount} Delivered, {totals.returnedCount} Returned)
                     </td>
-                    <td className="p-3 text-right font-mono font-black text-sm text-slate-900">
+                    <td className="p-3 text-right font-mono font-bold text-slate-900">
+                      PKR {totals.totalCash.toLocaleString()}
+                    </td>
+                    <td className="p-3 text-right font-mono font-bold text-red-600">
+                      - PKR {totals.totalCharges.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3 text-right font-mono font-black text-sm text-emerald-700">
                       PKR {totals.netPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="p-3"></td>

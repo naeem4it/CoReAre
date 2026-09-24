@@ -196,17 +196,59 @@ const YES_NO_OPTIONS = [
   { label: 'Yes', value: 'Yes' },
 ];
 
-const TIME_SLOT_OPTIONS = [
-  { label: 'Morning (09 AM - 12 PM)', value: 'Morning (09 AM - 12 PM)' },
-  { label: 'Afternoon (12 PM - 04 PM)', value: 'Afternoon (12 PM - 04 PM)' },
-  { label: 'Evening (04 PM - 08 PM)', value: 'Evening (04 PM - 08 PM)' },
-];
+// Dynamic delivery / service charge calculator for Pakistan logistics
+export function calculateDeliveryCharge(
+  originCity: string,
+  destinationCity: string,
+  weight: number,
+  plan?: any
+): number {
+  const oCity = (originCity || 'Lahore').toLowerCase().trim();
+  const dCity = (destinationCity || 'Lahore').toLowerCase().trim();
+  const numWeight = Math.max(0.1, Number(weight) || 0.5);
+
+  const isWithinCity = oCity && dCity && (oCity === dCity || oCity.includes(dCity) || dCity.includes(oCity));
+  const isMajorMetro = dCity.includes('karachi') || dCity.includes('lahore') || dCity.includes('islamabad') || dCity.includes('rawalpindi');
+
+  // Realistic Pakistan courier standard rates: Base first 1 kg + Additional kg
+  let baseRate = isWithinCity ? 150 : (isMajorMetro ? 180 : 220);
+  let addKgRate = isWithinCity ? 35 : (isMajorMetro ? 45 : 55);
+
+  // If active plan has zones configured, check for custom rates
+  if (plan?.zones && Array.isArray(plan.zones)) {
+    const targetZoneName = isWithinCity ? 'Within City' : (isMajorMetro ? 'Zone A' : 'Zone B');
+    const matchedZone = plan.zones.find((z: any) => z.zoneName?.toLowerCase() === targetZoneName.toLowerCase());
+    if (matchedZone?.tierRates) {
+      if (numWeight <= 0.5 && matchedZone.tierRates.tier_half_kg) {
+        baseRate = Number(matchedZone.tierRates.tier_half_kg);
+      } else if (matchedZone.tierRates.tier_one_kg) {
+        baseRate = Number(matchedZone.tierRates.tier_one_kg);
+      }
+      if (matchedZone.tierRates.tier_add_kg) {
+        const rawAdd = Number(matchedZone.tierRates.tier_add_kg);
+        // Protect against inflated tier_add_kg
+        addKgRate = rawAdd <= 80 ? rawAdd : (isWithinCity ? 35 : (isMajorMetro ? 45 : 55));
+      }
+    }
+  }
+
+  let charge = baseRate;
+  if (numWeight > 1.0) {
+    const extraKg = Math.ceil(numWeight - 1.0);
+    charge = baseRate + (extraKg * addKgRate);
+  }
+
+  return Math.round(charge);
+}
 
 function BookShipmentForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user: authUser, activeBusinessId: authActiveBizId } = useAuth();
+  const { user: authUser, activeBusinessId: authActiveBizId, isShipper } = useAuth();
   
+  // Selected shipper ID when Courier staff books order on behalf of a shipper
+  const [selectedCourierShipperId, setSelectedCourierShipperId] = React.useState<number | null>(null);
+
   // User auth state read directly from authContext or localStorage fallback
   const [user, setUser] = React.useState<any>(null);
   React.useEffect(() => {
@@ -228,9 +270,14 @@ function BookShipmentForm() {
   const [allShippers, setAllShippers] = React.useState<Array<{
     id: number;
     name: string;
+    account_id?: string;
     address?: string;
     city?: string;
+    phone?: string;
+    email?: string;
     shipper_plan?: any;
+    preferred_tpl_partner?: any;
+    pickup_locations?: any[];
   }>>([]);
 
   React.useEffect(() => {
@@ -238,21 +285,44 @@ function BookShipmentForm() {
       .catch(() => apiClient.get('/shippers?populate=*'))
       .then(res => {
         const raw = res.data?.data || [];
-        const mapped = raw.map((item: any) => ({
-          id: item.id,
-          name: item.name || item.attributes?.name || `Shipper #${item.id}`,
-          address: item.address || item.attributes?.address || (item.offices && item.offices[0]?.address) || '',
-          city: item.city || item.attributes?.city || (item.offices && item.offices[0]?.city?.name) || (typeof item.offices?.[0]?.city === 'string' ? item.offices[0].city : '') || '',
-          shipper_plan: item.shipper_plan,
-        }));
+        const mapped = raw.map((item: any) => {
+          const attrs = item.attributes || item;
+          return {
+            id: item.id,
+            name: attrs.name || `Shipper #${item.id}`,
+            account_id: attrs.account_id || item.account_id || String(28000 + item.id),
+            address: attrs.address || (attrs.offices && attrs.offices[0]?.address) || '',
+            city: attrs.city || (attrs.offices && attrs.offices[0]?.city?.name) || (typeof attrs.offices?.[0]?.city === 'string' ? attrs.offices[0].city : '') || '',
+            phone: attrs.phone || item.phone || '',
+            email: attrs.email || item.email || '',
+            shipper_plan: attrs.shipper_plan?.data ? { id: attrs.shipper_plan.data.id, ...attrs.shipper_plan.data.attributes } : (attrs.shipper_plan || item.shipper_plan),
+            preferred_tpl_partner: attrs.preferred_tpl_partner?.data ? { id: attrs.preferred_tpl_partner.data.id, ...attrs.preferred_tpl_partner.data.attributes } : (attrs.preferred_tpl_partner || item.preferred_tpl_partner),
+            pickup_locations: attrs.pickup_locations?.data || attrs.pickup_locations || [],
+          };
+        });
         setAllShippers(mapped);
+        if (!isShipper && mapped.length > 0) {
+          setSelectedCourierShipperId(prev => prev || mapped[0].id);
+        }
       })
       .catch(err => console.warn('Failed to load shippers:', err));
-  }, []);
+  }, [isShipper]);
 
   const currentActiveBizId = authActiveBizId || (typeof window !== 'undefined' ? Number(localStorage.getItem('activeBusinessId')) : null);
 
   const selectedShipperBusiness = React.useMemo(() => {
+    // 0. For Courier users (!isShipper), use selectedCourierShipperId
+    if (!isShipper) {
+      if (selectedCourierShipperId && allShippers.length > 0) {
+        const found = allShippers.find(s => s.id === selectedCourierShipperId);
+        if (found) return found;
+      }
+      if (allShippers.length > 0) {
+        return allShippers[0];
+      }
+      return null;
+    }
+
     // 1. Match by currentActiveBizId in allShippers
     if (currentActiveBizId && allShippers.length > 0) {
       const found = allShippers.find(s => s.id === currentActiveBizId);
@@ -269,8 +339,11 @@ function BookShipmentForm() {
           return {
             id: foundInUser.id,
             name: foundInUser.name || full?.name || `Shipper #${foundInUser.id}`,
+            account_id: full?.account_id || foundInUser.account_id || '',
             address: full?.address || foundInUser.address || '',
             city: full?.city || foundInUser.city || '',
+            phone: full?.phone || foundInUser.phone || '',
+            email: full?.email || foundInUser.email || '',
             shipper_plan: full?.shipper_plan || foundInUser.shipper_plan,
           };
         }
@@ -281,8 +354,11 @@ function BookShipmentForm() {
         return {
           id: first.id,
           name: first.name || full?.name || `Shipper #${first.id}`,
+          account_id: full?.account_id || first.account_id || '',
           address: full?.address || first.address || '',
           city: full?.city || first.city || '',
+          phone: full?.phone || first.phone || '',
+          email: full?.email || first.email || '',
           shipper_plan: full?.shipper_plan || first.shipper_plan,
         };
       }
@@ -292,7 +368,7 @@ function BookShipmentForm() {
       return allShippers[0];
     }
     return null;
-  }, [currentActiveBizId, allShippers, authUser, user]);
+  }, [isShipper, selectedCourierShipperId, currentActiveBizId, allShippers, authUser, user]);
   
   // UI States
   const [bookingMode, setBookingMode] = React.useState<'manual' | 'bulk'>('manual');
@@ -320,13 +396,17 @@ function BookShipmentForm() {
 
   // Sync mode with query parameter tab state (?tab=bulk or ?tab=manual)
   React.useEffect(() => {
+    if (!isShipper) {
+      setBookingMode('manual');
+      return;
+    }
     const tab = searchParams?.get('tab');
     if (tab === 'bulk') {
       setBookingMode('bulk');
     } else {
       setBookingMode('manual');
     }
-  }, [searchParams]);
+  }, [searchParams, isShipper]);
 
   const [showDetailsModal, setShowDetailsModal] = React.useState(false);
 
@@ -635,7 +715,7 @@ function BookShipmentForm() {
 
     let halfKgRate = isVip ? 110 : isCorporate ? 120 : 135;
     let oneKgRate = isVip ? 130 : isCorporate ? 140 : 150;
-    let addKgRate = isVip ? 120 : isCorporate ? 130 : 150;
+    let addKgRate = isVip ? 35 : isCorporate ? 40 : 45;
 
     const zLower = zoneName.toLowerCase();
     if (zLower.includes('zone a') || zLower.includes('metro')) {
@@ -766,7 +846,7 @@ function BookShipmentForm() {
       const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
       const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
       
-      let shipperId: number | null = selectedShipperBusiness?.id || null;
+      let shipperId: number | null = selectedShipperBusiness?.id || selectedCourierShipperId || null;
       if (!shipperId) {
         if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
           const matchingShipper = user.shipper.find((s: any) => s.id === activeBusinessId);
@@ -776,6 +856,12 @@ function BookShipmentForm() {
         } else if (activeBusinessId && !isNaN(activeBusinessId)) {
           shipperId = activeBusinessId;
         }
+      }
+
+      if (!isShipper && !shipperId) {
+        setErrorMessage('Please select a shipper account before booking an order.');
+        setBookingStatus('error');
+        return;
       }
 
       const originOfficeId = data.pickupLocation && !isNaN(Number(data.pickupLocation)) ? Number(data.pickupLocation) : null;
@@ -937,13 +1023,28 @@ function BookShipmentForm() {
 
             headers.forEach((header, idx) => {
               const val = values[idx] || '';
-              if (['weight', 'pieces', 'codAmount', 'collectRs'].includes(header)) {
-                rowData[header] = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
+              const hLower = header.toLowerCase().trim();
+              if (hLower === 'codamount' || hLower === 'codamour' || hLower === 'cod' || hLower === 'cod_amount') {
+                rowData.codAmount = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
+              } else if (hLower === 'weight') {
+                rowData.weight = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0.5;
+              } else if (hLower === 'pieces') {
+                rowData.pieces = val !== '' && !isNaN(Number(val)) ? parseInt(val) : 1;
+              } else if (hLower === 'collectrs') {
+                rowData.collectRs = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
               } else {
                 rowData[header] = val;
               }
             });
 
+            // Calculate delivery / service charges and payable to shipper
+            const originCity = selectedShipperBusiness?.city || 'Lahore';
+            const destCity = rowData.destinationCity || '';
+            const serviceCharge = calculateDeliveryCharge(originCity, destCity, rowData.weight, selectedShipperBusiness?.shipper_plan);
+            const payableToShipper = rowData.codAmount > 0 ? (rowData.codAmount - serviceCharge) : -serviceCharge;
+
+            rowData.serviceCharge = serviceCharge;
+            rowData.payableToShipper = payableToShipper;
             rowData.errors = validateSpreadsheetRow(rowData);
             rows.push(rowData);
           }
@@ -1052,6 +1153,12 @@ function BookShipmentForm() {
 
   const saveRowEdits = () => {
     const updatedForm = { ...editFormData };
+    const originCity = selectedShipperBusiness?.city || 'Lahore';
+    const destCity = updatedForm.destinationCity || '';
+    const serviceCharge = calculateDeliveryCharge(originCity, destCity, updatedForm.weight, selectedShipperBusiness?.shipper_plan);
+    const payableToShipper = updatedForm.codAmount > 0 ? (updatedForm.codAmount - serviceCharge) : -serviceCharge;
+    updatedForm.serviceCharge = serviceCharge;
+    updatedForm.payableToShipper = payableToShipper;
     updatedForm.errors = validateSpreadsheetRow(updatedForm);
     setParsedRows(prev => prev.map(row => (row.id === updatedForm.id ? updatedForm : row)));
     setEditingRowId(null);
@@ -1134,10 +1241,19 @@ function BookShipmentForm() {
     try {
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
-        const extraWeight = Math.max(0, (row.weight || 0.5) - 0.5);
-        const extraUnits = Math.ceil(extraWeight / 0.5);
-        const deliveryCharge = 250 + (extraUnits * 100) + 35;
+        const originCity = selectedShipperBusiness?.city || 'Lahore';
+        const destCity = row.destinationCity || 'Lahore';
+        const deliveryCharge = row.serviceCharge || calculateDeliveryCharge(originCity, destCity, row.weight, selectedShipperBusiness?.shipper_plan);
         const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
+        // Check dynamically against courier offices loaded from database (detailedOffices)
+        const is2PLCourierCity = detailedOffices && detailedOffices.length > 0
+          ? detailedOffices.some((o: any) => {
+              const oCity = (o.cityName || '').trim().toLowerCase();
+              const dCity = destCity.trim().toLowerCase();
+              return oCity && (dCity === oCity || dCity.includes(oCity) || oCity.includes(dCity));
+            })
+          : false;
 
         const parcelPayload: any = {
           tracking_number: trackingId,
@@ -1149,12 +1265,15 @@ function BookShipmentForm() {
           delivery_charges: deliveryCharge,
           recipient_name: row.consigneeName || 'Customer',
           recipient_phone: row.consigneePhone || '',
-          recipient_address: `${row.deliveryAddress || ''}${row.area ? `, ${row.area}` : ''}, ${row.destinationCity || ''}`,
+          recipient_address: `${row.deliveryAddress || ''}${row.area ? `, ${row.area}` : ''}, ${destCity}`,
+          source_city: originCity,
+          destination_city: destCity,
           consignee_email: row.consigneeEmail || '',
           consignee_alt_phone: row.consigneeAltPhone || '',
           allow_to_open: row.allowToOpen || 'No',
           comments: row.productDescription || row.comments || '',
           shipper: shipperId || null,
+          is_3pl: !is2PLCourierCity,
         };
 
         const parcelRes = await apiClient.post('/parcels', { data: parcelPayload });
@@ -1257,10 +1376,10 @@ function BookShipmentForm() {
             <nav className="flex gap-xs text-label-md font-label-md text-on-surface-variant mb-xs">
               <Link href="/orders" className="hover:text-primary transition-colors cursor-pointer">Booking Order</Link>
               <span>/</span>
-              <span className="text-on-surface">{bookingMode === 'manual' ? 'Book Order' : 'Bulk Booking'}</span>
+              <span className="text-on-surface">{bookingMode === 'manual' || !isShipper ? 'Book Order' : 'Bulk Booking'}</span>
             </nav>
             <h1 className="font-display-lg text-display-lg text-on-surface">
-              {bookingMode === 'manual' ? 'Book New Order' : 'Bulk Booking Orders'}
+              {bookingMode === 'manual' || !isShipper ? 'Book New Order' : 'Bulk Booking Orders'}
             </h1>
           </div>
           
@@ -1268,7 +1387,7 @@ function BookShipmentForm() {
           <div className="flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-2.5">
               
-              {bookingMode === 'manual' ? (
+              {bookingMode === 'manual' || !isShipper ? (
                 <button 
                   onClick={handleSubmit(onSubmit)}
                   disabled={bookingStatus === 'submitting' || bookingStatus === 'success'}
@@ -1339,7 +1458,9 @@ function BookShipmentForm() {
             {selectedShipperBusiness && (
               <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl shadow-2xs animate-in fade-in duration-200">
                 <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="font-bold text-slate-800">{selectedShipperBusiness.name}</span>
+                <span className="font-bold text-slate-800">
+                  {!isShipper ? `Shipper: ${selectedShipperBusiness.name}` : selectedShipperBusiness.name}
+                </span>
                 {selectedShipperBusiness.address && (
                   <>
                     <span className="text-slate-300">•</span>
@@ -1401,40 +1522,124 @@ function BookShipmentForm() {
 
         {/* Full-Width Compact Layout Section */}
         <div className="w-full space-y-md">
-          {/* Mode Switch Tabs */}
-          <div className="bg-surface-container-high p-1.5 rounded-2xl flex w-fit gap-1 border border-outline-variant">
-            <button
-              onClick={() => {
-                setBookingMode('manual');
-                router.push('/shipments/book?tab=manual');
-              }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
-                ${bookingMode === 'manual' 
-                  ? 'bg-white text-on-surface shadow-sm' 
-                  : 'text-outline hover:text-on-surface'}`}
-            >
-              <User className="h-3.5 w-3.5" />
-              Book Order
-            </button>
-            <button
-              onClick={() => {
-                setBookingMode('bulk');
-                router.push('/shipments/book?tab=bulk');
-              }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
-                ${bookingMode === 'bulk' 
-                  ? 'bg-white text-on-surface shadow-sm' 
-                  : 'text-outline hover:text-on-surface'}`}
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              Bulk Booking
-            </button>
-          </div>
+          {/* Mode Switch Tabs (Hidden for Courier, only single booking is supported) */}
+          {isShipper && (
+            <div className="bg-surface-container-high p-1.5 rounded-2xl flex w-fit gap-1 border border-outline-variant">
+              <button
+                onClick={() => {
+                  setBookingMode('manual');
+                  router.push('/shipments/book?tab=manual');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
+                  ${bookingMode === 'manual' 
+                    ? 'bg-white text-on-surface shadow-sm' 
+                    : 'text-outline hover:text-on-surface'}`}
+              >
+                <User className="h-3.5 w-3.5" />
+                Book Order
+              </button>
+              <button
+                onClick={() => {
+                  setBookingMode('bulk');
+                  router.push('/shipments/book?tab=bulk');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer
+                  ${bookingMode === 'bulk' 
+                    ? 'bg-white text-on-surface shadow-sm' 
+                    : 'text-outline hover:text-on-surface'}`}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Bulk Booking
+              </button>
+            </div>
+          )}
 
-          {bookingMode === 'manual' ? (
+          {bookingMode === 'manual' || !isShipper ? (
             /* Manual Booking Form Context Provider & Form Canvas */
             <FormProvider {...methods}>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-md">
+                {/* Shipper Selection Section for Courier Staff */}
+                {!isShipper && (
+                  <section className="bg-surface-container-lowest border-2 border-primary/20 rounded-xl p-md shadow-sm animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-sm border-b border-outline-variant pb-xs">
+                      <div className="flex items-center gap-sm">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Building2 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h2 className="font-bold text-sm text-on-surface">Book Order for Shipper / Merchant</h2>
+                          <p className="text-xs text-on-surface-variant">Select the registered shipper merchant account this consignment belongs to</p>
+                        </div>
+                      </div>
+                      {selectedShipperBusiness && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary">
+                          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                          Active: {selectedShipperBusiness.name}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-md items-end">
+                      <div className="md:col-span-2 flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-on-surface flex items-center gap-1">
+                          <Building2 className="w-3.5 h-3.5 text-primary" />
+                          Select Shipper Account <span className="text-error font-bold">*</span>
+                        </label>
+                        <select
+                          value={selectedCourierShipperId || selectedShipperBusiness?.id || ''}
+                          onChange={(e) => {
+                            const newId = Number(e.target.value);
+                            setSelectedCourierShipperId(newId);
+                            const found = allShippers.find(s => s.id === newId);
+                            if (found) {
+                              if (found.city) {
+                                setValue('sourceCity', found.city);
+                                setValue('sourceCityName', found.city);
+                              }
+                              if (found.preferred_tpl_partner) {
+                                setShipperPreferredTplId(found.preferred_tpl_partner?.id || found.preferred_tpl_partner);
+                              }
+                            }
+                          }}
+                          className="w-full h-11 px-3 py-2 bg-white border border-outline-variant rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer shadow-2xs"
+                        >
+                          <option value="" disabled>-- Select a Shipper Account --</option>
+                          {allShippers.map((sh) => (
+                            <option key={sh.id} value={sh.id}>
+                              {sh.name} {sh.account_id ? `(${sh.account_id})` : ''} - {sh.city || 'No City'} {sh.shipper_plan?.name ? `• [${sh.shipper_plan.name}]` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Selected Shipper Summary Card */}
+                      {selectedShipperBusiness && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs flex flex-col justify-center gap-1">
+                          <div className="flex items-center justify-between text-slate-500">
+                            <span className="font-semibold text-[11px]">Tariff Plan</span>
+                            <span className="font-bold text-primary text-[11px] truncate max-w-[130px]" title={selectedShipperBusiness.shipper_plan?.name}>
+                              {selectedShipperBusiness.shipper_plan?.name || 'Standard Tariff Plan'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-slate-500">
+                            <span className="font-semibold text-[11px]">Origin City</span>
+                            <span className="font-bold text-slate-800 text-[11px]">
+                              {selectedShipperBusiness.city || 'Not Specified'}
+                            </span>
+                          </div>
+                          {selectedShipperBusiness.phone && (
+                            <div className="flex items-center justify-between text-slate-500">
+                              <span className="font-semibold text-[11px]">Phone</span>
+                              <span className="font-medium text-slate-700 text-[11px]">
+                                {selectedShipperBusiness.phone}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
                 {/* Section 1: Consignee & Delivery Detail */}
                 <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
                   <div className="flex items-center gap-sm mb-md border-b border-outline-variant pb-xs">
@@ -2008,8 +2213,8 @@ function BookShipmentForm() {
                 <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm space-y-md">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant pb-md">
                     <div>
-                      <h3 className="font-headline-md text-headline-md">Loaded Orders Grid</h3>
-                      <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">Edit rows to correct error highlights before booking</p>
+                      <h3 className="font-headline-md text-headline-md">Loaded Orders &amp; COD Settlement Calculation</h3>
+                      <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">Calculated courier freight charges deducted from COD, showing net payable to shipper</p>
                     </div>
 
                     {gridHasErrors && (
@@ -2019,18 +2224,53 @@ function BookShipmentForm() {
                     )}
                   </div>
 
+                  {/* Financial Settlement Overview Cards (matching COD Settlement) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Loaded Orders</span>
+                      <div className="text-xl font-black text-slate-900 mt-0.5">{parsedRows.length}</div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Shipments in spreadsheet</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total COD Collected</span>
+                      <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
+                        PKR {parsedRows.reduce((acc, r) => acc + (Number(r.codAmount) || 0), 0).toLocaleString()}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Gross cash from recipients</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courier Freight Charges</span>
+                      <div className="text-xl font-black font-mono text-red-600 mt-0.5">
+                        - PKR {parsedRows.reduce((acc, r) => acc + (Number(r.serviceCharge) || 0), 0).toLocaleString()}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Service charges deduction</p>
+                    </div>
+
+                    <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Net Payout to Shipper</span>
+                      <div className="text-xl font-black font-mono text-emerald-700 mt-0.5">
+                        PKR {parsedRows.reduce((acc, r) => acc + (Number(r.payableToShipper) || 0), 0).toLocaleString()}
+                      </div>
+                      <p className="text-[10px] font-bold text-emerald-800 mt-0.5">Remaining payable to merchant</p>
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto rounded-xl border border-outline-variant">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 border-b border-outline-variant text-outline font-bold uppercase">
                         <tr>
-                          <th className="px-4 py-3">#</th>
-                          <th className="px-4 py-3">Recipient Name</th>
-                          <th className="px-4 py-3">Phone</th>
-                          <th className="px-4 py-3">Destination City</th>
-                          <th className="px-4 py-3">Address</th>
-                          <th className="px-4 py-3">Weight (Kg)</th>
-                          <th className="px-4 py-3">COD (PKR)</th>
-                          <th className="px-4 py-3 text-center">Actions</th>
+                          <th className="px-3 py-3">#</th>
+                          <th className="px-3 py-3">Recipient Name</th>
+                          <th className="px-3 py-3">Phone</th>
+                          <th className="px-3 py-3">Destination City</th>
+                          <th className="px-3 py-3">Address</th>
+                          <th className="px-3 py-3 text-center">Weight (Kg)</th>
+                          <th className="px-3 py-3 text-right">COD Collected</th>
+                          <th className="px-3 py-3 text-right">Freight Charges</th>
+                          <th className="px-3 py-3 text-right text-emerald-700">Net Payable</th>
+                          <th className="px-3 py-3 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-outline-variant font-medium text-on-surface">
@@ -2043,7 +2283,7 @@ function BookShipmentForm() {
                               key={row.id} 
                               className={`transition-colors ${hasErrors ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-slate-50/40'}`}
                             >
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-3">
                                 {hasErrors ? (
                                   <span title={Object.values(row.errors).join(', ')}>
                                     <AlertCircle className="h-4 w-4 text-red-500 animate-pulse" />
@@ -2053,7 +2293,7 @@ function BookShipmentForm() {
                                 )}
                               </td>
 
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-3">
                                 {isEditing ? (
                                   <input 
                                     type="text" 
@@ -2066,7 +2306,7 @@ function BookShipmentForm() {
                                 )}
                               </td>
 
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-3">
                                 {isEditing ? (
                                   <input 
                                     type="text" 
@@ -2079,7 +2319,7 @@ function BookShipmentForm() {
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 font-semibold">
+                              <td className="px-3 py-3 font-semibold">
                                 {isEditing ? (
                                   <select 
                                     value={editFormData.destinationCity || ''} 
@@ -2101,7 +2341,7 @@ function BookShipmentForm() {
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 max-w-[150px] truncate">
+                              <td className="px-3 py-3 max-w-[150px] truncate">
                                 {isEditing ? (
                                   <input 
                                     type="text" 
@@ -2114,30 +2354,42 @@ function BookShipmentForm() {
                                 )}
                               </td>
 
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-3 text-center">
                                 {isEditing ? (
                                   <input 
                                     type="number" 
                                     step="0.1"
                                     value={editFormData.weight || 0} 
                                     onChange={(e) => handleEditFormChange('weight', parseFloat(e.target.value))}
-                                    className="w-14 h-8 px-2 border border-outline-variant rounded-lg outline-none"
+                                    className="w-14 h-8 px-2 border border-outline-variant rounded-lg outline-none text-center"
                                   />
                                 ) : (
                                   <span>{row.weight} kg</span>
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 font-bold">
+                              <td className="px-3 py-3 font-bold text-right font-mono text-slate-900">
                                 {isEditing ? (
                                   <input 
                                     type="number" 
                                     value={editFormData.codAmount || 0} 
-                                    onChange={(e) => handleEditFormChange('codAmount', parseInt(e.target.value))}
-                                    className="w-16 h-8 px-2 border border-outline-variant rounded-lg outline-none"
+                                    onChange={(e) => handleEditFormChange('codAmount', parseInt(e.target.value) || 0)}
+                                    className="w-16 h-8 px-2 border border-outline-variant rounded-lg outline-none text-right font-mono"
                                   />
                                 ) : (
-                                  <span>PKR {row.codAmount}</span>
+                                  <span>PKR {Number(row.codAmount || 0).toLocaleString()}</span>
+                                )}
+                              </td>
+
+                              <td className="px-3 py-3 text-right font-mono text-red-600 font-semibold whitespace-nowrap">
+                                - PKR {Number(row.serviceCharge || 0).toLocaleString()}
+                              </td>
+
+                              <td className="px-3 py-3 text-right font-mono font-bold whitespace-nowrap">
+                                {row.payableToShipper >= 0 ? (
+                                  <span className="text-emerald-700 font-black">PKR {Number(row.payableToShipper || 0).toLocaleString()}</span>
+                                ) : (
+                                  <span className="text-red-700 font-black">- PKR {Math.abs(Number(row.payableToShipper || 0)).toLocaleString()}</span>
                                 )}
                               </td>
 
