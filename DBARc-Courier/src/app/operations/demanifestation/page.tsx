@@ -145,6 +145,25 @@ export default function OperationsDeManifestationPage() {
     return 'Destination';
   }, []);
 
+  // Helper to determine if a manifest is 3PL (TPL / 3rd Party Partner)
+  const is3PLManifest = React.useCallback((m: any): boolean => {
+    if (!m) return false;
+    const attrs = m.attributes || m;
+    const mType = String(attrs.manifest_type || m.manifest_type || '').trim().toLowerCase();
+    const isTPLType = mType === 'tpl' || mType === '3pl partner' || mType.includes('3pl') || mType.includes('third party');
+    const thirdParty = attrs.third_party || m.third_party;
+    const hasThirdParty = Boolean(thirdParty && String(thirdParty).trim() !== '' && String(thirdParty).trim() !== '-' && String(thirdParty).trim().toLowerCase() !== 'none');
+    
+    // Check if associated parcels are 3PL
+    const rawParcels = attrs.parcels?.data || attrs.parcels || m.parcels || [];
+    const all3PLParcels = rawParcels.length > 0 && rawParcels.every((p: any) => {
+      const pData = p.attributes || p;
+      return pData.is_3pl === true;
+    });
+
+    return isTPLType || hasThirdParty || all3PLParcels;
+  }, []);
+
   // Fetch Manifest and its associated In Transit parcels
   const handleLoadManifest = async (mNum?: string) => {
     let cleanNum = (mNum || manifestNumber).trim();
@@ -198,6 +217,16 @@ export default function OperationsDeManifestationPage() {
         return;
       }
 
+      // 3PL manifests cannot be demanifested in courier hub because 3rd party handles them after dispatch
+      if (is3PLManifest(manifest)) {
+        triggerToast(`Manifest #${manifest.manifest_number || cleanNum} is a 3PL partner handover manifest (${manifest.third_party || '3PL Partner'}). 3PL shipments are handled directly by the 3rd party partner and cannot be de-manifested in the courier hub.`, 'error');
+        setManifestParcels([]);
+        setActiveManifestObj(null);
+        setManifestNumber('');
+        setSealNo('');
+        return;
+      }
+
       setActiveManifestObj(manifest);
       setManifestNumber(String(manifest.manifest_number || manifest.id || cleanNum));
       setSealNo(manifest.seal_no || '');
@@ -220,6 +249,18 @@ export default function OperationsDeManifestationPage() {
         } catch (e) {
           console.warn('Fallback querying parcels by manifest id notice:', e);
         }
+      }
+
+      // Filter out any 3PL parcels - courier de-manifestation strictly handles 2PL in-house shipments
+      parcelsList = parcelsList.filter((p: any) => {
+        const pData = p.attributes || p;
+        return pData.is_3pl !== true;
+      });
+
+      if (parcelsList.length === 0) {
+        triggerToast(`Manifest #${manifest.manifest_number || cleanNum} has no 2PL shipments to de-manifest.`, 'error');
+        setManifestParcels([]);
+        return;
       }
 
       const mapped: DeManifestItem[] = parcelsList.map((p: any) => {
@@ -295,6 +336,15 @@ export default function OperationsDeManifestationPage() {
       }
 
       const targetId = parcel.documentId || parcel.id;
+      const pData = parcel.attributes || parcel;
+
+      // 3PL shipments are handled externally by 3rd party partners
+      if (pData.is_3pl === true) {
+        triggerToast(`Shipment #${code} is a 3PL partner shipment. 3PL shipments are handled directly by the 3rd party partner and cannot be de-manifested in the courier hub.`, 'error');
+        setScanBarcode('');
+        return;
+      }
+
       // Update status to "Arrived at warehouse (Dest)"
       await apiClient.put(`/parcels/${targetId}`, {
         data: {
@@ -387,13 +437,15 @@ export default function OperationsDeManifestationPage() {
     }
   };
 
-  // Browse Past Dispatched Manifests Modal
+  // Browse Past Dispatched Manifests Modal (strictly 2PL in-house station manifests)
   const handleOpenBrowseModal = async () => {
     setIsBrowseModalOpen(true);
     setIsLoadingPastManifests(true);
     try {
-      const res = await apiClient.get('/manifests?sort[0]=createdAt:desc&pagination[limit]=50&populate=*');
-      setPastManifestsList(res.data?.data || []);
+      const res = await apiClient.get('/manifests?sort[0]=createdAt:desc&pagination[limit]=100&populate=*');
+      const allManifests = res.data?.data || [];
+      const only2PLManifests = allManifests.filter((m: any) => !is3PLManifest(m));
+      setPastManifestsList(only2PLManifests);
     } catch (e) {
       console.warn('Could not load manifests list:', e);
     } finally {
@@ -475,15 +527,16 @@ export default function OperationsDeManifestationPage() {
   const pendingCount = manifestParcels.length - sentCount;
 
   const filteredPastManifests = React.useMemo(() => {
-    if (!modalSearch.trim()) return pastManifestsList;
+    const baseList = pastManifestsList.filter((m: any) => !is3PLManifest(m));
+    if (!modalSearch.trim()) return baseList;
     const q = modalSearch.toLowerCase();
-    return pastManifestsList.filter((m: any) => {
+    return baseList.filter((m: any) => {
       const num = String(m.manifest_number || m.id || '').toLowerCase();
       const st = String(m.station || '').toLowerCase();
       const sl = String(m.seal_no || '').toLowerCase();
       return num.includes(q) || st.includes(q) || sl.includes(q);
     });
-  }, [pastManifestsList, modalSearch]);
+  }, [pastManifestsList, modalSearch, is3PLManifest]);
 
   return (
     <PortalLayout>
@@ -699,7 +752,7 @@ export default function OperationsDeManifestationPage() {
               <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
                 <div className="flex items-center gap-2">
                   <List className="w-5 h-5 text-primary" />
-                  <h2 className="text-base font-bold">Dispatched Manifests (Select to De-Manifest)</h2>
+                  <h2 className="text-base font-bold">Dispatched Manifests (2PL Courier In-House Only)</h2>
                 </div>
                 <button onClick={() => setIsBrowseModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
                   <X className="w-5 h-5" />
@@ -717,14 +770,14 @@ export default function OperationsDeManifestationPage() {
                     className="w-full bg-white border border-slate-300 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
-                <span className="text-xs font-bold text-slate-500">Showing {filteredPastManifests.length} manifests</span>
+                <span className="text-xs font-bold text-slate-500">Showing {filteredPastManifests.length} manifests (3PL excluded)</span>
               </div>
 
               <div className="p-6 overflow-y-auto custom-scrollbar">
                 {isLoadingPastManifests ? (
-                  <div className="p-8 text-center text-slate-500 font-semibold text-xs">Loading manifests...</div>
+                  <div className="p-8 text-center text-slate-500 font-semibold text-xs">Loading in-house manifests...</div>
                 ) : filteredPastManifests.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 font-semibold text-xs">No dispatched manifests found.</div>
+                  <div className="p-8 text-center text-slate-400 font-semibold text-xs">No dispatched 2PL in-house manifests found.</div>
                 ) : (
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
@@ -743,20 +796,13 @@ export default function OperationsDeManifestationPage() {
                         const mNumber = m.manifest_number || m.id;
                         const dateStr = m.date ? new Date(m.date).toLocaleString() : (m.createdAt ? new Date(m.createdAt).toLocaleString() : '-');
                         const pCount = m.parcels?.length || m.total_parcels || 0;
-                        const is3PL = m.manifest_type === 'TPL' || m.manifest_type === '3PL Partner' || Boolean(m.third_party && m.third_party !== '-');
                         return (
                           <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-3 font-bold text-primary font-mono text-sm">{mNumber}</td>
                             <td className="p-3">
-                              {is3PL ? (
-                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                  3PL ({m.third_party || 'Partner'})
-                                </span>
-                              ) : (
-                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                  2PL Station
-                                </span>
-                              )}
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                2PL Station
+                              </span>
                             </td>
                             <td className="p-3 text-slate-600">{dateStr}</td>
                             <td className="p-3 font-bold text-slate-900">{m.station || '-'}</td>
