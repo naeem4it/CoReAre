@@ -4,6 +4,7 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { InvoiceService } from '@/services/api';
 import { Download, Filter, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 interface InvoiceItem {
   id: number;
@@ -33,6 +34,7 @@ interface InvoiceItem {
 }
 
 export default function CustomerInvoicePage() {
+  const { user, isShipper, activeBusinessId } = useAuth();
   const [invoices, setInvoices] = React.useState<InvoiceItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedStatus, setSelectedStatus] = React.useState<'All' | 'Paid' | 'Pending' | 'Overdue'>('All');
@@ -41,12 +43,32 @@ export default function CustomerInvoicePage() {
   const [pageSize] = React.useState(10);
   const [totalCount, setTotalCount] = React.useState(0);
 
+  const userBusinesses = React.useMemo(() => {
+    if (!user?.shipper) return [];
+    return Array.isArray(user.shipper) ? user.shipper : [user.shipper];
+  }, [user]);
+
+  const userBusinessIds = React.useMemo(() => {
+    return userBusinesses.map((b: any) => b.id).filter(Boolean);
+  }, [userBusinesses]);
+
   const fetchInvoices = React.useCallback(async () => {
     setIsLoading(true);
     try {
       let query = `?populate=*&sort[0]=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}`;
       if (selectedStatus !== 'All') {
         query += `&filters[status][$eq]=${selectedStatus}`;
+      }
+      if (isShipper) {
+        if (activeBusinessId && userBusinessIds.includes(activeBusinessId)) {
+          query += `&filters[shipper][id][$eq]=${activeBusinessId}`;
+        } else if (userBusinessIds.length === 1) {
+          query += `&filters[shipper][id][$eq]=${userBusinessIds[0]}`;
+        } else if (userBusinessIds.length > 1) {
+          userBusinessIds.forEach((id: number, idx: number) => {
+            query += `&filters[shipper][id][$in][${idx}]=${id}`;
+          });
+        }
       }
       const res = await InvoiceService.getAll(query);
       const data = res?.data || [];
@@ -57,7 +79,7 @@ export default function CustomerInvoicePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, selectedStatus]);
+  }, [page, pageSize, selectedStatus, isShipper, activeBusinessId, userBusinessIds]);
 
   React.useEffect(() => {
     fetchInvoices();

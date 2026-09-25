@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
-import { ChevronDown, Building2, MapPin, User, LogOut, Settings, Key } from 'lucide-react';
+import { ChevronDown, Building2, MapPin, User, LogOut, Settings, Key, CreditCard } from 'lucide-react';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -251,7 +251,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                     <p className="font-bold text-sm text-on-surface truncate">{user?.fullName || user?.username}</p>
                     <p className="text-xs text-on-surface-variant truncate">{user?.email}</p>
                   </div>
-                  <div className="p-2">
+                  <div className="p-2 space-y-1">
+                    {(isShipperAdmin || isShipper) && (
+                      <Link 
+                        href="/profile/payment-method" 
+                        onClick={() => setProfileDropdownOpen(false)} 
+                        className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-slate-50 rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <CreditCard className="w-4 h-4 text-primary" /> Configure Payment Method
+                      </Link>
+                    )}
                     <Link href="/auth/change-password" onClick={() => setProfileDropdownOpen(false)} className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-slate-50 rounded-lg flex items-center gap-2 transition-colors">
                       <Key className="w-4 h-4 text-primary" /> Change Password
                     </Link>
@@ -348,7 +357,9 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (pathname.startsWith('/invoices/cod-settlement')) {
+    if (isShipper && (pathname.startsWith('/financials') || pathname.startsWith('/invoices'))) {
+      setExpandedMenu('reports');
+    } else if (!isShipper && pathname.startsWith('/invoices/cod-settlement')) {
       setExpandedMenu('financials');
     } else if (
       pathname.startsWith('/reports') || 
@@ -367,13 +378,13 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
       pathname.startsWith('/administration/plans') ||
       pathname.startsWith('/financials')
     ) {
-      setExpandedMenu('financials');
+      setExpandedMenu(isShipper ? 'reports' : 'financials');
     } else if (pathname.startsWith('/administration')) {
       setExpandedMenu('admin');
     } else if (pathname.startsWith('/operations')) {
       setExpandedMenu('operations');
     }
-  }, [pathname]);
+  }, [pathname, isShipper]);
 
   const toggleMenu = (menu: string) => {
     setExpandedMenu(expandedMenu === menu ? null : menu);
@@ -603,6 +614,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             </button>
             {expandedMenu === 'reports' && (
               <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
+                <NavLink href="/financials/shipper-invoices" icon="receipt_long" label="Invoices" />
                 <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoices" />
                 <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />
                 <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />

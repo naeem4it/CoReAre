@@ -1116,6 +1116,10 @@ export interface ApiInvoiceInvoice extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    account_number: Schema.Attribute.String;
+    account_title: Schema.Attribute.String;
+    bank_name: Schema.Attribute.String;
+    cheque_number: Schema.Attribute.String;
     cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1137,6 +1141,8 @@ export interface ApiInvoiceInvoice extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     net_payable: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     parcels: Schema.Attribute.Relation<'oneToMany', 'api::parcel.parcel'>;
+    payment_method: Schema.Attribute.Enumeration<['Cash', 'Cheque', 'Online']> &
+      Schema.Attribute.DefaultTo<'Cash'>;
     period_end: Schema.Attribute.Date;
     period_start: Schema.Attribute.Date;
     publishedAt: Schema.Attribute.DateTime;
@@ -1980,6 +1986,8 @@ export interface ApiShipperShipper extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     offices: Schema.Attribute.Relation<'oneToMany', 'api::office.office'>;
+    payment_method: Schema.Attribute.Enumeration<['Cash', 'Cheque', 'Online']> &
+      Schema.Attribute.DefaultTo<'Cash'>;
     phone: Schema.Attribute.String;
     pickup_locations: Schema.Attribute.Relation<
       'oneToMany',

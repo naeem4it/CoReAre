@@ -8,6 +8,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
 import { Eye, EyeOff } from 'lucide-react';
+import PaymentMethodConfigBlock, { PaymentMethodData } from '@/components/payment/PaymentMethodConfigBlock';
 
 interface RoleDefinition {
   id: number;
@@ -24,7 +25,16 @@ interface User {
   blocked?: boolean;
   confirmed?: boolean;
   role_definition?: RoleDefinition[];
-  shipper?: { id: number; name: string; planName?: string }[] | null;
+  shipper?: { 
+    id: number; 
+    name: string; 
+    planName?: string;
+    payment_method?: 'Cash' | 'Cheque' | 'Online';
+    bank_name?: string;
+    account_title?: string;
+    account_number?: string;
+    cheque_title?: string;
+  }[] | null;
   shipper_roles?: string[];
   offices?: { id: number; name: string }[] | null;
   tenant?: any;
@@ -168,7 +178,12 @@ function EmployeeManagementContent() {
     address?: string; 
     city?: string; 
     offices?: any[]; 
-    shipper_plan?: any 
+    shipper_plan?: any;
+    payment_method?: 'Cash' | 'Cheque' | 'Online';
+    bank_name?: string;
+    account_title?: string;
+    account_number?: string;
+    cheque_title?: string;
   }>>([]);
   const [offices, setOffices] = React.useState<{ id: number; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -209,6 +224,11 @@ function EmployeeManagementContent() {
     planId?: number | 'custom' | undefined;
     planName: string;
     customPlanData?: CustomPlanData | undefined;
+    payment_method?: 'Cash' | 'Cheque' | 'Online' | undefined;
+    bank_name?: string | undefined;
+    account_title?: string | undefined;
+    account_number?: string | undefined;
+    cheque_title?: string | undefined;
     isSelected?: boolean | undefined;
     isEditingName?: boolean | undefined;
     isEditingPlan?: boolean | undefined;
@@ -241,6 +261,13 @@ function EmployeeManagementContent() {
   const [newBusinessCity, setNewBusinessCity] = React.useState('');
   const [businessModalError, setBusinessModalError] = React.useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = React.useState<number | 'custom'>(1);
+  const [newBusinessPaymentData, setNewBusinessPaymentData] = React.useState<PaymentMethodData>({
+    payment_method: 'Cash',
+    bank_name: '',
+    account_title: '',
+    account_number: '',
+    cheque_title: '',
+  });
 
   // Custom Tariff Plan configuration modal state
   const [isCustomPlanModalOpen, setIsCustomPlanModalOpen] = React.useState(false);
@@ -285,6 +312,11 @@ function EmployeeManagementContent() {
           name: item.name || item.attributes?.name || `Shipper #${item.id}`,
           address: item.address || item.attributes?.address || (item.offices && item.offices[0]?.address) || '',
           city: item.city || item.attributes?.city || (item.offices && item.offices[0]?.city?.name) || (typeof item.offices?.[0]?.city === 'string' ? item.offices[0].city : '') || '',
+          payment_method: item.payment_method || item.attributes?.payment_method || 'Cash',
+          bank_name: item.bank_name || item.attributes?.bank_name || '',
+          account_title: item.account_title || item.attributes?.account_title || '',
+          account_number: item.account_number || item.attributes?.account_number || '',
+          cheque_title: item.cheque_title || item.attributes?.cheque_title || '',
           shipper_plan: item.shipper_plan,
         }));
         setShippers(mappedShippers);
@@ -552,6 +584,11 @@ function EmployeeManagementContent() {
           city?: string;
           planId?: number | 'custom';
           planName: string;
+          payment_method?: 'Cash' | 'Cheque' | 'Online';
+          bank_name?: string;
+          account_title?: string;
+          account_number?: string;
+          cheque_title?: string;
           isSelected?: boolean;
         } = {
           tempId: String(sId || idx + 1),
@@ -560,6 +597,11 @@ function EmployeeManagementContent() {
           city: city || '',
           planId: s.shipper_plan?.id || matched?.shipper_plan?.id || 1,
           planName: s.shipper_plan?.name || matched?.shipper_plan?.name || s.planName || 'Standard Tariff Plan (Default)',
+          payment_method: s.payment_method || matched?.payment_method || 'Cash',
+          bank_name: s.bank_name || matched?.bank_name || '',
+          account_title: s.account_title || matched?.account_title || '',
+          account_number: s.account_number || matched?.account_number || '',
+          cheque_title: s.cheque_title || matched?.cheque_title || '',
           isSelected: false
         };
         if (sId && !isNaN(Number(sId))) {
@@ -874,6 +916,17 @@ function EmployeeManagementContent() {
     } else {
       setConfiguredCustomPlan(null);
     }
+
+    // Load existing payment method & bank details for this row (or fallback to matched shipper)
+    const matchedShipper = shippers.find(s => s.id === row.id);
+    setNewBusinessPaymentData({
+      payment_method: row.payment_method || matchedShipper?.payment_method || 'Cash',
+      bank_name: row.bank_name || matchedShipper?.bank_name || '',
+      account_title: row.account_title || matchedShipper?.account_title || '',
+      account_number: row.account_number || matchedShipper?.account_number || '',
+      cheque_title: row.cheque_title || matchedShipper?.cheque_title || '',
+    });
+
     setBusinessModalError(null);
     setIsAddBusinessModalOpen(true);
   };
@@ -902,6 +955,22 @@ function EmployeeManagementContent() {
       return;
     }
 
+    // Validation for Cheque / Online
+    if (newBusinessPaymentData.payment_method === 'Cheque' || newBusinessPaymentData.payment_method === 'Online') {
+      if (!newBusinessPaymentData.bank_name?.trim()) {
+        setBusinessModalError('Bank Name is required for ' + newBusinessPaymentData.payment_method + ' payment.');
+        return;
+      }
+      if (!newBusinessPaymentData.account_title?.trim()) {
+        setBusinessModalError('Account Title is required for ' + newBusinessPaymentData.payment_method + ' payment.');
+        return;
+      }
+      if (!newBusinessPaymentData.account_number?.trim()) {
+        setBusinessModalError('Account Number / IBAN is required for ' + newBusinessPaymentData.payment_method + ' payment.');
+        return;
+      }
+    }
+
     const isCustom = selectedPlanId === 'custom';
     if (isCustom && !configuredCustomPlan) {
       setBusinessModalError('Please configure the Custom Tariff Plan rates before adding the business.');
@@ -921,6 +990,11 @@ function EmployeeManagementContent() {
             city: trimmedCity,
             planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
             planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
+            payment_method: newBusinessPaymentData.payment_method || 'Cash',
+            bank_name: newBusinessPaymentData.bank_name || '',
+            account_title: newBusinessPaymentData.account_title || '',
+            account_number: newBusinessPaymentData.account_number || '',
+            cheque_title: newBusinessPaymentData.cheque_title || '',
             ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
           };
         }
@@ -934,6 +1008,11 @@ function EmployeeManagementContent() {
         city: trimmedCity,
         planId: isCustom ? ('custom' as any) : (planObj?.id || 1),
         planName: isCustom ? `★ ${configuredCustomPlan?.name || 'Custom Plan'}` : (planObj?.name || 'Standard Tariff Plan (Default)'),
+        payment_method: newBusinessPaymentData.payment_method || 'Cash',
+        bank_name: newBusinessPaymentData.bank_name || '',
+        account_title: newBusinessPaymentData.account_title || '',
+        account_number: newBusinessPaymentData.account_number || '',
+        cheque_title: newBusinessPaymentData.cheque_title || '',
         isSelected: false,
         ...(isCustom && configuredCustomPlan ? { customPlanData: configuredCustomPlan } : {}),
       };
@@ -945,6 +1024,13 @@ function EmployeeManagementContent() {
     setNewBusinessName('');
     setNewBusinessAddress('');
     setNewBusinessCity('');
+    setNewBusinessPaymentData({
+      payment_method: 'Cash',
+      bank_name: '',
+      account_title: '',
+      account_number: '',
+      cheque_title: '',
+    });
     setBusinessModalError(null);
     setConfiguredCustomPlan(null);
     setSelectedPlanId(availablePlans[0]?.id || 1);
@@ -1067,14 +1153,36 @@ function EmployeeManagementContent() {
           }
 
           const numId = Number(b.id);
-          shipperObjects.push({
+          const shipperObj: any = {
             id: (!isNaN(numId) && numId > 0 && numId < 1000000000000) ? numId : undefined,
             name: b.name,
             address: b.address || '',
             city: b.city || '',
             planId: assignedPlanId,
-            planName: b.planName || 'Standard Tariff Plan (Default)'
-          });
+            planName: b.planName || 'Standard Tariff Plan (Default)',
+            payment_method: b.payment_method || 'Cash',
+            bank_name: b.bank_name || '',
+            account_title: b.account_title || '',
+            account_number: b.account_number || '',
+            cheque_title: b.cheque_title || '',
+          };
+          shipperObjects.push(shipperObj);
+
+          if (!isNaN(numId) && numId > 0 && numId < 1000000000000) {
+            try {
+              await apiClient.put(`/shippers/${numId}`, {
+                data: {
+                  payment_method: b.payment_method || 'Cash',
+                  bank_name: b.bank_name || '',
+                  account_title: b.account_title || '',
+                  account_number: b.account_number || '',
+                  cheque_title: b.cheque_title || '',
+                }
+              });
+            } catch (errPut) {
+              console.warn(`Failed direct update on /shippers/${numId}:`, errPut);
+            }
+          }
         }
 
         payload.shipper = shipperObjects;
@@ -1678,6 +1786,29 @@ function EmployeeManagementContent() {
                         setNewBusinessCity('');
                         setBusinessModalError(null);
                         setSelectedPlanId(availablePlans[0]?.id || 1);
+                        setEditingBusinessRow(null);
+                        setConfiguredCustomPlan(null);
+
+                        // Auto-populate from previous business if exists
+                        const prevBiz = businessGridRows.slice().reverse().find(b => b.payment_method || b.bank_name || b.account_number) || businessGridRows[businessGridRows.length - 1];
+                        if (prevBiz) {
+                          setNewBusinessPaymentData({
+                            payment_method: prevBiz.payment_method || 'Cash',
+                            bank_name: prevBiz.bank_name || '',
+                            account_title: prevBiz.account_title || '',
+                            account_number: prevBiz.account_number || '',
+                            cheque_title: prevBiz.cheque_title || '',
+                          });
+                        } else {
+                          setNewBusinessPaymentData({
+                            payment_method: 'Cash',
+                            bank_name: '',
+                            account_title: '',
+                            account_number: '',
+                            cheque_title: '',
+                          });
+                        }
+
                         setIsAddBusinessModalOpen(true);
                       }}
                       className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-xs"
@@ -1951,9 +2082,9 @@ function EmployeeManagementContent() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => { setEditingBusinessRow(null); setIsAddBusinessModalOpen(false); }} />
           
-          <div className="relative z-10 bg-white rounded-3xl shadow-2xl w-[560px] max-w-[95vw] shrink-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
+          <div className="relative z-10 bg-white rounded-3xl shadow-2xl w-[620px] max-w-[95vw] max-h-[92vh] flex flex-col shrink-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-900 text-white rounded-t-3xl">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-900 text-white rounded-t-3xl shrink-0">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary-container">
                   {editingBusinessRow ? 'edit' : 'storefront'}
@@ -1968,7 +2099,7 @@ function EmployeeManagementContent() {
               </button>
             </div>
 
-            <form onSubmit={handleAddBusinessToGrid} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleAddBusinessToGrid} className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(92vh-75px)]">
               {businessModalError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
                   <span className="material-symbols-outlined text-red-500 text-[18px]">error</span>
@@ -2097,6 +2228,21 @@ function EmployeeManagementContent() {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Payment Method Configuration Block */}
+              <div className="pt-3 border-t border-slate-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                    Payment Method
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">Configure payout channel for this business</span>
+                </div>
+                <PaymentMethodConfigBlock
+                  mode="booking"
+                  value={newBusinessPaymentData}
+                  onChange={(val) => setNewBusinessPaymentData(val)}
+                />
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">

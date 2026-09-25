@@ -119,6 +119,15 @@
     },
     "cheque_title": {
       "type": "string"
+    },
+    "payment_method": {
+      "type": "enumeration",
+      "enum": [
+        "Cash",
+        "Cheque",
+        "Online"
+      ],
+      "default": "Cash"
     }
   }
 }

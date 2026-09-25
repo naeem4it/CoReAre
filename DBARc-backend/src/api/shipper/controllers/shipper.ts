@@ -2,6 +2,17 @@ import { factories } from '@strapi/strapi';
 import shipperOrderApi from './shipper-order-api';
 
 export default factories.createCoreController('api::shipper.shipper', ({ strapi }) => ({
+  async findOne(ctx) {
+    const id = ctx.params.id || ctx.params.documentId;
+    if (!id) return ctx.badRequest('ID required');
+    const shipper = await strapi.db.query('api::shipper.shipper').findOne({
+      where: isNaN(Number(id)) ? { documentId: id } : { id: Number(id) },
+      populate: ['shipper_plan', 'tenant', 'offices', 'preferred_tpl_partner'],
+    });
+    if (!shipper) return ctx.notFound('Shipper not found');
+    return ctx.send({ data: shipper });
+  },
+
   async update(ctx) {
     const { id } = ctx.params;
     if (id && !isNaN(Number(id))) {
@@ -68,6 +79,16 @@ export default factories.createCoreController('api::shipper.shipper', ({ strapi 
       if (preferredTplPartner !== undefined) {
         updateData.preferred_tpl_partner = preferredTplPartner ? (Number(preferredTplPartner) || preferredTplPartner) : null;
       }
+
+      if (body.payment_method !== undefined) updateData.payment_method = body.payment_method;
+      if (body.bank_name !== undefined) updateData.bank_name = body.bank_name;
+      if (body.account_title !== undefined) updateData.account_title = body.account_title;
+      if (body.account_number !== undefined) updateData.account_number = body.account_number;
+      if (body.cheque_title !== undefined) updateData.cheque_title = body.cheque_title;
+      if (body.cheque_number !== undefined) updateData.cheque_number = body.cheque_number;
+      if (body.name !== undefined) updateData.name = body.name;
+      if (body.address !== undefined) updateData.address = body.address;
+      if (body.city !== undefined) updateData.city = body.city;
 
       if (Object.keys(updateData).length > 0) {
         await strapi.db.query('api::shipper.shipper').update({

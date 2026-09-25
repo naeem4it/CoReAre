@@ -160,6 +160,14 @@ export default {
       },
     },
     {
+      method: 'GET',
+      path: '/shippers/:id',
+      handler: 'shipper.findOne',
+      config: {
+        auth: false,
+      },
+    },
+    {
       method: 'PUT',
       path: '/shippers/:id/assign-plan',
       handler: 'shipper.assignPlan',

@@ -73,6 +73,27 @@
       "relation": "oneToMany",
       "target": "api::parcel.parcel",
       "mappedBy": "invoice"
+    },
+    "payment_method": {
+      "type": "enumeration",
+      "enum": [
+        "Cash",
+        "Cheque",
+        "Online"
+      ],
+      "default": "Cash"
+    },
+    "cheque_number": {
+      "type": "string"
+    },
+    "bank_name": {
+      "type": "string"
+    },
+    "account_title": {
+      "type": "string"
+    },
+    "account_number": {
+      "type": "string"
     }
   }
 }

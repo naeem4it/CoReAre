@@ -576,10 +576,17 @@ export default (plugin: any) => {
               });
               if (existingShipper) {
                 targetShipperIds.push(existingShipper.id);
-                if (resolvedPlanId) {
+                const updateData: any = {};
+                if (resolvedPlanId) updateData.shipper_plan = resolvedPlanId;
+                if (item.payment_method) updateData.payment_method = item.payment_method;
+                if (item.bank_name !== undefined) updateData.bank_name = item.bank_name;
+                if (item.account_title !== undefined) updateData.account_title = item.account_title;
+                if (item.account_number !== undefined) updateData.account_number = item.account_number;
+                if (item.cheque_title !== undefined) updateData.cheque_title = item.cheque_title;
+                if (Object.keys(updateData).length > 0) {
                   await strapi.db.query('api::shipper.shipper').update({
                     where: { id: existingShipper.id },
-                    data: { shipper_plan: resolvedPlanId }
+                    data: updateData
                   });
                 }
                 continue;
@@ -594,6 +601,11 @@ export default (plugin: any) => {
                   tenant: tenantId,
                   status: 'active',
                   shipper_plan: resolvedPlanId || null,
+                  payment_method: item.payment_method || 'Cash',
+                  bank_name: item.bank_name || '',
+                  account_title: item.account_title || '',
+                  account_number: item.account_number || '',
+                  cheque_title: item.cheque_title || '',
                   publishedAt: new Date(),
                 }
               });
@@ -895,6 +907,21 @@ export default (plugin: any) => {
                     if (resolvedPlanId) {
                       updateShipperData.shipper_plan = resolvedPlanId;
                     }
+                    if (item.payment_method) {
+                      updateShipperData.payment_method = item.payment_method;
+                    }
+                    if (item.bank_name !== undefined) {
+                      updateShipperData.bank_name = item.bank_name;
+                    }
+                    if (item.account_title !== undefined) {
+                      updateShipperData.account_title = item.account_title;
+                    }
+                    if (item.account_number !== undefined) {
+                      updateShipperData.account_number = item.account_number;
+                    }
+                    if (item.cheque_title !== undefined) {
+                      updateShipperData.cheque_title = item.cheque_title;
+                    }
                     if (Object.keys(updateShipperData).length > 0) {
                       await strapi.db.query('api::shipper.shipper').update({
                         where: { id: existingShipper.id },
@@ -915,6 +942,11 @@ export default (plugin: any) => {
                       tenant: tenantId || null,
                       status: 'active',
                       shipper_plan: resolvedPlanId || null,
+                      payment_method: item.payment_method || 'Cash',
+                      bank_name: item.bank_name || '',
+                      account_title: item.account_title || '',
+                      account_number: item.account_number || '',
+                      cheque_title: item.cheque_title || '',
                       publishedAt: new Date(),
                     }
                   });
