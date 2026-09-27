@@ -18,11 +18,30 @@ export default {
         }
         const token = authHeader.split(' ')[1];
         try {
-          const decoded = await strapi.service('admin::jwt').verify(token);
-          if (decoded && decoded.id) {
+          let adminId: number | null = null;
+          try {
+            const sessionManager = strapi.sessionManager;
+            if (sessionManager) {
+              const result = sessionManager('admin').validateAccessToken(token);
+              if (result?.isValid && result?.payload?.userId) {
+                adminId = Number(result.payload.userId);
+              }
+            }
+          } catch (e) {}
+
+          if (!adminId) {
+            try {
+              const jwt = require('jsonwebtoken');
+              const decoded: any = jwt.decode(token);
+              const aid = decoded && (decoded.id || decoded.userId);
+              if (aid) adminId = Number(aid);
+            } catch (e) {}
+          }
+
+          if (adminId) {
             const admin = await strapi.db.query('admin::user').findOne({
-              where: { id: decoded.id },
-              populate: ['roles', 'tenant'],
+              where: { id: Number(adminId) },
+              populate: ['roles'],
             });
             if (admin) {
               const isSuperAdmin = admin.roles?.some((r: any) => r.code === 'strapi-super-admin');
@@ -63,10 +82,20 @@ export default {
       },
       async verify(auth: any, config: any) {
         const { credentials: user, ability } = auth;
+        if (!user) {
+          throw new UnauthorizedError();
+        }
+
+        // Super Admin bypass: full access across Content API
+        const isSuperAdmin = user.isAdminUser && (
+          user.adminUser?.roles?.some((r: any) => r.code === 'strapi-super-admin') ||
+          user.role?.type === 'super_admin'
+        );
+        if (isSuperAdmin) {
+          return;
+        }
+
         if (!config.scope) {
-          if (!user) {
-            throw new UnauthorizedError();
-          }
           return;
         }
         if (!ability) {
@@ -92,6 +121,43 @@ export default {
   async bootstrap({ strapi }: { strapi: any }) {
     try {
       console.log('Bootstrapping default permissions...');
+
+      // Auto-sync all PostgreSQL primary key sequences to MAX(id)
+      try {
+        await strapi.db.connection.raw(`
+          DO $$
+          DECLARE
+              rec RECORD;
+              max_val BIGINT;
+          BEGIN
+              FOR rec IN 
+                  SELECT 
+                      tc.table_schema, 
+                      tc.table_name, 
+                      cc.column_name,
+                      pg_get_serial_sequence('"' || tc.table_schema || '"."' || tc.table_name || '"', cc.column_name) AS seq_name
+                  FROM information_schema.table_constraints tc
+                  JOIN information_schema.constraint_column_usage cc 
+                      ON tc.constraint_name = cc.constraint_name 
+                      AND tc.table_schema = cc.table_schema
+                  WHERE tc.constraint_type = 'PRIMARY KEY' 
+                    AND tc.table_schema = 'public'
+              LOOP
+                  IF rec.seq_name IS NOT NULL THEN
+                      EXECUTE format('SELECT COALESCE(MAX(%I), 0) FROM %I.%I', rec.column_name, rec.table_schema, rec.table_name) INTO max_val;
+                      IF max_val > 0 THEN
+                          EXECUTE format('SELECT setval(%L, %s, true)', rec.seq_name, max_val);
+                      ELSE
+                          EXECUTE format('SELECT setval(%L, 1, false)', rec.seq_name);
+                      END IF;
+                  END IF;
+              END LOOP;
+          END $$;
+        `);
+        console.log('PostgreSQL primary key sequences synchronized.');
+      } catch (seqErr: any) {
+        console.warn('Sequence alignment note:', seqErr.message);
+      }
 
       // Seed default courier roles for all existing tenants
       const tenants = await strapi.db.query('api::tenant.tenant').findMany();

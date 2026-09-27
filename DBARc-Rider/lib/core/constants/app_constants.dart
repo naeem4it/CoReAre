@@ -2,10 +2,8 @@ class AppConstants {
   static const String appName = 'DBARc Rider';
   static const String appVersion = '1.0.0';
 
-  // Default Base URL for Strapi backend
-  // For Android Emulator: http://10.0.2.2:1337/api
-  // For Physical Device / LAN: User can override in settings
-  static const String defaultBaseUrl = 'http://10.0.2.2:1337/api';
+  // Default Base URL for Strapi backend (Production / TestFlight)
+  static const String defaultBaseUrl = 'https://api.dbarc.mashrue.com/api';
   static const String defaultLocalhostUrl = 'http://localhost:1337/api';
 
   // Storage Keys

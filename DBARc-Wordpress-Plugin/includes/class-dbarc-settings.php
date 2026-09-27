@@ -38,7 +38,7 @@ class DBARc_Settings {
 
         $email = sanitize_text_field($_POST['dbarc_email'] ?? '');
         $password = $_POST['dbarc_password'] ?? '';
-        $base_url = esc_url_raw($_POST['dbarc_api_base_url'] ?? 'http://localhost:1337');
+        $base_url = esc_url_raw($_POST['dbarc_api_base_url'] ?? 'https://api.dbarc.mashrue.com');
         $tenant_id = sanitize_text_field($_POST['dbarc_tenant_id'] ?? '');
 
         update_option('dbarc_api_base_url', $base_url);
@@ -74,7 +74,7 @@ class DBARc_Settings {
         $jwt = get_option('dbarc_jwt_token', '');
         $user_email = get_option('dbarc_user_email', '');
         $is_connected = !empty($jwt);
-        $base_url = get_option('dbarc_api_base_url', 'http://localhost:1337');
+        $base_url = get_option('dbarc_api_base_url', 'https://api.dbarc.mashrue.com');
         $tenant_id = get_option('dbarc_tenant_id', '');
         $auto_sync_status = get_option('dbarc_auto_sync_status', 'processing');
         $default_service = get_option('dbarc_default_service_type', 'Overnight');

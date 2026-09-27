@@ -95,8 +95,8 @@ export const CourierShipmentsTable = () => {
           'Return_to_Shipper': 'bg-gray-100 text-gray-700 border-gray-200',
         };
         return (
-          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold border', styles[status] || styles['Booked'] || styles['Total_Booking'])}>
-            {status === 'Total Booking' ? 'Booked' : status}
+          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold border', styles[status] || styles['Total_Booking'])}>
+            {(status as string) === 'Total Booking' || (status as string) === 'Total_Booking' ? 'Booked' : status}
           </span>
         );
       },

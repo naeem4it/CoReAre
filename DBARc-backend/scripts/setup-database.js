@@ -120,8 +120,14 @@ async function main() {
     console.log(`[DB Setup] Database "${dbName}" currently contains ${tableCount} table(s).`);
 
     if (tableCount === 0) {
-      console.log(`[DB Setup] Database is empty. Restoring schema from DBARc_Schema_2026June2.sql...`);
-      const schemaFile = path.resolve(__dirname, '..', '..', 'DBARc_Schema_2026June2.sql');
+      console.log(`[DB Setup] Database is empty. Restoring schema from DBARc_chema_2026September.sql...`);
+      let schemaFile = path.resolve(__dirname, '..', '..', 'DBARc_chema_2026September.sql');
+      if (!fs.existsSync(schemaFile)) {
+        schemaFile = path.resolve(__dirname, '..', '..', 'DBARc_Schema_2026September.sql');
+      }
+      if (!fs.existsSync(schemaFile)) {
+        schemaFile = path.resolve(__dirname, '..', '..', 'DBARc_Schema_2026June2.sql');
+      }
       if (!fs.existsSync(schemaFile)) {
         console.warn(`[DB Setup WARNING] Schema file not found at: ${schemaFile}`);
       } else {

@@ -55,6 +55,103 @@ export default (plugin: any) => {
     return { isValid: true };
   };
 
+  // Helper to safely resolve city relation ID for office records (avoids "invalid input syntax for type integer: 'CityName'")
+  const resolveOfficeCityId = async (cityInput: any): Promise<number | null> => {
+    if (!cityInput) return null;
+
+    // 1. Numeric ID directly
+    if (typeof cityInput === 'number' && !isNaN(cityInput) && cityInput > 0) {
+      try {
+        const found = await strapi.db.query('api::city.city').findOne({
+          where: { id: cityInput }
+        });
+        if (found) return found.id;
+      } catch (e) {}
+      return cityInput;
+    }
+
+    // 2. Numeric string like "15"
+    if (typeof cityInput === 'string' && !isNaN(Number(cityInput)) && Number(cityInput) > 0) {
+      const numId = Number(cityInput);
+      try {
+        const found = await strapi.db.query('api::city.city').findOne({
+          where: { id: numId }
+        });
+        if (found) return found.id;
+      } catch (e) {}
+      return numId;
+    }
+
+    // 3. Object with id (e.g. { id: 15 } or { data: { id: 15 } })
+    if (typeof cityInput === 'object' && cityInput !== null) {
+      const objId = cityInput.id || cityInput.data?.id;
+      if (objId && !isNaN(Number(objId)) && Number(objId) > 0) {
+        return Number(objId);
+      }
+      const name = cityInput.CityName || cityInput.name || cityInput.cityName;
+      if (name) {
+        return resolveOfficeCityId(name);
+      }
+    }
+
+    // 4. String city name (e.g. "Lahore", "Karachi", "Islamabad")
+    if (typeof cityInput === 'string' && cityInput.trim()) {
+      const cleanName = cityInput.trim();
+
+      try {
+        // 4a. Exact case-insensitive match
+        let found = await strapi.db.query('api::city.city').findOne({
+          where: {
+            CityName: {
+              $eqi: cleanName
+            }
+          }
+        });
+        if (found && found.id) return found.id;
+
+        // 4b. Contains case-insensitive match
+        found = await strapi.db.query('api::city.city').findOne({
+          where: {
+            CityName: {
+              $containsi: cleanName
+            }
+          }
+        });
+        if (found && found.id) return found.id;
+
+        // 4c. First word match (e.g. "Lahore" from "Lahore District")
+        const baseName = cleanName.split(/[\s,-]/)[0]?.trim();
+        if (baseName && baseName.length >= 3) {
+          found = await strapi.db.query('api::city.city').findOne({
+            where: {
+              CityName: {
+                $containsi: baseName
+              }
+            }
+          });
+          if (found && found.id) return found.id;
+        }
+
+        // 4d. Auto-create city record if not found
+        const newCity = await strapi.db.query('api::city.city').create({
+          data: {
+            CityName: cleanName,
+            Active: true,
+            publishedAt: new Date(),
+          }
+        });
+        if (newCity && newCity.id) {
+          return newCity.id;
+        }
+      } catch (err: any) {
+        console.warn(`[resolveOfficeCityId] Could not resolve or create city "${cleanName}":`, err?.message || err);
+      }
+    }
+
+    return null;
+  };
+
+
   const originalAuthFactory = plugin.controllers.auth;
 
   plugin.controllers.auth = (params: any) => {
@@ -292,19 +389,23 @@ export default (plugin: any) => {
   };
 
   const getAuthenticatedContext = async (ctx: any) => {
-    // 1. Check ctx.state.user already attached by Strapi
-    if (ctx.state?.user) {
-      if (ctx.state.user.isAdminUser) {
+    // 1. Check ctx.state.user or ctx.state.auth.credentials already attached by Strapi
+    const stateUser = ctx.state?.user || ctx.state?.auth?.credentials;
+    if (stateUser) {
+      if (stateUser.isAdminUser) {
+        const isSuperAdmin = stateUser.adminUser?.roles?.some((r: any) => r.code === 'strapi-super-admin') ||
+                             stateUser.role?.type === 'super_admin' ||
+                             stateUser.role_type === 'SUPER_ADMIN';
         return {
-          isSuperAdmin: ctx.state.user.role?.type === 'super_admin' || ctx.state.user.role_type === 'SUPER_ADMIN',
-          tenantId: ctx.state.user.tenant?.id || (typeof ctx.state.user.tenant === 'number' ? ctx.state.user.tenant : null),
+          isSuperAdmin,
+          tenantId: stateUser.tenant?.id || (typeof stateUser.tenant === 'number' ? stateUser.tenant : 1),
           courierId: null,
           shipperIds: [],
-          user: ctx.state.user.adminUser,
+          user: stateUser.adminUser || stateUser,
         };
       }
       const user = await strapi.db.query('plugin::users-permissions.user').findOne({
-        where: { id: ctx.state.user.id },
+        where: { id: stateUser.id },
         populate: ['tenant', 'role', 'courier', 'shipper'],
       });
       if (user) {
@@ -357,11 +458,16 @@ export default (plugin: any) => {
         } catch (e) {}
       }
 
-      // Try 3: admin::jwt service
+      // Try 3: Strapi v5 session manager for admin tokens
       if (!decodedUserId) {
         try {
-          const decoded = await strapi.service('admin::jwt').verify(token);
-          if (decoded?.id) decodedAdminId = decoded.id;
+          const sessionManager = strapi.sessionManager;
+          if (sessionManager) {
+            const result = sessionManager('admin').validateAccessToken(token);
+            if (result?.isValid && result?.payload?.userId) {
+              decodedAdminId = Number(result.payload.userId);
+            }
+          }
         } catch (e) {}
       }
 
@@ -370,7 +476,9 @@ export default (plugin: any) => {
         try {
           const decoded: any = jwt.decode(token);
           if (decoded?.id) {
-            decodedUserId = decoded.id;
+            decodedUserId = Number(decoded.id);
+          } else if (decoded?.userId) {
+            decodedAdminId = Number(decoded.userId);
           }
         } catch (e) {}
       }
@@ -404,7 +512,7 @@ export default (plugin: any) => {
       if (decodedAdminId) {
         const admin = await strapi.db.query('admin::user').findOne({
           where: { id: decodedAdminId },
-          populate: ['roles', 'tenant'],
+          populate: ['roles'],
         });
         if (admin) {
           const isSuperAdmin = admin.roles?.some((r: any) => r.code === 'strapi-super-admin');
@@ -532,6 +640,9 @@ export default (plugin: any) => {
       
       let targetShipperIds: number[] = [];
       const adminShipperIds = authContext.shipperIds || [];
+      let initialOffices: number[] = Array.isArray(offices) 
+        ? offices.map(Number).filter(n => !isNaN(n) && n > 0) 
+        : (offices ? [Number(offices)].filter(n => !isNaN(n) && n > 0) : []);
       
       if (shipper && Array.isArray(shipper) && shipper.length > 0) {
         for (const item of shipper) {
@@ -611,17 +722,21 @@ export default (plugin: any) => {
               });
               targetShipperIds.push(newShipper.id);
               if (item.address || item.city) {
-                await strapi.db.query('api::office.office').create({
+                const resolvedOfficeCityId = await resolveOfficeCityId(item.city);
+                const newOffice = await strapi.db.query('api::office.office').create({
                   data: {
                     name: `${item.name} Main Office`,
                     address: item.address || '',
-                    city: item.city || null,
+                    city: resolvedOfficeCityId,
                     type: 'shipper',
                     shipper: newShipper.id,
                     tenant: tenantId,
                     publishedAt: new Date(),
                   }
                 });
+                if (newOffice?.id && !initialOffices.includes(newOffice.id)) {
+                  initialOffices.push(newOffice.id);
+                }
               }
             }
           } else if (typeof item === 'number') {
@@ -641,17 +756,21 @@ export default (plugin: any) => {
         targetShipperIds = [newShipper.id];
         
         // Also create the Shipper's default office
-        await strapi.db.query('api::office.office').create({
+        const resolvedOfficeCityId = await resolveOfficeCityId(shipperCity);
+        const newOffice = await strapi.db.query('api::office.office').create({
           data: {
             name: 'Main Office',
             address: shipperAddress || '',
-            city: shipperCity || null,
+            city: resolvedOfficeCityId,
             type: 'shipper',
             shipper: newShipper.id,
             tenant: tenantId,
             publishedAt: new Date(),
           }
         });
+        if (newOffice?.id && !initialOffices.includes(newOffice.id)) {
+          initialOffices.push(newOffice.id);
+        }
         console.log(`Automatically created Shipper record: ${shipperName} (ID: ${newShipper.id}) with office.`);
       } else if (adminShipperIds.length === 0 && shipper_roles && shipper_roles.length > 0 && !shipper) {
         // Fallback if no shipperName is provided but we need a shipper
@@ -754,7 +873,7 @@ export default (plugin: any) => {
         courier: courierId,
         shipper: targetShipperIds,
         pickup_locations: Array.isArray(pickup_locations) ? pickup_locations.map(Number) : (pickup_locations ? [Number(pickup_locations)] : []),
-        offices: Array.isArray(offices) ? offices.map(Number).filter(n => !isNaN(n) && n > 0) : (offices ? [Number(offices)].filter(n => !isNaN(n) && n > 0) : []),
+        offices: initialOffices,
         blocked: isenable === false,
         confirmed: isNoConfirmation,
         password: passwordHash,
@@ -953,17 +1072,21 @@ export default (plugin: any) => {
                   targetShipperIds.push(newShipper.id);
 
                   if (item.address || item.city) {
-                    await strapi.db.query('api::office.office').create({
+                    const resolvedOfficeCityId = await resolveOfficeCityId(item.city);
+                    const newOffice = await strapi.db.query('api::office.office').create({
                       data: {
                         name: `${item.name} Main Office`,
                         address: item.address || '',
-                        city: item.city || null,
+                        city: resolvedOfficeCityId,
                         type: 'shipper',
                         shipper: newShipper.id,
                         tenant: tenantId || null,
                         publishedAt: new Date(),
                       }
                     });
+                    if (newOffice?.id && Array.isArray(updateData.offices) && !updateData.offices.includes(newOffice.id)) {
+                      updateData.offices.push(newOffice.id);
+                    }
                   }
                 }
               } else if (typeof item === 'number' && !isNaN(item) && item > 0) {

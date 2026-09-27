@@ -9,7 +9,7 @@ class DBARc_API_Client {
     private $api_token;
 
     public function __construct() {
-        $this->base_url = rtrim(get_option('dbarc_api_base_url', 'http://localhost:1337'), '/');
+        $this->base_url = rtrim(get_option('dbarc_api_base_url', 'https://api.dbarc.mashrue.com'), '/');
         $this->tenant_id = get_option('dbarc_tenant_id', '');
         $this->api_token = get_option('dbarc_jwt_token', '');
     }

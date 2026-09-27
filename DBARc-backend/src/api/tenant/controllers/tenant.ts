@@ -363,6 +363,65 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
               data: userUpdate
             });
           }
+        } else if (adminEmail) {
+          // If no admin user exists yet for this tenant, create one
+          const cleanEmail = adminEmail.trim().toLowerCase();
+          const cleanUsername = (adminUsername || cleanEmail.split('@')[0]).trim().toLowerCase();
+          const authenticatedRole = await strapi.db.query('plugin::users-permissions.role').findOne({
+            where: { type: 'authenticated' }
+          });
+          
+          let courierAdminRole = await strapi.db.query('api::role-definition.role-definition').findOne({
+            where: { tenant: targetTenantId, role_name: 'Super Admin' }
+          });
+          if (!courierAdminRole) {
+            courierAdminRole = await strapi.db.query('api::role-definition.role-definition').findOne({
+              where: { role_name: 'Super Admin' }
+            });
+          }
+
+          let defaultOffice = await strapi.db.query('api::office.office').findOne({
+            where: { tenant: targetTenantId }
+          });
+          if (!defaultOffice) {
+            defaultOffice = await strapi.db.query('api::office.office').create({
+              data: {
+                name: 'Head Office',
+                address: address || 'Main Office',
+                type: 'courier',
+                tenant: targetTenantId,
+                publishedAt: new Date(),
+              }
+            });
+          }
+
+          const plainPassword = adminPassword && adminPassword.trim() ? adminPassword.trim() : 'Password123!';
+          const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+          const newUser = await strapi.db.query('plugin::users-permissions.user').create({
+            data: {
+              username: cleanUsername.includes('#') ? cleanUsername : `${cleanUsername}#${targetTenantId}`,
+              email: cleanEmail.includes('#') ? cleanEmail : `${cleanEmail}#${targetTenantId}`,
+              password: passwordHash,
+              confirmed: true,
+              blocked: false,
+              provider: 'local',
+              tenant: targetTenantId,
+              role: authenticatedRole?.id || 1,
+              fullName: adminFullName || '',
+              phone: adminPhone || '',
+            }
+          });
+
+          if (newUser && (courierAdminRole || defaultOffice)) {
+            const extraData: any = {};
+            if (courierAdminRole) extraData.role_definition = [courierAdminRole.id];
+            if (defaultOffice) extraData.offices = [defaultOffice.id];
+            await strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: newUser.id },
+              data: extraData
+            });
+          }
         }
       }
       
