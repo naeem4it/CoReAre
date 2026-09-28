@@ -1,11 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:signature/signature.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/parcel_model.dart';
-import 'signature_dialog.dart';
 
 class DeliveryActionSheet extends StatefulWidget {
   final ParcelModel parcel;
@@ -30,8 +31,8 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
   final _receiverController = TextEditingController();
   final _otpController = TextEditingController();
   String _selectedRelation = 'Self';
-  String? _signatureBase64;
   String? _photoPath;
+  late SignatureController _sigController;
   final ImagePicker _picker = ImagePicker();
 
   final List<String> _relations = ['Self', 'Family Member', 'Guard / Security', 'Colleague / Office', 'Neighbor'];
@@ -40,12 +41,18 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
   void initState() {
     super.initState();
     _receiverController.text = widget.parcel.recipientName;
+    _sigController = SignatureController(
+      penStrokeWidth: 3,
+      penColor: Colors.black,
+      exportBackgroundColor: Colors.white,
+    );
   }
 
   @override
   void dispose() {
     _receiverController.dispose();
     _otpController.dispose();
+    _sigController.dispose();
     super.dispose();
   }
 
@@ -56,17 +63,7 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
         setState(() => _photoPath = photo.path);
       }
     } catch (e) {
-      // Ignored / simulator without camera
-    }
-  }
-
-  Future<void> _openSignaturePad() async {
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => const SignatureDialog(),
-    );
-    if (result != null) {
-      setState(() => _signatureBase64 = result);
+      // Ignored on web/simulator without webcam
     }
   }
 
@@ -148,9 +145,9 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
                         ),
                       ),
                       Text(
-                        widget.parcel.isPaid ? 'PKR 0' : currencyFormatter.format(widget.parcel.codAmount),
+                        widget.parcel.isPaid ? 'Rs. 0' : currencyFormatter.format(widget.parcel.codAmount),
                         style: GoogleFonts.outfit(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: widget.parcel.isPaid ? AppColors.success : AppColors.primaryLight,
                         ),
@@ -162,7 +159,7 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Receiver Name & Relation
+            // Receiver Info Inputs
             Row(
               children: [
                 Expanded(
@@ -170,8 +167,9 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
                   child: TextFormField(
                     controller: _receiverController,
                     decoration: const InputDecoration(
-                      labelText: 'Receiver Name',
+                      labelText: 'Received By (Name)',
                       isDense: true,
+                      prefixIcon: Icon(LucideIcons.user, size: 16),
                     ),
                   ),
                 ),
@@ -191,66 +189,110 @@ class _DeliveryActionSheetState extends State<DeliveryActionSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-            // e-POD Proof: Signature & Camera Capture
+            // Receiver Finger Signature Box
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Signature Button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _openSignaturePad,
-                    icon: Icon(
-                      _signatureBase64 != null ? LucideIcons.checkCircle2 : LucideIcons.penTool,
-                      size: 16,
-                      color: _signatureBase64 != null ? AppColors.success : AppColors.textPrimary,
-                    ),
-                    label: Text(
-                      _signatureBase64 != null ? 'Signature OK' : 'Get Signature',
-                      style: TextStyle(
-                        color: _signatureBase64 != null ? AppColors.success : AppColors.textPrimary,
+                Row(
+                  children: [
+                    const Icon(LucideIcons.penTool, size: 15, color: AppColors.primaryLight),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Receiver Signature (Sign with finger)',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: _signatureBase64 != null ? AppColors.success : AppColors.border,
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-
-                // Photo Button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _capturePhoto,
-                    icon: Icon(
-                      _photoPath != null ? LucideIcons.checkCircle2 : LucideIcons.camera,
-                      size: 16,
-                      color: _photoPath != null ? AppColors.success : AppColors.textPrimary,
-                    ),
-                    label: Text(
-                      _photoPath != null ? 'Photo Added' : 'Take Photo',
-                      style: TextStyle(
-                        color: _photoPath != null ? AppColors.success : AppColors.textPrimary,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: _photoPath != null ? AppColors.success : AppColors.border,
-                      ),
-                    ),
+                TextButton.icon(
+                  onPressed: () => _sigController.clear(),
+                  icon: const Icon(LucideIcons.rotateCcw, size: 13, color: AppColors.textMuted),
+                  label: const Text('Clear Box', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 6),
+
+            // Signature Canvas Box
+            Container(
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border, width: 1.5),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Signature(
+                      controller: _sigController,
+                      height: 140,
+                      backgroundColor: Colors.white,
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 12,
+                      child: Text(
+                        '✍ Sign inside this box',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade400,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Photo Button (Optional proof)
+            OutlinedButton.icon(
+              onPressed: _capturePhoto,
+              icon: Icon(
+                _photoPath != null ? LucideIcons.checkCircle2 : LucideIcons.camera,
+                size: 16,
+                color: _photoPath != null ? AppColors.success : AppColors.textPrimary,
+              ),
+              label: Text(
+                _photoPath != null ? 'Photo Attached' : 'Attach Delivery Photo (Optional)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _photoPath != null ? AppColors.success : AppColors.textPrimary,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: _photoPath != null ? AppColors.success : AppColors.border,
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 18),
 
             // Submit Button
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                String? sigBase64;
+                if (_sigController.isNotEmpty) {
+                  final bytes = await _sigController.toPngBytes();
+                  if (bytes != null) {
+                    sigBase64 = base64Encode(bytes);
+                  }
+                }
                 widget.onConfirm(
-                  signatureBase64: _signatureBase64,
+                  signatureBase64: sigBase64,
                   photoPath: _photoPath,
                   receiverName: _receiverController.text.trim(),
                   receiverRelation: _selectedRelation,

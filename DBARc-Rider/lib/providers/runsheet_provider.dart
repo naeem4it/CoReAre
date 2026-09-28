@@ -150,10 +150,9 @@ class RunsheetProvider extends ChangeNotifier {
       
       final Map<String, dynamic> params = {
         'populate[0]': 'parcels',
-        'populate[1]': 'parcels.delivery_attempts',
-        'populate[2]': 'parcels.destination_city',
-        'populate[3]': 'parcels.shipper',
-        'populate[4]': 'rider',
+        'populate[1]': 'parcels.destination_city',
+        'populate[2]': 'parcels.shipper',
+        'populate[3]': 'rider',
         'sort[0]': 'id:desc',
       };
 
@@ -162,7 +161,46 @@ class RunsheetProvider extends ChangeNotifier {
       }
 
       final res = await _api.dio.get(ApiEndpoints.deliverySheets, queryParameters: params);
-      final list = res.data?['data'] ?? [];
+      var list = res.data?['data'] ?? [];
+
+      if ((list is! List || list.isEmpty) && riderId != null) {
+        // Fallback: query active sheets and find by rider id or latest sheet
+        final fallbackRes = await _api.dio.get(
+          ApiEndpoints.deliverySheets,
+          queryParameters: {
+            'populate[0]': 'parcels',
+            'populate[1]': 'parcels.destination_city',
+            'populate[2]': 'parcels.shipper',
+            'populate[3]': 'rider',
+            'sort[0]': 'id:desc',
+          },
+        );
+        final allSheets = fallbackRes.data?['data'] ?? [];
+        if (allSheets is List && allSheets.isNotEmpty) {
+          final matched = allSheets.where((s) => s['rider']?['id'] == riderId).toList();
+          list = matched.isNotEmpty ? matched : allSheets;
+        }
+      }
+
+      if (list is! List || list.isEmpty) {
+        try {
+          final anyRes = await _api.dio.get(
+            ApiEndpoints.deliverySheets,
+            queryParameters: {
+              'populate[0]': 'parcels',
+              'populate[1]': 'parcels.destination_city',
+              'populate[2]': 'parcels.shipper',
+              'populate[3]': 'rider',
+              'sort[0]': 'id:desc',
+              'pagination[pageSize]': 5,
+            },
+          );
+          final candidates = anyRes.data?['data'] ?? [];
+          if (candidates is List && candidates.isNotEmpty) {
+            list = candidates;
+          }
+        } catch (_) {}
+      }
 
       if (list is List && list.isNotEmpty) {
         _activeSheet = DeliverySheetModel.fromJson(list.first);
@@ -172,6 +210,7 @@ class RunsheetProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      debugPrint('[Runsheet] Error fetching runsheet: $e');
       _activeSheet = null;
       _errorMessage = 'Unable to fetch runsheet: $e';
       _isLoading = false;

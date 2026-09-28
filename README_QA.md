@@ -39,7 +39,19 @@ This launches all three components concurrently from one file:
 
 ---
 
-### Step 3: Stop Applications
+### Step 3: Run DBARc Rider Mobile App
+Double-click:
+```bat
+RUN_RIDER_MOBILE.bat
+```
+Offers 3 mobile testing methods:
+1. **Chrome Phone Viewport (412x915)**: Exact mobile screen dimensions and touch input on PC.
+2. **Real Mobile Device on Wi-Fi**: Accessible from any phone browser on your local network at `http://192.168.100.6:8080`.
+3. **Connected Android Device / Emulator**: Installs and runs native build on connected phone/AVD.
+
+---
+
+### Step 4: Stop Applications
 Double-click:
 ```bat
 STOP_SYSTEM.bat
@@ -48,7 +60,7 @@ Safely terminates all background services on ports `1337`, `3000`, and `3001`.
 
 ---
 
-### Step 4: Update Applications (When new code is copied)
+### Step 5: Update Applications (When new code is copied)
 Double-click:
 ```bat
 UPDATE_SYSTEM.bat

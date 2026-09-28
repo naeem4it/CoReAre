@@ -48,6 +48,9 @@ class AuthProvider extends ChangeNotifier {
       if (res.statusCode == 200) {
         _user = UserModel.fromJson(res.data);
         await _storage.saveUserData(jsonEncode(_user!.toJson()));
+        if (_rider == null) {
+          await _fetchAssociatedRider(_user!);
+        }
         _status = AuthStatus.authenticated;
       } else {
         await logout();
@@ -61,6 +64,13 @@ class AuthProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  Future<void> refreshRider() async {
+    if (_user != null) {
+      await _fetchAssociatedRider(_user!);
+      notifyListeners();
+    }
   }
 
   Future<bool> login(String identifier, String password) async {
@@ -119,30 +129,42 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _fetchAssociatedRider(UserModel user) async {
     try {
-      final res = await _api.dio.get(
-        ApiEndpoints.riders,
-        queryParameters: {
-          'filters[\$or][0][email][\$eq]': user.email,
-          'filters[\$or][1][rider_code][\$eq]': user.username,
-          'populate': '*',
-        },
-      );
+      final res = await _api.dio.get(ApiEndpoints.riders);
       final list = res.data?['data'] ?? [];
       if (list is List && list.isNotEmpty) {
-        _rider = RiderModel.fromJson(list.first);
-        await _storage.saveRiderData(jsonEncode(_rider!.toJson()));
-      } else {
-        // Fallback rider object from user
-        _rider = RiderModel(
-          id: user.id,
-          name: user.username,
-          phone: '',
-          email: user.email,
-          riderCode: user.username,
+        final matched = list.firstWhere(
+          (r) {
+            final rId = r['id'];
+            final rEmail = r['email']?.toString() ?? '';
+            final rName = r['name']?.toString().toLowerCase() ?? '';
+            final rCode = r['rider_code']?.toString() ?? '';
+            final uName = user.username.toLowerCase();
+            return rId == user.id ||
+                rEmail == user.email ||
+                rEmail.startsWith(user.email) ||
+                rName.contains(uName) ||
+                rCode.toLowerCase() == uName;
+          },
+          orElse: () => null,
         );
+
+        if (matched != null) {
+          _rider = RiderModel.fromJson(matched);
+          await _storage.saveRiderData(jsonEncode(_rider!.toJson()));
+          return;
+        }
       }
+
+      // Fallback rider object from user
+      _rider = RiderModel(
+        id: user.id,
+        name: user.username,
+        phone: '',
+        email: user.email,
+        riderCode: user.username,
+      );
     } catch (e) {
-      // Fallback
+      debugPrint('[Auth] Fetch rider error: $e');
       _rider = RiderModel(
         id: user.id,
         name: user.username,

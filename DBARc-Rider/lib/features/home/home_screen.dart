@@ -30,9 +30,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = context.read<AuthProvider>();
-      context.read<RunsheetProvider>().fetchActiveRunsheet(riderId: auth.rider?.id);
+      if (auth.rider == null && auth.user != null) {
+        await auth.refreshRider();
+      }
+      if (mounted) {
+        context.read<RunsheetProvider>().fetchActiveRunsheet(riderId: auth.rider?.id ?? auth.user?.id);
+      }
     });
   }
 
@@ -51,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       // 1. Dashboard View
       RefreshIndicator(
-        onRefresh: () => runsheet.fetchActiveRunsheet(riderId: auth.rider?.id),
+        onRefresh: () => runsheet.fetchActiveRunsheet(riderId: auth.rider?.id ?? auth.user?.id),
         color: AppColors.primary,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

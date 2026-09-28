@@ -29,9 +29,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _urlController.text = _storage.getBaseUrl();
-    // Default demo credentials
-    _usernameController.text = 'rider1';
-    _passwordController.text = 'RiderPass@123';
+    // Default QA rider credentials for local database
+    _usernameController.text = 'ginjeeerider#1';
+    _passwordController.text = 'Password123!';
   }
 
   @override

@@ -35,6 +35,70 @@ interface DeliveryShipment {
   remarks: string;
 }
 
+function getProperDestination(parcel: any): string {
+  if (!parcel) return 'Lahore';
+
+  // 1. Relational destination_city object
+  if (parcel.destination_city && typeof parcel.destination_city === 'object') {
+    const name = parcel.destination_city.CityName || parcel.destination_city.city_name || parcel.destination_city.name;
+    if (name && typeof name === 'string' && name.trim() && name.trim().toLowerCase() !== 'destination') {
+      return name.trim();
+    }
+  }
+
+  // 2. destination_city as direct string
+  if (typeof parcel.destination_city === 'string' && parcel.destination_city.trim() && parcel.destination_city.trim().toLowerCase() !== 'destination') {
+    return parcel.destination_city.trim();
+  }
+
+  // 3. Alternative attributes (destinationCity, destination, city)
+  if (typeof parcel.destinationCity === 'string' && parcel.destinationCity.trim() && parcel.destinationCity.trim().toLowerCase() !== 'destination') {
+    return parcel.destinationCity.trim();
+  }
+  if (typeof parcel.destination === 'string' && parcel.destination.trim() && parcel.destination.trim().toLowerCase() !== 'destination') {
+    return parcel.destination.trim();
+  }
+  if (typeof parcel.city === 'string' && parcel.city.trim() && parcel.city.trim().toLowerCase() !== 'destination') {
+    return parcel.city.trim();
+  }
+
+  // 4. Extract from recipient address (e.g. "Main Boulevard, Lahore", "Gulshan E Johar, Karachi Central", etc.)
+  const addr = parcel.recipient_address || parcel.consignee_address || parcel.consigneeAddress || parcel.address || '';
+  if (addr) {
+    const commonCities = [
+      'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan',
+      'Peshawar', 'Quetta', 'Gujranwala', 'Sialkot', 'Hyderabad', 'Sukkur',
+      'Bahawalpur', 'Sargodha', 'Abbottabad', 'Mardan', 'Gujrat', 'Sahiwal',
+      'Larkana', 'Sheikhupura', 'Jhelum', 'Okara', 'Rahim Yar Khan', 'Kasur',
+      'Muzaffargarh', 'Dera Ghazi Khan', 'Chiniot', 'Kamoke', 'Hafizabad', 'Burewala',
+      'Khanewal', 'Dera Ismail Khan', 'Muzaffarabad', 'Mirpur', 'Gilgit', 'Gwadar'
+    ];
+    const parts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      for (const c of commonCities) {
+        if (new RegExp(`\\b${c}\\b`, 'i').test(part)) {
+          return c;
+        }
+      }
+      if (/sailkot/i.test(part)) return 'Sialkot';
+    }
+    if (parts.length > 0) {
+      const last = parts[parts.length - 1];
+      if (last.length <= 25 && !/^\d+$/.test(last) && !/^(pakistan|pk)$/i.test(last)) {
+        return last;
+      }
+    }
+  }
+
+  // 5. Hub / office name
+  if (parcel.destination_office?.name) {
+    return parcel.destination_office.name.replace(/\s*(hub|branch|station|office)\s*/gi, '').trim() || parcel.destination_office.name;
+  }
+
+  return 'Lahore';
+}
+
 
 export default function OperationsDeliverySheetPage() {
   const [sheetNumber, setSheetNumber] = React.useState<number>(() => Math.floor(1000000 + Math.random() * 9000000));
@@ -101,21 +165,20 @@ export default function OperationsDeliverySheetPage() {
   // Available parcels in hub awaiting delivery dispatch (Dest Arrived)
   const [availableParcels, setAvailableParcels] = React.useState<any[]>([]);
   const [isLoadingAvailable, setIsLoadingAvailable] = React.useState(false);
+  const [parcelRiderMap, setParcelRiderMap] = React.useState<Record<string, string>>({});
 
   const fetchAvailableParcels = React.useCallback(async () => {
     setIsLoadingAvailable(true);
     try {
       const queryStatuses = [
-        'In Transit',
-        'in transit',
         'Arrived at warehouse (Dest)',
         'Arrived At Destination',
+        'Arrived at the warehouse',
         'Arrived at warehouse',
         'Arrived',
-        'Out For delivery',
-        'Out for Delivery'
       ];
       const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
+      
       const res = await apiClient.get(`/parcels?${statusParams}&sort[0]=updatedAt:desc&pagination[pageSize]=100&populate=*`);
       setAvailableParcels(res.data?.data || []);
     } catch (e) {
@@ -128,7 +191,7 @@ export default function OperationsDeliverySheetPage() {
   const loadPastSheet = async (sheetItem: any) => {
     try {
       const targetId = sheetItem.documentId || sheetItem.id;
-      const res = await apiClient.get(`/delivery-sheets/${targetId}?populate[parcels]=true&populate[rider]=true`);
+      const res = await apiClient.get(`/delivery-sheets/${targetId}?populate[parcels][populate]=*&populate[rider]=true`);
       const sheet = res.data?.data;
       if (!sheet) return;
 
@@ -151,10 +214,10 @@ export default function OperationsDeliverySheetPage() {
         documentId: p.documentId,
         shipmentNumber: p.tracking_number,
         shipmentRef: p.reference_number || `#${p.id}`,
-        shipperName: p.shipper?.name || 'Shipper',
+        shipperName: p.shipper?.name || p.shipper?.shipper_name || 'Shipper',
         consigneeName: p.recipient_name || 'Customer',
         consigneeAddress: p.recipient_address || '',
-        destination: p.destination_city?.CityName || p.destination_city?.city_name || p.destination_city?.name || 'Destination',
+        destination: getProperDestination(p),
         pieces: Number(p.pieces) || 1,
         weight: Number(p.weight) || 0.5,
         amountCollect: Number(p.cod_amount) || 0,
@@ -201,9 +264,7 @@ export default function OperationsDeliverySheetPage() {
         }
       }
 
-      const dest = typeof parcel?.destination_city === 'string'
-        ? parcel.destination_city
-        : (parcel?.destination_city?.CityName || parcel?.destination_city?.city_name || parcel?.destination_city?.name || 'Destination');
+      const dest = getProperDestination(parcel);
       const shp = typeof parcel?.shipper === 'string'
         ? parcel.shipper
         : (parcel?.shipper?.name || parcel?.shipper?.shipper_name || 'Shipper');
@@ -226,6 +287,20 @@ export default function OperationsDeliverySheetPage() {
       };
 
       setShipments(prev => [newItem, ...prev]);
+
+      if (savedSheetId) {
+        try {
+          const currentIds = shipments.map(s => s.parcelId).filter(Boolean) as number[];
+          const allIds = Array.from(new Set([...currentIds, parcel.id]));
+          await DeliverySheetService.update(savedSheetId, {
+            parcels: allIds,
+            status: 'Out For Delivery',
+          });
+        } catch (syncErr) {
+          console.warn('Could not auto-link parcel to delivery sheet:', syncErr);
+        }
+      }
+
       triggerToast(`Added #${tracking} to delivery sheet (Out for Delivery).`, 'success');
       fetchAvailableParcels();
     } catch (e: any) {
@@ -273,7 +348,7 @@ export default function OperationsDeliverySheetPage() {
     fetchPastSheets();
 
     // Auto-load latest delivery sheet if one exists
-    DeliverySheetService.getAll('?sort[0]=createdAt:desc&pagination[limit]=1&populate[parcels]=true&populate[rider]=true')
+    DeliverySheetService.getAll('?sort[0]=createdAt:desc&pagination[limit]=1&populate[parcels][populate]=*&populate[rider]=true')
       .then(res => {
         const latest = res.data?.[0];
         if (latest && latest.parcels && latest.parcels.length > 0) {
@@ -390,9 +465,7 @@ export default function OperationsDeliverySheetPage() {
         }
       }
 
-      const dest = typeof parcel?.destination_city === 'string'
-        ? parcel.destination_city
-        : (parcel?.destination_city?.city_name || parcel?.destination_city?.CityName || parcel?.destination_city?.name || 'Destination');
+      const dest = getProperDestination(parcel);
       const shp = typeof parcel?.shipper === 'string'
         ? parcel.shipper
         : (parcel?.shipper?.name || parcel?.shipper?.shipper_name || parcel?.pickup_location?.shipper?.name || 'Assigned Merchant');
@@ -770,77 +843,75 @@ export default function OperationsDeliverySheetPage() {
         </div>
 
         {/* Available Parcels in Hub Ready for Delivery Dispatch (Dest Arrived) */}
-        {availableParcels.length > 0 && (
-          <div className="bg-white rounded-2xl border border-blue-200 shadow-xs overflow-hidden">
-            <div className="px-6 py-4 bg-blue-950 text-white font-bold text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <Package className="w-4 h-4 text-amber-400" />
-                <span>Parcels Ready for Delivery Dispatch in Hub ({availableParcels.length})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddAllAvailable}
-                  className="bg-primary hover:bg-primary-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add All to Sheet
-                </button>
-                <button
-                  type="button"
-                  onClick={fetchAvailableParcels}
-                  disabled={isLoadingAvailable}
-                  className="p-1.5 hover:bg-blue-900 text-blue-200 hover:text-white rounded-lg transition-colors cursor-pointer"
-                  title="Refresh ready parcels"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoadingAvailable ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
+        {(() => {
+          const readyParcels = availableParcels.filter(p => !shipments.some(s => s.shipmentNumber === p.tracking_number));
+          if (readyParcels.length === 0) return null;
 
-            <div className="overflow-x-auto max-h-64">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 sticky top-0 bg-slate-50 z-10">
-                  <tr>
-                    <th className="px-4 py-3">Tracking #</th>
-                    <th className="px-4 py-3">Consignee & Address</th>
-                    <th className="px-4 py-3 text-center">Dest</th>
-                    <th className="px-4 py-3 text-center">Pcs / Wt</th>
-                    <th className="px-4 py-3 text-right">COD</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                  {availableParcels.map((p: any) => {
-                    const trk = p.tracking_number;
-                    const isOnSheet = shipments.some(s => s.shipmentNumber === trk);
-                    const dest = p.destination_city?.CityName || p.destination_city?.name || 'Destination';
-                    const cod = Number(p.cod_amount) || 0;
-                    return (
-                      <tr key={p.id} className="hover:bg-blue-50/50 transition-colors">
-                        <td className="px-4 py-3">
-                          <span className="font-bold font-mono text-slate-900">{trk}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900">{p.recipient_name || 'Customer'}</div>
-                          <div className="text-[10px] text-slate-400 truncate max-w-xs">{p.recipient_address || '-'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-center font-bold text-slate-900">{dest}</td>
-                        <td className="px-4 py-3 text-center text-slate-600">{p.pieces || 1} pcs • {p.weight || 0.5} kg</td>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-600 font-mono">
-                          {p.payment_type === 'PAID' || cod === 0 ? 'PAID' : `Rs. ${cod}`}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {isOnSheet ? (
-                            <span className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Added
+          return (
+            <div className="bg-white rounded-2xl border border-blue-200 shadow-xs overflow-hidden">
+              <div className="px-6 py-4 bg-blue-950 text-white font-bold text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Package className="w-4 h-4 text-amber-400" />
+                  <span>Parcels Ready for Delivery Dispatch in Hub ({readyParcels.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddAllAvailable}
+                    className="bg-primary hover:bg-primary-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add All to Sheet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchAvailableParcels}
+                    disabled={isLoadingAvailable}
+                    className="p-1.5 hover:bg-blue-900 text-blue-200 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    title="Refresh ready parcels"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoadingAvailable ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-64">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 sticky top-0 bg-slate-50 z-10">
+                    <tr>
+                      <th className="px-4 py-3">Tracking #</th>
+                      <th className="px-4 py-3">Consignee & Address</th>
+                      <th className="px-4 py-3 text-center">Dest</th>
+                      <th className="px-4 py-3 text-center">Pcs / Wt</th>
+                      <th className="px-4 py-3 text-right">COD</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                    {readyParcels.map((p: any) => {
+                      const trk = p.tracking_number;
+                      const dest = getProperDestination(p);
+                      const cod = Number(p.cod_amount) || 0;
+                      return (
+                        <tr key={p.id} className="hover:bg-blue-50/50 transition-colors">
+                          <td className="px-4 py-3">
+                            <span className="font-bold font-mono text-slate-900">{trk}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-900">{p.recipient_name || 'Customer'}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-xs">{p.recipient_address || '-'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-slate-900">{dest}</td>
+                          <td className="px-4 py-3 text-center text-slate-600">{p.pieces || 1} pcs • {p.weight || 0.5} kg</td>
+                          <td className="px-4 py-3 text-right font-bold text-emerald-600 font-mono">
+                            {p.payment_type === 'PAID' || cod === 0 ? 'PAID' : `Rs. ${cod}`}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                              Arrived at warehouse (Dest)
                             </span>
-                          ) : (
+                          </td>
+                          <td className="px-4 py-3 text-center">
                             <button
                               type="button"
                               onClick={() => addParcelToSheet(p)}
@@ -848,16 +919,16 @@ export default function OperationsDeliverySheetPage() {
                             >
                               <Plus className="w-3.5 h-3.5" /> Add to Sheet
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Shipments List Table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -875,6 +946,7 @@ export default function OperationsDeliverySheetPage() {
                   <th className="px-4 py-3.5">Shipper Name</th>
                   <th className="px-4 py-3.5">Consignee Name</th>
                   <th className="px-4 py-3.5 text-center">Dest</th>
+                  <th className="px-4 py-3.5 text-center">Assigned Rider</th>
                   <th className="px-4 py-3.5 text-center">Pieces</th>
                   <th className="px-4 py-3.5 text-center">Weight</th>
                   <th className="px-4 py-3.5 text-right">COD Amount</th>
@@ -890,6 +962,12 @@ export default function OperationsDeliverySheetPage() {
                     <td className="px-4 py-3.5 text-slate-900">{s.shipperName}</td>
                     <td className="px-4 py-3.5 text-slate-900">{s.consigneeName}</td>
                     <td className="px-4 py-3.5 text-center font-bold text-slate-900">{s.destination}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <User className="w-3 h-3 text-indigo-500" />
+                        {selectedRiderName || selectedRider || 'Assigned Rider'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3.5 text-center">{s.pieces}</td>
                     <td className="px-4 py-3.5 text-center">{s.weight.toFixed(2)} KG</td>
                     <td className="px-4 py-3.5 text-right font-bold text-slate-900">Rs. {s.amountCollect}</td>
