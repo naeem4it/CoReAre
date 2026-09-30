@@ -123,3 +123,5 @@ export function TablePagination({
     </div>
   );
 }
+
+export default TablePagination;
