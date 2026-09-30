@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface TrackingEvent {
   title: string;
@@ -679,20 +681,37 @@ function TrackingPageContent() {
     });
   }, [parcels, searchQuery, statusFilter, shipperFilter, dateFrom, dateTo, isShipper]);
 
-  // Table Pagination State
+  // Table Sorting & Pagination State
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10); // 10, 25, 50, 100
 
-  const totalPages = Math.max(1, Math.ceil(filteredParcels.length / pageSize));
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedParcels,
+  } = useTableSort<any>(filteredParcels, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      tracking_number: (p) => p.tracking_number,
+      shipper_name: (p) => p.shipper_name,
+      recipient_name: (p) => p.recipient_name,
+      destination: (p) => p.destination,
+      cod_amount: (p) => Number(p.cod_amount) || 0,
+      status: (p) => p.status,
+    },
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedParcels.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const paginatedParcels = React.useMemo(() => {
     const startIndex = (safeCurrentPage - 1) * pageSize;
-    return filteredParcels.slice(startIndex, startIndex + pageSize);
-  }, [filteredParcels, safeCurrentPage, pageSize]);
+    return sortedParcels.slice(startIndex, startIndex + pageSize);
+  }, [sortedParcels, safeCurrentPage, pageSize]);
 
-  const startRecord = filteredParcels.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
-  const endRecord = Math.min(safeCurrentPage * pageSize, filteredParcels.length);
+  const startRecord = sortedParcels.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
+  const endRecord = Math.min(safeCurrentPage * pageSize, sortedParcels.length);
 
   return (
     <PortalLayout>
@@ -977,14 +996,28 @@ function TrackingPageContent() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/60 border-b border-outline-variant text-xs font-bold text-on-surface-variant uppercase tracking-wider">
-                    <th className="px-4 py-3">Tracking ID</th>
-                    {!isShipper && <th className="px-4 py-3">Shipper</th>}
-                    <th className="px-4 py-3">Consignee</th>
-                    <th className="px-4 py-3">Route (Origin → Dest)</th>
+                    <th className="px-4 py-3">
+                      <SortableHeader label="Tracking ID" column="tracking_number" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    {!isShipper && (
+                      <th className="px-4 py-3">
+                        <SortableHeader label="Shipper" column="shipper_name" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                      </th>
+                    )}
+                    <th className="px-4 py-3">
+                      <SortableHeader label="Consignee" column="recipient_name" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader label="Route (Origin → Dest)" column="destination" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
                     <th className="px-4 py-3">Package / Items</th>
                     <th className="px-4 py-3">Handler / Stage</th>
-                    <th className="px-4 py-3">COD Amount</th>
-                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">
+                      <SortableHeader label="COD Amount" column="cod_amount" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader label="Status" column="status" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
                 </thead>

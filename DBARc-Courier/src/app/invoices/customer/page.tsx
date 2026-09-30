@@ -6,6 +6,8 @@ import { InvoiceService } from '@/services/api';
 import { Download, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface InvoiceItem {
   id: number;
@@ -120,6 +122,23 @@ export default function CustomerInvoicePage() {
   }, [invoices]);
 
   const paidRate = invoices.length > 0 ? ((paidCount / invoices.length) * 100).toFixed(1) : '0';
+
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedInvoices,
+  } = useTableSort<InvoiceItem>(invoices, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      invoiceNumber: (inv: InvoiceItem) => getField(inv, 'invoice_number') || `INV-${inv.id}`,
+      customer: (inv: InvoiceItem) => getShipperName(inv),
+      invoiceDate: (inv: InvoiceItem) => getField(inv, 'invoice_date') || '',
+      period: (inv: InvoiceItem) => getField(inv, 'period_start') || '',
+      totalCharges: (inv: InvoiceItem) => Number(getField(inv, 'total_charges')) || 0,
+      status: (inv: InvoiceItem) => getField(inv, 'status') || '',
+    },
+  });
 
   const handleExportCSV = () => {
     const header = 'Invoice #,Customer,Date,Period,Charges,Status\n';
@@ -259,12 +278,24 @@ export default function CustomerInvoicePage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-surface-container-low border-b border-outline-variant font-bold text-outline uppercase tracking-wider">
                   <tr>
-                    <th className="px-md py-3.5">Invoice #</th>
-                    <th className="px-md py-3.5">Customer</th>
-                    <th className="px-md py-3.5">Date</th>
-                    <th className="px-md py-3.5">Billing Period</th>
-                    <th className="px-md py-3.5 text-right">Total Charges</th>
-                    <th className="px-md py-3.5 text-center">Status</th>
+                    <th className="px-md py-3.5">
+                      <SortableHeader label="Invoice #" column="invoiceNumber" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-md py-3.5">
+                      <SortableHeader label="Customer" column="customer" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-md py-3.5">
+                      <SortableHeader label="Date" column="invoiceDate" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-md py-3.5">
+                      <SortableHeader label="Billing Period" column="period" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                    </th>
+                    <th className="px-md py-3.5 text-right">
+                      <SortableHeader label="Total Charges" column="totalCharges" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} align="right" />
+                    </th>
+                    <th className="px-md py-3.5 text-center">
+                      <SortableHeader label="Status" column="status" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} align="center" />
+                    </th>
                     <th className="px-md py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -278,14 +309,14 @@ export default function CustomerInvoicePage() {
                         </div>
                       </td>
                     </tr>
-                  ) : invoices.length === 0 ? (
+                  ) : sortedInvoices.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-md py-12 text-center text-outline">
                         No invoices found for the selected filter.
                       </td>
                     </tr>
                   ) : (
-                    invoices.map((inv, index) => {
+                    sortedInvoices.map((inv, index) => {
                       const id = inv.id;
                       const invNumber = getField(inv, 'invoice_number') || `INV-${id}`;
                       const customer = getShipperName(inv);

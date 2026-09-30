@@ -28,6 +28,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { TablePagination } from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 function extractCityFromAddress(address: string): string {
   if (!address) return 'Pakistan';
@@ -365,17 +367,35 @@ function AirwayBillContent() {
     });
   }, [data, searchQuery, fromDate, toDate, selectedRouting, selectedCity, statusFilter]);
 
-  // Table Pagination State
+  // Table Sorting & Pagination State
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedOrders,
+  } = useTableSort<OrderRow>(filteredData, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      trackingNumber: (r) => r.trackingNumber,
+      orderReference: (r) => r.orderReference,
+      customerName: (r) => r.customerName,
+      address: (r) => r.address,
+      codAmount: (r) => Number(r.codAmount) || 0,
+      weight: (r) => Number(r.weightKg) || 0,
+      status: (r) => r.status,
+    },
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedOrders.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
   const paginatedData = React.useMemo(() => {
     const start = (safePage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, safePage, pageSize]);
+    return sortedOrders.slice(start, start + pageSize);
+  }, [sortedOrders, safePage, pageSize]);
 
   // Strictly filter Booked orders that are eligible for dispatch slip printing
   const eligibleBookedOrders = React.useMemo(() => {
@@ -740,13 +760,27 @@ function AirwayBillContent() {
                       title={eligibleBookedOrders.length > 0 ? 'Select all Booked orders' : 'No Booked orders available to select'}
                     />
                   </th>
-                  <th className="px-4 py-3">Tracking ID / AWB</th>
-                  <th className="px-4 py-3">Order Ref</th>
-                  <th className="px-4 py-3">Consignee</th>
-                  <th className="px-4 py-3">Destination Address</th>
-                  <th className="px-4 py-3">Payment / COD</th>
-                  <th className="px-4 py-3">Weight &amp; Pcs</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Tracking ID / AWB" column="trackingNumber" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Order Ref" column="orderReference" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Consignee" column="customerName" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Destination Address" column="address" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Payment / COD" column="codAmount" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Weight & Pcs" column="weight" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Status" column="status" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
                   <th className="px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>

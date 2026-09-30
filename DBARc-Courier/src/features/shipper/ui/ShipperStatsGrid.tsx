@@ -45,12 +45,26 @@ export interface ShipperStatsGridProps {
   isLoading?: boolean;
 }
 
+interface StatCardItem {
+  key?: string;
+  label: string;
+  value: number;
+  codAmount: number;
+  percentage: number;
+  queryStatus?: string;
+  icon: any;
+  isPrimaryDark?: boolean;
+  iconColor?: string;
+  bottomBarColor?: string;
+  href: string;
+}
+
 export function ShipperStatsGrid({ metrics, isLoading = false }: ShipperStatsGridProps) {
   const formatRs = (amount: number) => {
     return `Rs ${amount.toLocaleString('en-US')}`;
   };
 
-  const cards = [
+  const cards: StatCardItem[] = [
     // 1. TOTAL BOOKING
     {
       ...metrics.totalBooking,

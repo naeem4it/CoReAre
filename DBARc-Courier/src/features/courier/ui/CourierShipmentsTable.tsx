@@ -5,6 +5,8 @@ import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 type ShipmentRow = {
   id: number | string;
@@ -272,10 +274,29 @@ export const CourierShipmentsTable = ({
     return 'bg-tertiary-fixed text-tertiary';
   };
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  // Sorting
+  const {
+    sortedItems: sortedData,
+    sortColumn,
+    sortDirection,
+    handleSort
+  } = useTableSort<ShipmentRow>(filteredData, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      trackingNumber: (r) => r.trackingNumber || '',
+      customerName: (r) => r.customerName || '',
+      route: (r) => `${r.origin} ${r.destination}`,
+      status: (r) => r.status || '',
+      payment: (r) => r.codAmount,
+      eta: (r) => r.eta || '',
+    }
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+  const paginatedData = sortedData.slice(startIndex, startIndex + pageSize);
 
   return (
     <section className="mt-lg bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
@@ -340,12 +361,61 @@ export const CourierShipmentsTable = ({
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 text-on-surface-variant">
             <tr>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Tracking ID</th>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Customer</th>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Origin / Destination</th>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Status</th>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Payment</th>
-              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant text-right">ETA / Date</th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">
+                <SortableHeader
+                  label="Tracking ID"
+                  columnKey="trackingNumber"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              </th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">
+                <SortableHeader
+                  label="Customer"
+                  columnKey="customerName"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              </th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">
+                <SortableHeader
+                  label="Origin / Destination"
+                  columnKey="route"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              </th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">
+                <SortableHeader
+                  label="Status"
+                  columnKey="status"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              </th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">
+                <SortableHeader
+                  label="Payment"
+                  columnKey="payment"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              </th>
+              <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant text-right">
+                <SortableHeader
+                  label="ETA / Date"
+                  columnKey="eta"
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                  align="right"
+                />
+              </th>
               <th className="px-md py-3 font-label-md text-label-md border-b border-outline-variant">Action</th>
             </tr>
           </thead>

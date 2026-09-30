@@ -24,6 +24,8 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { TablePagination } from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 function extractCityFromAddress(address: string): string {
   if (!address) return 'Pakistan';
@@ -69,7 +71,7 @@ export function canCancelOrder(status: string): boolean {
   }
 
   const norm = normalizeShipmentStatus(status);
-  const nonCancellable = [
+  const nonCancellable: string[] = [
     SHIPMENT_STATUSES.IN_TRANSIT,
     SHIPMENT_STATUSES.ARRIVED_DEST,
     SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
@@ -80,7 +82,7 @@ export function canCancelOrder(status: string): boolean {
     SHIPMENT_STATUSES.LOST_DAMAGE,
   ];
 
-  return !nonCancellable.includes(norm);
+  return !nonCancellable.includes(norm as string);
 }
 
 import {
@@ -186,8 +188,8 @@ function OrderListContent() {
           params: { filters: tenantId ? { tenant: tenantId } : {}, populate: '*' }
         });
         const partners = (tplRes.data?.data || []).map((item: { id: number; attributes?: Record<string, unknown> }) => ({
-          id: item.id,
-          ...(item.attributes || item)
+          ...(item.attributes || item),
+          id: item.id
         }));
         setCourierTplPartners(partners);
       } catch (err) {
@@ -207,9 +209,8 @@ function OrderListContent() {
         let parcels = response.data?.data || [];
 
         if (isShipper && shipperId && parcels.length > 0) {
-          parcels = parcels.filter((item) => {
-            const raw = item as Record<string, unknown>;
-            const itemShipper = (raw.shipper || (raw.pickup_location as Record<string, unknown>)?.shipper) as { id?: number } | undefined;
+          parcels = parcels.filter((item: any) => {
+            const itemShipper = (item.shipper || item.pickup_location?.shipper) as { id?: number } | undefined;
             if (!itemShipper) return true;
             return itemShipper.id === shipperId;
           });
@@ -377,17 +378,35 @@ function OrderListContent() {
     return true;
   });
 
-  // Table Pagination State
+  // Table Sorting & Pagination State
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedOrders,
+  } = useTableSort<OrderRow>(filteredData, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      trackingNumber: (r) => r.trackingNumber,
+      customerName: (r) => r.customerName,
+      address: (r) => r.address,
+      shipper: (r) => r.shipperName,
+      codAmount: (r) => Number(r.codAmount) || 0,
+      status: (r) => r.status,
+      dateCreated: (r) => r.dateCreated,
+    },
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedOrders.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
   const paginatedData = React.useMemo(() => {
     const start = (safePage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, safePage, pageSize]);
+    return sortedOrders.slice(start, start + pageSize);
+  }, [sortedOrders, safePage, pageSize]);
 
   // Business Rule: Dispatch slips can strictly only be generated for Booked orders
   const eligibleBookedOrders = React.useMemo(() => {
@@ -740,13 +759,25 @@ function OrderListContent() {
                       title={eligibleBookedOrders.length > 0 ? "Select all Booked orders" : "No Booked orders available to select"}
                     />
                   </th>
-                  <th className="px-4 py-3">Tracking ID</th>
-                  <th className="px-4 py-3">Consignee</th>
-                  <th className="px-4 py-3">Destination Address</th>
-                  <th className="px-4 py-3">Shipper</th>
-                  <th className="px-4 py-3">Payment / COD</th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Tracking ID" column="trackingNumber" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Consignee" column="customerName" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Destination Address" column="address" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Shipper" column="shipper" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Payment / COD" column="codAmount" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
                   <th className="px-4 py-3">Allow to Open</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Status" column="status" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>

@@ -4,6 +4,8 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { 
   Printer, 
   Search, 
@@ -161,11 +163,20 @@ export default function CodSettlementPage() {
 
   const selectedShipperName = shippers.find(s => String(s.id) === selectedShipperId)?.name || 'Selected Shipper';
 
-  const totalItems = parcels.length;
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedParcels,
+  } = useTableSort<SettlementParcel>(parcels, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+  });
+
+  const totalItems = sortedParcels.length;
   const startIndex = (page - 1) * pageSize;
   const paginatedParcels = React.useMemo(() => {
-    return parcels.slice(startIndex, startIndex + pageSize);
-  }, [parcels, startIndex, pageSize]);
+    return sortedParcels.slice(startIndex, startIndex + pageSize);
+  }, [sortedParcels, startIndex, pageSize]);
 
   return (
     <PortalLayout>
@@ -300,13 +311,27 @@ export default function CodSettlementPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-bold">
                 <tr>
-                  <th className="px-4 py-3">Tracking Number</th>
-                  <th className="px-4 py-3">Consignee</th>
-                  <th className="px-4 py-3">Destination</th>
-                  <th className="px-4 py-3">Delivered Date</th>
-                  <th className="px-4 py-3 text-right">COD Collected</th>
-                  <th className="px-4 py-3 text-right">Freight Deduction</th>
-                  <th className="px-4 py-3 text-right text-emerald-700">Net Payable</th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Tracking Number" column="trackingNumber" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Consignee" column="consigneeName" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Destination" column="destination" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortableHeader label="Delivered Date" column="deliveredDate" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="px-4 py-3 text-right">
+                    <SortableHeader label="COD Collected" column="codCollected" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} align="right" />
+                  </th>
+                  <th className="px-4 py-3 text-right">
+                    <SortableHeader label="Freight Deduction" column="deliveryCharge" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} align="right" />
+                  </th>
+                  <th className="px-4 py-3 text-right text-emerald-700">
+                    <SortableHeader label="Net Payable" column="netPayout" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} align="right" />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">

@@ -5,6 +5,8 @@ import PortalLayout from '@/components/PortalLayout';
 import { Download, RefreshCw } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface CustomerReportRow {
   id: string;
@@ -84,9 +86,17 @@ export default function CustomerReportPage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Customer_Report_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
+
+  const {
+    sortConfig,
+    handleSort,
+    sortedItems: sortedRows,
+  } = useTableSort<CustomerReportRow>(rows, {
+    defaultColumn: 'sNo',
+    defaultDirection: 'asc',
+  });
 
   return (
     <PortalLayout>
@@ -181,26 +191,46 @@ export default function CustomerReportPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant">
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">S.NO</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Tracking #</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Invoice #</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Book Date</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Arr. Date</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Vendor</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Reference</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Status</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Cons. Name</th>
-                  <th className="p-sm text-left font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Cons. Address</th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="S.NO" column="sNo" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Tracking #" column="trackingNumber" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Invoice #" column="invoiceNo" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Book Date" column="bookDate" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Arr. Date" column="arrivalDate" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Vendor" column="vendor" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Reference" column="reference" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Status" column="status" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Cons. Name" column="consigneeName" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
+                  <th className="p-sm text-left">
+                    <SortableHeader label="Cons. Address" column="consigneeAddress" activeColumn={sortConfig.column} direction={sortConfig.direction} onSort={handleSort} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant">
-                {rows.length === 0 ? (
+                {sortedRows.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-sm py-12 text-center text-on-surface-variant">
                       {isLoading ? 'Loading parcel data...' : 'No records found. Adjust filters and generate report.'}
                     </td>
                   </tr>
-                ) : rows.map((r, index) => (
+                ) : sortedRows.map((r, index) => (
                   <tr
                     key={r.id}
                     className={`hover:bg-background transition-colors h-[48px] cursor-pointer ${selectedRow === index ? 'bg-primary/5' : ''}`}

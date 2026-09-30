@@ -5,6 +5,8 @@ import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -277,10 +279,29 @@ export default function ShipperAdvisePage() {
     return matchesReason && matchesStatus;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredAttempts.length / pageSize));
+  // Sorting
+  const {
+    sortedItems: sortedAttempts,
+    sortColumn,
+    sortDirection,
+    handleSort
+  } = useTableSort<any>(filteredAttempts, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      tracking: (a) => a.parcel?.tracking_number || '',
+      consignee: (a) => a.parcel?.recipient_name || '',
+      rider: (a) => a.rider?.name || '',
+      attempt: (a) => a.status || '',
+      reason: (a) => a.failure_reason || '',
+      advice_status: (a) => a.advice_status || '',
+    }
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedAttempts.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const paginatedAttempts = filteredAttempts.slice(startIndex, startIndex + pageSize);
+  const paginatedAttempts = sortedAttempts.slice(startIndex, startIndex + pageSize);
 
   const renderAdviceStatusBadge = (attempt: any) => {
     const sla = getSLAStatus(attempt.createdAt || attempt.attempt_time, attempt.advice_status, attempt.status);
@@ -465,12 +486,60 @@ export default function ShipperAdvisePage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-outline-variant text-xs font-bold text-on-surface-variant uppercase">
-                    <th className="px-4 py-3">Tracking ID</th>
-                    <th className="px-4 py-3">Consignee Name</th>
-                    <th className="px-4 py-3">Rider Name</th>
-                    <th className="px-4 py-3">Attempt Num</th>
-                    <th className="px-4 py-3">Failure Reason</th>
-                    <th className="px-4 py-3">48h SLA & Advice Status</th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="Tracking ID"
+                        columnKey="tracking"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="Consignee Name"
+                        columnKey="consignee"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="Rider Name"
+                        columnKey="rider"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="Attempt Num"
+                        columnKey="attempt"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="Failure Reason"
+                        columnKey="reason"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortableHeader
+                        label="48h SLA & Advice Status"
+                        columnKey="advice_status"
+                        currentColumn={sortColumn}
+                        currentDirection={sortDirection}
+                        onSort={handleSort}
+                      />
+                    </th>
                     <th className="px-4 py-3">Shipper Instruction</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>

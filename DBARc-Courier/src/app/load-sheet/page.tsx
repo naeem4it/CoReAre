@@ -4,6 +4,8 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import {
   Search,
   Printer,
@@ -290,16 +292,52 @@ export default function LoadSheetPage() {
   const totalSelectedWeight = selectedParcels.reduce((sum, p) => sum + (Number(p.weight) || 0.5), 0);
   const totalSelectedCod = selectedParcels.reduce((sum, p) => sum + (Number(p.cod_amount) || 0), 0);
 
-  // Pagination calculations
-  const bookedTotalPages = Math.max(1, Math.ceil(bookedParcels.length / bookedPageSize));
+  // Table 1: Booked Orders sorting & pagination
+  const {
+    sortConfig: bookedSortConfig,
+    handleSort: handleBookedSort,
+    sortedItems: sortedBookedParcels,
+  } = useTableSort<any>(bookedParcels, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      tracking_number: (p) => p.tracking_number,
+      recipient_name: (p) => p.recipient_name,
+      destination_city: (p) => p.destination_city?.name || p.recipient_address || '',
+      pieces: (p) => Number(p.pieces) || 1,
+      weight: (p) => Number(p.weight) || 0.5,
+      cod_amount: (p) => Number(p.cod_amount) || 0,
+      createdAt: (p) => p.createdAt,
+    },
+  });
+
+  const bookedTotalPages = Math.max(1, Math.ceil(sortedBookedParcels.length / bookedPageSize));
   const bookedSafePage = Math.min(bookedCurrentPage, bookedTotalPages);
   const bookedStartIndex = (bookedSafePage - 1) * bookedPageSize;
-  const paginatedBookedParcels = bookedParcels.slice(bookedStartIndex, bookedStartIndex + bookedPageSize);
+  const paginatedBookedParcels = sortedBookedParcels.slice(bookedStartIndex, bookedStartIndex + bookedPageSize);
 
-  const historyTotalPages = Math.max(1, Math.ceil(loadSheets.length / historyPageSize));
+  // Table 2: Load Sheets history sorting & pagination
+  const {
+    sortConfig: historySortConfig,
+    handleSort: handleHistorySort,
+    sortedItems: sortedLoadSheets,
+  } = useTableSort<any>(loadSheets, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      sheet_id: (s) => s.sheet_id,
+      date_created: (s) => s.date_created,
+      rider: (s) => s.rider?.name || '',
+      origin_hub: (s) => s.origin_hub?.name || '',
+      ordersCount: (s) => s.parcels?.length || 0,
+      status: (s) => s.status,
+    },
+  });
+
+  const historyTotalPages = Math.max(1, Math.ceil(sortedLoadSheets.length / historyPageSize));
   const historySafePage = Math.min(historyCurrentPage, historyTotalPages);
   const historyStartIndex = (historySafePage - 1) * historyPageSize;
-  const paginatedLoadSheets = loadSheets.slice(historyStartIndex, historyStartIndex + historyPageSize);
+  const paginatedLoadSheets = sortedLoadSheets.slice(historyStartIndex, historyStartIndex + historyPageSize);
 
   // -------------------------------------------------------------------------
   // Generate Load Sheet
@@ -772,14 +810,28 @@ export default function LoadSheetPage() {
                             className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                           />
                         </th>
-                        <th className="p-3">Tracking Number</th>
-                        <th className="p-3">Consignee</th>
-                        <th className="p-3">Destination City</th>
-                        <th className="p-3 text-center">Pcs</th>
-                        <th className="p-3 text-center">Weight</th>
+                        <th className="p-3">
+                          <SortableHeader label="Tracking Number" column="tracking_number" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} />
+                        </th>
+                        <th className="p-3">
+                          <SortableHeader label="Consignee" column="recipient_name" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} />
+                        </th>
+                        <th className="p-3">
+                          <SortableHeader label="Destination City" column="destination_city" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} />
+                        </th>
+                        <th className="p-3 text-center">
+                          <SortableHeader label="Pcs" column="pieces" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} align="center" />
+                        </th>
+                        <th className="p-3 text-center">
+                          <SortableHeader label="Weight" column="weight" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} align="center" />
+                        </th>
                         <th className="p-3">Payment</th>
-                        <th className="p-3 text-right">COD Amount</th>
-                        <th className="p-3">Booked Date</th>
+                        <th className="p-3 text-right">
+                          <SortableHeader label="COD Amount" column="cod_amount" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} align="right" />
+                        </th>
+                        <th className="p-3">
+                          <SortableHeader label="Booked Date" column="createdAt" activeColumn={bookedSortConfig.column} direction={bookedSortConfig.direction} onSort={handleBookedSort} />
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant">
@@ -949,12 +1001,22 @@ export default function LoadSheetPage() {
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-slate-50/70 border-b border-outline-variant font-bold text-slate-600 uppercase">
-                        <th className="p-3">Sheet ID / Barcode</th>
-                        <th className="p-3">Date Created</th>
-                        <th className="p-3">Origin Hub</th>
-                        <th className="p-3 text-center">Parcels</th>
+                        <th className="p-3">
+                          <SortableHeader label="Sheet ID / Barcode" column="sheet_id" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                        </th>
+                        <th className="p-3">
+                          <SortableHeader label="Date Created" column="date_created" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                        </th>
+                        <th className="p-3">
+                          <SortableHeader label="Origin Hub" column="origin_hub" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                        </th>
+                        <th className="p-3 text-center">
+                          <SortableHeader label="Parcels" column="ordersCount" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="center" />
+                        </th>
                         <th className="p-3 text-right">Total COD</th>
-                        <th className="p-3">Status</th>
+                        <th className="p-3">
+                          <SortableHeader label="Status" column="status" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                        </th>
                         <th className="p-3 text-right">Actions</th>
                       </tr>
                     </thead>

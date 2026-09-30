@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import PaymentMethodConfigBlock, { PaymentMethodData } from '@/components/payment/PaymentMethodConfigBlock';
 import TablePagination from '@/components/ui/TablePagination';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface ShipperRecord {
   id: number;
@@ -625,16 +627,69 @@ export default function ShipperInvoicesPage() {
     };
   }, [printItems, ibftFee, singularPrintItem]);
 
-  // Pagination calculations
-  const statementTotalPages = Math.max(1, Math.ceil(lineItems.length / statementPageSize));
+  // Table 1: Statement Shipments sorting & pagination
+  const {
+    sortConfig: statementSortConfig,
+    handleSort: handleStatementSort,
+    sortedItems: sortedLineItems,
+  } = useTableSort<StatementLineItem>(lineItems, {
+    defaultColumn: 'cnNumber',
+    defaultDirection: 'desc',
+  });
+
+  const statementTotalPages = Math.max(1, Math.ceil(sortedLineItems.length / statementPageSize));
   const statementSafePage = Math.min(statementPage, statementTotalPages);
   const statementStartIndex = (statementSafePage - 1) * statementPageSize;
-  const paginatedLineItems = lineItems.slice(statementStartIndex, statementStartIndex + statementPageSize);
+  const paginatedLineItems = sortedLineItems.slice(statementStartIndex, statementStartIndex + statementPageSize);
 
-  const historyTotalPages = Math.max(1, Math.ceil(paidInvoices.length / historyPageSize));
+  // Table 2: Paid Invoices sorting & pagination
+  const {
+    sortConfig: historySortConfig,
+    handleSort: handleHistorySort,
+    sortedItems: sortedPaidInvoices,
+  } = useTableSort<any>(paidInvoices, {
+    defaultColumn: 'id',
+    defaultDirection: 'desc',
+    customExtractors: {
+      invoiceNumber: (inv: any) => {
+        const a = inv.attributes || inv;
+        return a.invoice_number || `INV-${inv.id}`;
+      },
+      invoiceDate: (inv: any) => {
+        const a = inv.attributes || inv;
+        return a.invoice_date || a.createdAt || '';
+      },
+      period: (inv: any) => {
+        const a = inv.attributes || inv;
+        return a.period_start || '';
+      },
+      ordersCount: (inv: any) => {
+        const a = inv.attributes || inv;
+        return a.included_parcel_count || a.parcels?.data?.length || a.parcels?.length || 0;
+      },
+      codAmount: (inv: any) => {
+        const a = inv.attributes || inv;
+        return Number(a.cod_amount) || 0;
+      },
+      totalCharges: (inv: any) => {
+        const a = inv.attributes || inv;
+        return Number(a.total_charges) || 0;
+      },
+      netPayable: (inv: any) => {
+        const a = inv.attributes || inv;
+        return Number(a.net_payable) || 0;
+      },
+      status: (inv: any) => {
+        const a = inv.attributes || inv;
+        return a.status || '';
+      },
+    },
+  });
+
+  const historyTotalPages = Math.max(1, Math.ceil(sortedPaidInvoices.length / historyPageSize));
   const historySafePage = Math.min(historyPage, historyTotalPages);
   const historyStartIndex = (historySafePage - 1) * historyPageSize;
-  const paginatedPaidInvoices = paidInvoices.slice(historyStartIndex, historyStartIndex + historyPageSize);
+  const paginatedPaidInvoices = sortedPaidInvoices.slice(historyStartIndex, historyStartIndex + historyPageSize);
 
   // Print handlers
   const handlePrintBatch = () => {
@@ -1721,15 +1776,31 @@ export default function ShipperInvoicesPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase text-[11px]">
                     <tr>
-                      <th className="p-3">Invoice Number</th>
-                      <th className="p-3">Date</th>
-                      <th className="p-3">Billing Period</th>
-                      <th className="p-3 text-center">Orders</th>
-                      <th className="p-3 text-right">COD Collected</th>
-                      <th className="p-3 text-right">Freight Charges</th>
-                      <th className="p-3 text-right font-black text-emerald-700">Net Payable</th>
+                      <th className="p-3">
+                        <SortableHeader label="Invoice Number" column="invoiceNumber" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                      </th>
+                      <th className="p-3">
+                        <SortableHeader label="Date" column="invoiceDate" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                      </th>
+                      <th className="p-3">
+                        <SortableHeader label="Billing Period" column="period" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} />
+                      </th>
+                      <th className="p-3 text-center">
+                        <SortableHeader label="Orders" column="ordersCount" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="center" />
+                      </th>
+                      <th className="p-3 text-right">
+                        <SortableHeader label="COD Collected" column="codAmount" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="right" />
+                      </th>
+                      <th className="p-3 text-right">
+                        <SortableHeader label="Freight Charges" column="totalCharges" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="right" />
+                      </th>
+                      <th className="p-3 text-right font-black text-emerald-700">
+                        <SortableHeader label="Net Payable" column="netPayable" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="right" />
+                      </th>
                       <th className="p-3 text-center">Payment Details</th>
-                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 text-center">
+                        <SortableHeader label="Status" column="status" activeColumn={historySortConfig.column} direction={historySortConfig.direction} onSort={handleHistorySort} align="center" />
+                      </th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -1872,14 +1943,30 @@ export default function ShipperInvoicesPage() {
                         title="Select / Unselect All"
                       />
                     </th>
-                    <th className="p-3 whitespace-nowrap">Tracking Number</th>
-                    <th className="p-3 whitespace-nowrap">Consignee</th>
-                    <th className="p-3 text-center whitespace-nowrap">Origin</th>
-                    <th className="p-3 text-center whitespace-nowrap">Destination</th>
-                    <th className="p-3 whitespace-nowrap">Delivered Date</th>
-                    <th className="p-3 text-right whitespace-nowrap font-bold">COD Collected</th>
-                    <th className="p-3 text-right whitespace-nowrap font-bold">Freight Deduction</th>
-                    <th className="p-3 text-right whitespace-nowrap font-black text-emerald-700">Net Payable</th>
+                    <th className="p-3 whitespace-nowrap">
+                      <SortableHeader label="Tracking Number" column="cnNumber" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} />
+                    </th>
+                    <th className="p-3 whitespace-nowrap">
+                      <SortableHeader label="Consignee" column="consignee" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} />
+                    </th>
+                    <th className="p-3 text-center whitespace-nowrap">
+                      <SortableHeader label="Origin" column="origin" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} align="center" />
+                    </th>
+                    <th className="p-3 text-center whitespace-nowrap">
+                      <SortableHeader label="Destination" column="destination" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} align="center" />
+                    </th>
+                    <th className="p-3 whitespace-nowrap">
+                      <SortableHeader label="Delivered Date" column="arrivalDate" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} />
+                    </th>
+                    <th className="p-3 text-right whitespace-nowrap font-bold">
+                      <SortableHeader label="COD Collected" column="cashCollected" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} align="right" />
+                    </th>
+                    <th className="p-3 text-right whitespace-nowrap font-bold">
+                      <SortableHeader label="Freight Deduction" column="netCharges" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} align="right" />
+                    </th>
+                    <th className="p-3 text-right whitespace-nowrap font-black text-emerald-700">
+                      <SortableHeader label="Net Payable" column="netPayable" activeColumn={statementSortConfig.column} direction={statementSortConfig.direction} onSort={handleStatementSort} align="right" />
+                    </th>
                     <th className="p-3 text-center whitespace-nowrap w-24">Action</th>
                   </tr>
                 </thead>
