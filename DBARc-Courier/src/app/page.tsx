@@ -6,12 +6,20 @@ import { CourierStats } from '@/features/courier/ui/CourierStats';
 import { LiveOperationsFeed } from '@/features/courier/ui/LiveOperationsFeed';
 import { CourierShipmentsTable } from '@/features/courier/ui/CourierShipmentsTable';
 import { TplOrderStatusSection } from '@/features/courier/ui/TplOrderStatusSection';
+import { ShipperDashboard } from '@/features/shipper/ui/ShipperDashboard';
 import { useTenant } from '@/components/TenantProvider';
 import { useAuth } from '@/components/AuthProvider';
+import { Store } from 'lucide-react';
 
 export default function DashboardPage() {
   const { businessName } = useTenant();
-  const { user } = useAuth();
+  const { user, isShipper } = useAuth();
+
+  // Allow admins or staff to preview shipper desktop if desired
+  const [adminViewMode, setAdminViewMode] = React.useState<'courier' | 'shipper' | null>(null);
+
+  // If user is a shipper, show Shipper Desktop. If admin selected preview, honor that.
+  const showShipperDesktop = isShipper || adminViewMode === 'shipper';
 
   // Helper for today's date formatted as YYYY-MM-DD
   const todayStr = React.useMemo(() => {
@@ -39,7 +47,7 @@ export default function DashboardPage() {
     if (user.shipper) {
       if (Array.isArray(user.shipper) && user.shipper.length > 0) {
         if (activeBizId) {
-          const found = user.shipper.find((s: any) => s.id === activeBizId);
+          const found = user.shipper.find((s: { id?: number; name?: string }) => s.id === activeBizId);
           if (found?.name) return found.name;
         }
         return user.shipper[0].name;
@@ -71,6 +79,31 @@ export default function DashboardPage() {
   // Selected status filter triggered by clicking tiles
   const [selectedStatus, setSelectedStatus] = React.useState<string>('all');
 
+  // If rendering Shipper Desktop
+  if (showShipperDesktop) {
+    return (
+      <PortalLayout>
+        {/* Admin preview banner */}
+        {!isShipper && (
+          <div className="mb-4 flex items-center justify-between bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl text-xs shadow-2xs">
+            <span className="font-semibold text-emerald-800 flex items-center gap-1.5">
+              <Store className="w-4 h-4 text-emerald-700" />
+              Viewing Shipper Merchant Desktop Preview
+            </span>
+            <button
+              onClick={() => setAdminViewMode('courier')}
+              className="px-3 py-1 bg-white border border-emerald-300 text-emerald-800 rounded-lg font-bold hover:bg-emerald-100 transition shadow-2xs cursor-pointer"
+            >
+              Switch to Courier Operations
+            </button>
+          </div>
+        )}
+        <ShipperDashboard />
+      </PortalLayout>
+    );
+  }
+
+  // Courier Operations Dashboard
   return (
     <PortalLayout>
       {/* Page Header & Date Range Controls */}
@@ -84,8 +117,19 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Dynamic Controls: From & To Date Range, Current Date, Business Location */}
+        {/* Dynamic Controls: From & To Date Range, Current Date, Business Location, View Mode */}
         <div className="flex flex-wrap items-center gap-sm">
+          {/* Quick Shipper View Toggle Button for Admin */}
+          <button
+            type="button"
+            onClick={() => setAdminViewMode('shipper')}
+            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs text-emerald-900 transition-colors cursor-pointer"
+            title="Preview Shipper Merchant Desktop"
+          >
+            <Store className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Shipper View</span>
+          </button>
+
           {/* From & To Date Range Inputs */}
           <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-xl p-1.5 shadow-sm">
             <div className="flex items-center gap-1.5 px-2">

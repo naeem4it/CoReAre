@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
@@ -10,18 +11,13 @@ import {
   Clock, 
   Truck, 
   Package, 
-  Phone, 
-  AlertCircle, 
   Navigation, 
   User, 
   ArrowRight, 
   Check, 
-  Filter, 
-  Calendar, 
   Eye, 
   X, 
   RefreshCw, 
-  MapPin, 
   FileText, 
   Building2, 
   RotateCcw, 
@@ -31,7 +27,11 @@ import {
   Copy,
   Barcode,
   Boxes,
-  Compass
+  Compass,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
@@ -80,7 +80,7 @@ function computeDeliveryCharges(item: any, isInterCity: boolean): number {
   const isSecondDay = item.service_type === 'Second Day';
   let baseRate = isInterCity ? 250 : 150;
   let oneKgRate = isInterCity ? 300 : 200;
-  let addPerKg = isInterCity ? 200 : 150;
+  const addPerKg = isInterCity ? 200 : 150;
 
   if (isSecondDay) {
     baseRate = Math.round(baseRate * 0.85);
@@ -93,11 +93,49 @@ function computeDeliveryCharges(item: any, isInterCity: boolean): number {
   return oneKgRate + (extraWeight * addPerKg);
 }
 
+// Canonical status helpers for accurate KPI metrics and filtering
+function isBookedStatus(status?: string | null): boolean {
+  if (!status) return true;
+  const s = status.trim().toLowerCase();
+  return s === 'booked' || s === 'total booking' || s === 'pending' || s === 'booking';
+}
+
+function isHubTransitStatus(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return [
+    'picked up by rider', 'arrived at the warehouse', 'arrived',
+    'in transit', 'arrived at warehouse', 'arrived at destination',
+    'arrived at warehouse (origin)', 'arrived at warehouse (dest)'
+  ].some(x => s === x || s.includes(x));
+}
+
+function isOutForDeliveryStatus(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return s === 'out for delivery';
+}
+
+function isDeliveredStatus(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return s === 'delivered';
+}
+
+function isFailedOrReturnStatus(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return [
+    'delivery failed', 'failed attempt', 'ready for return',
+    'ready to return', 'return to shipper', 'not arrived', 'lost/damage', 'lost / damage'
+  ].some(x => s === x || s.includes(x));
+}
+
 function TrackingPageContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams?.get('search') || '';
 
-  const { user, isShipper, activeBusinessId } = useAuth();
+  const { isShipper, activeBusinessId } = useAuth();
 
   const [parcels, setParcels] = React.useState<any[]>([]);
   const [shippers, setShippers] = React.useState<any[]>([]);
@@ -119,6 +157,17 @@ function TrackingPageContent() {
   const [statusComment, setStatusComment] = React.useState<string>('');
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
 
+  const handleSelectOrder = React.useCallback((order: any | null) => {
+    setSelectedOrder(order);
+    if (order) {
+      setEditStatus(order.status);
+      setStatusComment(order.failure_reason || '');
+    } else {
+      setEditStatus('');
+      setStatusComment('');
+    }
+  }, []);
+
   // Toast State
   const [showToast, setShowToast] = React.useState(false);
   const [toastMessage, setToastMessage] = React.useState('');
@@ -139,18 +188,41 @@ function TrackingPageContent() {
     }
   }, [isShipper]);
 
-  const fetchParcels = React.useCallback(async () => {
+  const fetchParcels = React.useCallback(async (showLoader = false) => {
     try {
-      setLoading(true);
-      let endpoint = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[limit]=100';
+      if (showLoader) {
+        setLoading(true);
+      }
+      const params = new URLSearchParams();
+      params.set('populate', '*');
+      params.set('sort[0]', 'createdAt:desc');
+      params.set('pagination[pageSize]', '100');
       
       // If Shipper user: scope strictly to their own business
       if (isShipper && activeBusinessId) {
-        endpoint += `&filters[shipper][id][$eq]=${activeBusinessId}`;
+        params.set('filters[shipper][id][$eq]', String(activeBusinessId));
       }
 
-      const response = await apiClient.get(endpoint);
-      const data = response.data?.data || [];
+      // 1. Fetch first page
+      const firstRes = await apiClient.get(`/parcels?${params.toString()}&pagination[page]=1`);
+      let allRawItems: any[] = firstRes.data?.data || [];
+      const pageCount = Number(firstRes.data?.meta?.pagination?.pageCount) || 1;
+
+      // 2. If more pages exist, fetch remaining pages in parallel to load 100% of orders
+      if (pageCount > 1) {
+        const pagePromises = [];
+        for (let p = 2; p <= pageCount; p++) {
+          pagePromises.push(apiClient.get(`/parcels?${params.toString()}&pagination[page]=${p}`));
+        }
+        const remainingResults = await Promise.all(pagePromises);
+        for (const res of remainingResults) {
+          if (Array.isArray(res.data?.data)) {
+            allRawItems = allRawItems.concat(res.data.data);
+          }
+        }
+      }
+
+      const data = allRawItems;
       if (data.length > 0) {
         const mapped = data.map((item: any) => {
           const originCity = resolveCity(
@@ -234,7 +306,7 @@ function TrackingPageContent() {
         if (initialSearch) {
           const match = mapped.find((p: any) => p.tracking_number.toLowerCase().includes(initialSearch.toLowerCase().trim()));
           if (match) {
-            setSelectedOrder(match);
+            handleSelectOrder(match);
           }
         }
       } else {
@@ -246,19 +318,13 @@ function TrackingPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [isShipper, activeBusinessId, initialSearch]);
+  }, [isShipper, activeBusinessId, initialSearch, handleSelectOrder]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchParcels();
     fetchShippers();
   }, [fetchParcels, fetchShippers]);
-
-  React.useEffect(() => {
-    if (selectedOrder) {
-      setEditStatus(selectedOrder.status);
-      setStatusComment(selectedOrder.failure_reason || '');
-    }
-  }, [selectedOrder]);
 
   // Direct Tracking Action
   const handleDirectTrack = (e?: React.FormEvent) => {
@@ -267,10 +333,11 @@ function TrackingPageContent() {
     if (!q) return;
     const match = parcels.find(p => p.tracking_number.toLowerCase() === q || p.tracking_number.toLowerCase().includes(q));
     if (match) {
-      setSelectedOrder(match);
+      handleSelectOrder(match);
       triggerToast(`Showing live tracking timeline for ${match.tracking_number}`);
     } else {
       setSearchQuery(directSearch);
+      setCurrentPage(1);
       triggerToast(`Filtered list by "${directSearch}"`);
     }
   };
@@ -543,73 +610,89 @@ function TrackingPageContent() {
   // Real live KPI stats calculation
   const stats = React.useMemo(() => {
     const total = parcels.length;
-    const inHubTransit = parcels.filter(p => [
-      'Picked up by rider', 'Arrived at the warehouse', 'Arrived', 
-      'In Transit', 'Arrived at warehouse', 'Arrived At Destination'
-    ].includes(p.status)).length;
-    const outForDelivery = parcels.filter(p => ['Out for Delivery', 'Out For delivery'].includes(p.status)).length;
-    const delivered = parcels.filter(p => p.status === 'Delivered').length;
-    const exceptions = parcels.filter(p => [
-      'Delivery Failed', 'Failed Attempt', 'Ready for Return', 
-      'Ready To Return', 'Return to Shipper', 'Not Arrived', 'Lost/Damage'
-    ].includes(p.status)).length;
+    const booked = parcels.filter(p => isBookedStatus(p.status)).length;
+    const inHubTransit = parcels.filter(p => isHubTransitStatus(p.status)).length;
+    const outForDelivery = parcels.filter(p => isOutForDeliveryStatus(p.status)).length;
+    const delivered = parcels.filter(p => isDeliveredStatus(p.status)).length;
+    const exceptions = parcels.filter(p => isFailedOrReturnStatus(p.status)).length;
 
-    return { total, inHubTransit, outForDelivery, delivered, exceptions };
+    return { total, booked, inHubTransit, outForDelivery, delivered, exceptions };
   }, [parcels]);
 
   // Filter Logic
-  const filteredParcels = parcels.filter((item) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q || (
-      item.tracking_number.toLowerCase().includes(q) ||
-      item.recipient_name.toLowerCase().includes(q) ||
-      item.recipient_address.toLowerCase().includes(q) ||
-      item.recipient_phone.includes(q) ||
-      (item.shipper_name && item.shipper_name.toLowerCase().includes(q))
-    );
+  const filteredParcels = React.useMemo(() => {
+    return parcels.filter((item) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || (
+        item.tracking_number.toLowerCase().includes(q) ||
+        item.recipient_name.toLowerCase().includes(q) ||
+        item.recipient_address.toLowerCase().includes(q) ||
+        item.recipient_phone.includes(q) ||
+        (item.shipper_name && item.shipper_name.toLowerCase().includes(q))
+      );
 
-    // Normalize status match for 12 statuses
-    let matchesStatus = true;
-    if (statusFilter) {
-      if (statusFilter === 'Booked' || statusFilter === 'Total Booking') {
-        matchesStatus = item.status === 'Booked' || item.status === 'booked' || item.status === 'Total Booking';
-      } else if (statusFilter === 'Arrived at the warehouse') {
-        matchesStatus = item.status === 'Arrived at the warehouse' || item.status === 'Arrived';
-      } else if (statusFilter === 'Arrived at warehouse') {
-        matchesStatus = item.status === 'Arrived at warehouse' || item.status === 'Arrived At Destination';
-      } else if (statusFilter === 'Out for Delivery') {
-        matchesStatus = item.status === 'Out for Delivery' || item.status === 'Out For delivery';
-      } else if (statusFilter === 'Delivery Failed') {
-        matchesStatus = item.status === 'Delivery Failed' || item.status === 'Failed Attempt';
-      } else if (statusFilter === 'Ready for Return') {
-        matchesStatus = item.status === 'Ready for Return' || item.status === 'Ready To Return';
-      } else {
-        matchesStatus = item.status === statusFilter;
+      // Normalize status match
+      let matchesStatus = true;
+      if (statusFilter) {
+        if (statusFilter === 'Booked' || statusFilter === 'Total Booking') {
+          matchesStatus = isBookedStatus(item.status);
+        } else if (statusFilter === 'In Transit') {
+          matchesStatus = isHubTransitStatus(item.status);
+        } else if (statusFilter === 'Out for Delivery') {
+          matchesStatus = isOutForDeliveryStatus(item.status);
+        } else if (statusFilter === 'Delivered') {
+          matchesStatus = isDeliveredStatus(item.status);
+        } else if (statusFilter === 'Delivery Failed') {
+          matchesStatus = isFailedOrReturnStatus(item.status);
+        } else if (statusFilter === 'Ready for Return') {
+          matchesStatus = item.status === 'Ready for Return' || item.status === 'Ready To Return';
+        } else if (statusFilter === 'Arrived at the warehouse') {
+          matchesStatus = item.status === 'Arrived at the warehouse' || item.status === 'Arrived';
+        } else if (statusFilter === 'Arrived at warehouse') {
+          matchesStatus = item.status === 'Arrived at warehouse' || item.status === 'Arrived At Destination';
+        } else {
+          matchesStatus = (item.status || '').toLowerCase() === statusFilter.toLowerCase();
+        }
       }
-    }
 
-    // Shipper Filter (for courier admin / staff)
-    let matchesShipper = true;
-    if (!isShipper && shipperFilter !== 'all') {
-      if (shipperFilter === 'self_booking') {
-        matchesShipper = item.is_self_booking;
-      } else {
-        matchesShipper = String(item.shipper_id) === String(shipperFilter);
+      // Shipper Filter (for courier admin / staff)
+      let matchesShipper = true;
+      if (!isShipper && shipperFilter !== 'all') {
+        if (shipperFilter === 'self_booking') {
+          matchesShipper = item.is_self_booking;
+        } else {
+          matchesShipper = String(item.shipper_id) === String(shipperFilter);
+        }
       }
-    }
 
-    let matchesDate = true;
-    if (dateFrom) {
-      matchesDate = matchesDate && new Date(item.createdAt) >= new Date(dateFrom);
-    }
-    if (dateTo) {
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      matchesDate = matchesDate && new Date(item.createdAt) <= toDate;
-    }
+      let matchesDate = true;
+      if (dateFrom) {
+        matchesDate = matchesDate && new Date(item.createdAt) >= new Date(dateFrom);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && new Date(item.createdAt) <= toDate;
+      }
 
-    return matchesSearch && matchesStatus && matchesShipper && matchesDate;
-  });
+      return matchesSearch && matchesStatus && matchesShipper && matchesDate;
+    });
+  }, [parcels, searchQuery, statusFilter, shipperFilter, dateFrom, dateTo, isShipper]);
+
+  // Table Pagination State
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10); // 10, 25, 50, 100
+
+  const totalPages = Math.max(1, Math.ceil(filteredParcels.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedParcels = React.useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * pageSize;
+    return filteredParcels.slice(startIndex, startIndex + pageSize);
+  }, [filteredParcels, safeCurrentPage, pageSize]);
+
+  const startRecord = filteredParcels.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
+  const endRecord = Math.min(safeCurrentPage * pageSize, filteredParcels.length);
 
   return (
     <PortalLayout>
@@ -629,7 +712,7 @@ function TrackingPageContent() {
             </p>
           </div>
           <button 
-            onClick={fetchParcels} 
+            onClick={() => fetchParcels(true)} 
             className="flex items-center gap-2 h-10 px-4 bg-white border border-outline-variant text-secondary rounded-xl text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer shadow-sm w-fit"
           >
             <RefreshCw className="w-4 h-4" /> Refresh Database
@@ -671,25 +754,39 @@ function TrackingPageContent() {
         </div>
 
         {/* Live Operational Status KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div 
-            onClick={() => setStatusFilter('')} 
+            onClick={() => { setStatusFilter(''); setCurrentPage(1); }} 
             className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
               statusFilter === '' ? 'bg-primary/5 border-primary ring-2 ring-primary/20' : 'bg-white border-slate-200 hover:border-primary/50'
             }`}
           >
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-[11px] font-bold uppercase tracking-wider">Booked Orders</span>
-              <Boxes className="w-4 h-4 text-primary" />
+              <span className="text-[11px] font-bold uppercase tracking-wider">All Orders</span>
+              <Layers className="w-4 h-4 text-primary" />
             </div>
             <div className="text-2xl font-black font-mono text-slate-900 mt-2">{stats.total}</div>
             <div className="text-[10px] text-slate-500 mt-0.5">All registered consignments</div>
           </div>
 
           <div 
-            onClick={() => setStatusFilter('Arrived at the warehouse')} 
+            onClick={() => { setStatusFilter('Booked'); setCurrentPage(1); }} 
             className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
-              statusFilter === 'Arrived at the warehouse' ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-indigo-400'
+              statusFilter === 'Booked' ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20' : 'bg-white border-slate-200 hover:border-amber-400'
+            }`}
+          >
+            <div className="flex items-center justify-between text-amber-700">
+              <span className="text-[11px] font-bold uppercase tracking-wider">Booked Orders</span>
+              <Boxes className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="text-2xl font-black font-mono text-amber-950 mt-2">{stats.booked}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Pending pickup & dispatch</div>
+          </div>
+
+          <div 
+            onClick={() => { setStatusFilter('In Transit'); setCurrentPage(1); }} 
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+              statusFilter === 'In Transit' ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 hover:border-indigo-400'
             }`}
           >
             <div className="flex items-center justify-between text-indigo-700">
@@ -701,7 +798,7 @@ function TrackingPageContent() {
           </div>
 
           <div 
-            onClick={() => setStatusFilter('Out for Delivery')} 
+            onClick={() => { setStatusFilter('Out for Delivery'); setCurrentPage(1); }} 
             className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
               statusFilter === 'Out for Delivery' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20' : 'bg-white border-slate-200 hover:border-blue-400'
             }`}
@@ -715,7 +812,7 @@ function TrackingPageContent() {
           </div>
 
           <div 
-            onClick={() => setStatusFilter('Delivered')} 
+            onClick={() => { setStatusFilter('Delivered'); setCurrentPage(1); }} 
             className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
               statusFilter === 'Delivered' ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-white border-slate-200 hover:border-emerald-400'
             }`}
@@ -729,7 +826,7 @@ function TrackingPageContent() {
           </div>
 
           <div 
-            onClick={() => setStatusFilter('Delivery Failed')} 
+            onClick={() => { setStatusFilter('Delivery Failed'); setCurrentPage(1); }} 
             className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
               statusFilter === 'Delivery Failed' ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20' : 'bg-white border-slate-200 hover:border-rose-400'
             }`}
@@ -765,7 +862,10 @@ function TrackingPageContent() {
                 type="text"
                 placeholder="Tracking ID, Recipient, Phone..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium"
               />
             </div>
@@ -777,7 +877,10 @@ function TrackingPageContent() {
               <label className="text-xs font-bold text-outline uppercase tracking-wider">Shipper / Booking</label>
               <select
                 value={shipperFilter}
-                onChange={(e) => setShipperFilter(e.target.value)}
+                onChange={(e) => {
+                  setShipperFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer"
               >
                 <option value="all">All Shippers & Direct Bookings</option>
@@ -796,19 +899,22 @@ function TrackingPageContent() {
             <label className="text-xs font-bold text-outline uppercase tracking-wider">Operational Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer"
             >
-              <option value="">All 12 Statuses</option>
-              <option value="Booked">1. Booked</option>
+              <option value="">All Statuses ({stats.total})</option>
+              <option value="Booked">1. Booked ({stats.booked})</option>
               <option value="Picked up by rider">2. Picked up by rider</option>
               <option value="Arrived at warehouse (Origin)">3. Arrived at warehouse (Origin)</option>
               <option value="Not Arrived">4. Not Arrived</option>
-              <option value="In Transit">5. In Transit</option>
+              <option value="In Transit">5. In Transit ({stats.inHubTransit})</option>
               <option value="Arrived at warehouse (Dest)">6. Arrived at warehouse (Dest)</option>
-              <option value="Out for Delivery">7. Out for Delivery</option>
-              <option value="Delivered">8. Delivered</option>
-              <option value="Delivery Failed">9. Delivery Failed</option>
+              <option value="Out for Delivery">7. Out for Delivery ({stats.outForDelivery})</option>
+              <option value="Delivered">8. Delivered ({stats.delivered})</option>
+              <option value="Delivery Failed">9. Delivery Failed ({stats.exceptions})</option>
               <option value="Ready for Return">10. Ready for Return</option>
               <option value="Return to Shipper">11. Return to Shipper</option>
               <option value="Lost / Damage">12. Lost / Damage</option>
@@ -821,7 +927,10 @@ function TrackingPageContent() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer"
             />
           </div>
@@ -832,7 +941,10 @@ function TrackingPageContent() {
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full bg-slate-50 border border-outline-variant rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer"
             />
           </div>
@@ -845,7 +957,7 @@ function TrackingPageContent() {
               <Package className="w-4 h-4 text-primary" /> Active Consignment Register
             </h2>
             <span className="text-xs font-semibold text-outline">
-              Showing {filteredParcels.length} of {parcels.length} consignments
+              Showing {filteredParcels.length > 0 ? `${startRecord}-${endRecord} of ` : ''}{filteredParcels.length} {statusFilter ? `(${statusFilter}) ` : ''}consignments (Total: {parcels.length})
             </span>
           </div>
 
@@ -877,10 +989,10 @@ function TrackingPageContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant text-xs font-medium">
-                  {filteredParcels.map((parcel) => (
+                  {paginatedParcels.map((parcel) => (
                     <tr 
                       key={parcel.id}
-                      onClick={() => setSelectedOrder(parcel)}
+                      onClick={() => handleSelectOrder(parcel)}
                       className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                     >
                       <td className="px-4 py-4 font-mono font-bold text-primary">
@@ -935,7 +1047,7 @@ function TrackingPageContent() {
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedOrder(parcel);
+                            handleSelectOrder(parcel);
                           }}
                           className="px-3 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg font-semibold transition-colors flex items-center gap-1 ml-auto text-[11px] cursor-pointer"
                         >
@@ -948,6 +1060,75 @@ function TrackingPageContent() {
               </table>
             )}
           </div>
+
+          {/* Bottom Pagination Controls */}
+          {filteredParcels.length > 0 && (
+            <div className="p-4 border-t border-outline-variant bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-xs text-slate-600">
+                <span>
+                  Showing <strong className="text-slate-900 font-mono">{startRecord}</strong> - <strong className="text-slate-900 font-mono">{endRecord}</strong> of <strong className="text-slate-900 font-mono">{filteredParcels.length}</strong> consignments
+                </span>
+                <span className="text-slate-300">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-500">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer shadow-2xs"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage <= 1}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
+                  title="First Page"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors flex items-center gap-1 shadow-2xs"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                </button>
+
+                <div className="flex items-center gap-1 px-2">
+                  <span className="text-xs font-bold text-slate-700">
+                    Page <span className="font-mono text-primary font-black">{safeCurrentPage}</span> of <span className="font-mono">{totalPages}</span>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors flex items-center gap-1 shadow-2xs"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
+                  title="Last Page"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
@@ -994,7 +1175,7 @@ function TrackingPageContent() {
                   <Printer className="w-4 h-4" /> Print
                 </button>
                 <button 
-                  onClick={() => setSelectedOrder(null)} 
+                  onClick={() => handleSelectOrder(null)} 
                   className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 transition-colors cursor-pointer ml-2"
                 >
                   <X className="w-5 h-5" />
