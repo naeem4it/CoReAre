@@ -3,8 +3,9 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { InvoiceService } from '@/services/api';
-import { Download, Filter, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Download, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import TablePagination from '@/components/ui/TablePagination';
 
 interface InvoiceItem {
   id: number;
@@ -40,17 +41,14 @@ export default function CustomerInvoicePage() {
   const [selectedStatus, setSelectedStatus] = React.useState<'All' | 'Paid' | 'Pending' | 'Overdue'>('All');
   const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
   const [page, setPage] = React.useState(1);
-  const [pageSize] = React.useState(10);
+  const [pageSize, setPageSize] = React.useState(10);
   const [totalCount, setTotalCount] = React.useState(0);
 
-  const userBusinesses = React.useMemo(() => {
-    if (!user?.shipper) return [];
-    return Array.isArray(user.shipper) ? user.shipper : [user.shipper];
+  const userBusinessIdsKey = React.useMemo(() => {
+    if (!user?.shipper) return '';
+    const businesses = Array.isArray(user.shipper) ? user.shipper : [user.shipper];
+    return businesses.map((b: any) => b.id).filter(Boolean).sort().join(',');
   }, [user]);
-
-  const userBusinessIds = React.useMemo(() => {
-    return userBusinesses.map((b: any) => b.id).filter(Boolean);
-  }, [userBusinesses]);
 
   const fetchInvoices = React.useCallback(async () => {
     setIsLoading(true);
@@ -60,12 +58,13 @@ export default function CustomerInvoicePage() {
         query += `&filters[status][$eq]=${selectedStatus}`;
       }
       if (isShipper) {
-        if (activeBusinessId && userBusinessIds.includes(activeBusinessId)) {
+        const ids = userBusinessIdsKey ? userBusinessIdsKey.split(',').map(Number) : [];
+        if (activeBusinessId && ids.includes(activeBusinessId)) {
           query += `&filters[shipper][id][$eq]=${activeBusinessId}`;
-        } else if (userBusinessIds.length === 1) {
-          query += `&filters[shipper][id][$eq]=${userBusinessIds[0]}`;
-        } else if (userBusinessIds.length > 1) {
-          userBusinessIds.forEach((id: number, idx: number) => {
+        } else if (ids.length === 1) {
+          query += `&filters[shipper][id][$eq]=${ids[0]}`;
+        } else if (ids.length > 1) {
+          ids.forEach((id: number, idx: number) => {
             query += `&filters[shipper][id][$in][${idx}]=${id}`;
           });
         }
@@ -79,9 +78,10 @@ export default function CustomerInvoicePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, selectedStatus, isShipper, activeBusinessId, userBusinessIds]);
+  }, [page, pageSize, selectedStatus, isShipper, activeBusinessId, userBusinessIdsKey]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInvoices();
   }, [fetchInvoices]);
 
@@ -120,8 +120,6 @@ export default function CustomerInvoicePage() {
   }, [invoices]);
 
   const paidRate = invoices.length > 0 ? ((paidCount / invoices.length) * 100).toFixed(1) : '0';
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const handleExportCSV = () => {
     const header = 'Invoice #,Customer,Date,Period,Charges,Status\n';
@@ -347,30 +345,19 @@ export default function CustomerInvoicePage() {
             </div>
 
             {/* Pagination */}
-            <div className="px-md py-3.5 border-t border-outline-variant flex items-center justify-between bg-surface-container-lowest text-xs text-outline">
-              <p>
-                Showing {invoices.length} of {totalCount} invoices
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1 || isLoading}
-                  className="px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-low disabled:opacity-40"
-                >
-                  Prev
-                </button>
-                <span className="px-2 font-bold text-on-surface">
-                  {page} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages || isLoading}
-                  className="px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-low disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            {!isLoading && invoices.length > 0 && (
+              <TablePagination
+                currentPage={page}
+                totalItems={totalCount}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                itemLabel="invoices"
+              />
+            )}
           </div>
         </div>
       </div>

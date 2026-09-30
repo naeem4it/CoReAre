@@ -23,60 +23,68 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     }
   }, [isShipperEmployee, pathname, router]);
 
+  const authCheckedRef = React.useRef(false);
+
   React.useEffect(() => {
+    if (authCheckedRef.current) return;
+    authCheckedRef.current = true;
+
     const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
     if (!token) {
       router.push('/login');
-    } else {
-      apiClient.get('/users/me?populate=shipper,offices,role_definition,tenant.logo')
-        .then((res) => {
-          const userData = res.data;
-          const roleType = (
-            userData?.role?.type ||
-            userData?.role_type ||
-            userData?.role?.name ||
-            (typeof userData?.role === 'string' ? userData?.role : '')
-          ).toString().toLowerCase();
+      return;
+    }
 
-          const isSuperAdmin =
-            roleType.includes('super_admin') ||
-            roleType.includes('super admin') ||
-            userData?.role_type === 'SUPER_ADMIN' ||
-            userData?.isAdminUser;
+    const existingUserStr = localStorage.getItem('user');
+    if (existingUserStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsAuthenticated(true);
+    }
 
-          if (isSuperAdmin) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('dbarc-token');
-            localStorage.removeItem('user');
-            router.push('/login');
-            return;
-          }
+    apiClient.get('/users/me?populate=shipper,offices,role_definition,tenant.logo')
+      .then((res) => {
+        const userData = res.data;
+        const roleType = (
+          userData?.role?.type ||
+          userData?.role_type ||
+          userData?.role?.name ||
+          (typeof userData?.role === 'string' ? userData?.role : '')
+        ).toString().toLowerCase();
 
-          localStorage.setItem('user', JSON.stringify(userData));
-          // Reset any previous activeBusinessId/activeOfficeId so user gets courier context immediately
-          localStorage.removeItem('activeBusinessId');
-          localStorage.removeItem('activeOfficeId');
+        const isSuperAdmin =
+          roleType.includes('super_admin') ||
+          roleType.includes('super admin') ||
+          userData?.role_type === 'SUPER_ADMIN' ||
+          userData?.isAdminUser;
+
+        if (isSuperAdmin) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('dbarc-token');
+          localStorage.removeItem('user');
+          router.push('/login');
+          return;
+        }
+
+        localStorage.setItem('user', JSON.stringify(userData));
+        refreshUser();
+        setIsAuthenticated(true);
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch user context:', err.message);
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('dbarc-token');
+          localStorage.removeItem('user');
+          router.push('/login');
+          return;
+        }
+        if (existingUserStr) {
           refreshUser();
           setIsAuthenticated(true);
-        })
-        .catch((err) => {
-          console.warn('Failed to fetch user context:', err.message);
-          if (err.response?.status === 401) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('dbarc-token');
-            localStorage.removeItem('user');
-            router.push('/login');
-            return;
-          }
-          const existingUserStr = localStorage.getItem('user');
-          if (existingUserStr) {
-            refreshUser();
-            setIsAuthenticated(true);
-          } else {
-            router.push('/login');
-          }
-        });
-    }
+        } else {
+          router.push('/login');
+        }
+      });
   }, [router, refreshUser]);
 
   const isShipperUser = React.useMemo(() => {

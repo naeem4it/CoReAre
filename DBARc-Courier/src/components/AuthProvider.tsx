@@ -96,45 +96,57 @@ export const AuthProvider = ({ children, initialUser }: { children: React.ReactN
     return !isShipperEmployee;
   }, [isShipper, isShipperEmployee]);
 
-  const setActiveBusinessId = (id: number | null) => {
+  const setActiveBusinessId = React.useCallback((id: number | null) => {
     setActiveBusinessIdState(id);
     if (id) {
       localStorage.setItem('activeBusinessId', id.toString());
     } else {
       localStorage.removeItem('activeBusinessId');
     }
-  };
+  }, []);
 
-  const setActiveOfficeId = (id: number | null) => {
+  const setActiveOfficeId = React.useCallback((id: number | null) => {
     setActiveOfficeIdState(id);
     if (id) {
       localStorage.setItem('activeOfficeId', id.toString());
     } else {
       localStorage.removeItem('activeOfficeId');
     }
-  };
+  }, []);
 
-  const refreshUser = () => {
+  const refreshUser = React.useCallback(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
       } catch (e) {}
     }
-  };
+  }, []);
+
+  const contextValue = React.useMemo(() => ({
+    user,
+    activeBusinessId,
+    activeOfficeId,
+    isShipper,
+    isShipperAdmin,
+    isShipperEmployee,
+    setActiveBusinessId,
+    setActiveOfficeId,
+    refreshUser,
+  }), [
+    user,
+    activeBusinessId,
+    activeOfficeId,
+    isShipper,
+    isShipperAdmin,
+    isShipperEmployee,
+    setActiveBusinessId,
+    setActiveOfficeId,
+    refreshUser,
+  ]);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      activeBusinessId,
-      activeOfficeId,
-      isShipper,
-      isShipperAdmin,
-      isShipperEmployee,
-      setActiveBusinessId,
-      setActiveOfficeId,
-      refreshUser
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
