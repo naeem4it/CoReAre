@@ -4,6 +4,7 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
+import TablePagination from '@/components/ui/TablePagination';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -41,6 +42,10 @@ export default function ShipperAdvisePage() {
   // Filters
   const [filterReason, setFilterReason] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
 
   // Toast
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
@@ -272,6 +277,11 @@ export default function ShipperAdvisePage() {
     return matchesReason && matchesStatus;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredAttempts.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedAttempts = filteredAttempts.slice(startIndex, startIndex + pageSize);
+
   const renderAdviceStatusBadge = (attempt: any) => {
     const sla = getSLAStatus(attempt.createdAt || attempt.attempt_time, attempt.advice_status, attempt.status);
 
@@ -394,7 +404,10 @@ export default function ShipperAdvisePage() {
               type="text" 
               placeholder="Filter by Reason (e.g. Not Available)..."
               value={filterReason}
-              onChange={(e) => setFilterReason(e.target.value)}
+              onChange={(e) => {
+                setFilterReason(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full px-3 py-2 bg-slate-50/50 border border-outline-variant rounded-xl font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"
             />
           </div>
@@ -404,7 +417,10 @@ export default function ShipperAdvisePage() {
             <select 
               className="w-full px-3 py-2 bg-slate-50/50 border border-outline-variant rounded-xl font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container cursor-pointer font-medium text-xs"
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => {
+                setFilterStatus(e.target.value);
+                setCurrentPage(1);
+              }}
             >
               <option value="">All Statuses</option>
               <option value="Awaiting advice">Awaiting advice</option>
@@ -460,7 +476,7 @@ export default function ShipperAdvisePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant text-xs font-medium">
-                  {filteredAttempts.map((attempt) => {
+                  {paginatedAttempts.map((attempt) => {
                     const sla = getSLAStatus(attempt.createdAt || attempt.attempt_time, attempt.advice_status, attempt.status);
                     const isThirdAttempt = attempt.status === 'Attempt 3';
                     const isAwaiting = attempt.advice_status === 'Awaiting advice';
@@ -493,7 +509,7 @@ export default function ShipperAdvisePage() {
                         <td className="px-4 py-4">
                           {attempt.shipper_advice ? (
                             <span className="text-[10px] text-slate-600 font-medium italic bg-slate-50 p-1.5 rounded border border-outline-variant block max-w-[220px] truncate">
-                              "{attempt.shipper_advice}"
+                              &quot;{attempt.shipper_advice}&quot;
                             </span>
                           ) : (
                             <span className="text-slate-400 italic text-[11px]">No advice given yet</span>
@@ -534,6 +550,20 @@ export default function ShipperAdvisePage() {
               </table>
             )}
           </div>
+
+          {!loading && filteredAttempts.length > 0 && (
+            <TablePagination
+              currentPage={safePage}
+              totalItems={filteredAttempts.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+              itemLabel="tickets"
+            />
+          )}
         </div>
 
       </div>

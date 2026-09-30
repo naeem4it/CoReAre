@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   CheckCircle2
 } from 'lucide-react';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 function extractCityFromAddress(address: string): string {
   if (!address) return 'Pakistan';
@@ -376,6 +377,18 @@ function OrderListContent() {
     return true;
   });
 
+  // Table Pagination State
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedData = React.useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, safePage, pageSize]);
+
   // Business Rule: Dispatch slips can strictly only be generated for Booked orders
   const eligibleBookedOrders = React.useMemo(() => {
     return filteredData.filter((r) => isEligibleForDispatchSlip(r.status));
@@ -569,7 +582,10 @@ function OrderListContent() {
                 type="text"
                 placeholder="Search Tracking #, Consignee..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-9 pr-4 py-2 text-xs font-medium border border-outline-variant bg-slate-50/70 hover:bg-white focus:bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs transition-colors"
               />
             </div>
@@ -579,7 +595,10 @@ function OrderListContent() {
               <select
                 id="status-filter-select"
                 value={statusFilter}
-                onChange={(e) => setSelectedStatus(e.target.value)}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="px-3.5 py-2 text-xs font-bold border border-outline-variant bg-slate-50/70 hover:bg-white focus:bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs text-slate-800 cursor-pointer transition-colors"
                 title="Filter by Order Status"
               >
@@ -607,6 +626,7 @@ function OrderListContent() {
               onChange={(from, to) => {
                 setFromDate(from);
                 setToDate(to);
+                setCurrentPage(1);
               }}
             />
 
@@ -620,6 +640,7 @@ function OrderListContent() {
                   setSearchQuery('');
                   setFromDate('');
                   setToDate('');
+                  setCurrentPage(1);
                 }}
                 className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1"
                 title="Reset all active filters"
@@ -752,7 +773,7 @@ function OrderListContent() {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row) => {
+                  paginatedData.map((row) => {
                     const isSlipEligible = isEligibleForDispatchSlip(row.status);
                     const cancellable = canCancelOrder(row.status);
                     const isCancelled = row.status.toLowerCase().includes('cancel');
@@ -891,6 +912,16 @@ function OrderListContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Table Pagination Controls */}
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredData.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="orders"
+          />
         </div>
       </div>
 

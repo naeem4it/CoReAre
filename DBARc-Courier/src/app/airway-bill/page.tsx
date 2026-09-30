@@ -27,6 +27,7 @@ import {
   FileText,
   RefreshCw
 } from 'lucide-react';
+import { TablePagination } from '@/components/ui/TablePagination';
 
 function extractCityFromAddress(address: string): string {
   if (!address) return 'Pakistan';
@@ -364,6 +365,18 @@ function AirwayBillContent() {
     });
   }, [data, searchQuery, fromDate, toDate, selectedRouting, selectedCity, statusFilter]);
 
+  // Table Pagination State
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedData = React.useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, safePage, pageSize]);
+
   // Strictly filter Booked orders that are eligible for dispatch slip printing
   const eligibleBookedOrders = React.useMemo(() => {
     return filteredData.filter((r) => isEligibleForDispatchSlip(r.status));
@@ -552,7 +565,10 @@ function AirwayBillContent() {
                 type="text"
                 placeholder="Search Tracking #, Consignee, Ref..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-9 pr-4 py-2 text-xs font-medium border border-outline-variant bg-slate-50/70 hover:bg-white focus:bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs transition-colors"
               />
             </div>
@@ -565,6 +581,7 @@ function AirwayBillContent() {
                 onChange={(from, to) => {
                   setFromDate(from);
                   setToDate(to);
+                  setCurrentPage(1);
                 }}
               />
             </div>
@@ -573,7 +590,10 @@ function AirwayBillContent() {
             <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold shrink-0">
               <button
                 type="button"
-                onClick={() => setSelectedRouting('ALL')}
+                onClick={() => {
+                  setSelectedRouting('ALL');
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   selectedRouting === 'ALL'
                     ? 'bg-white text-primary shadow-xs'
@@ -584,7 +604,10 @@ function AirwayBillContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedRouting('2PL')}
+                onClick={() => {
+                  setSelectedRouting('2PL');
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   selectedRouting === '2PL'
                     ? 'bg-emerald-600 text-white shadow-xs'
@@ -595,7 +618,10 @@ function AirwayBillContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedRouting('3PL')}
+                onClick={() => {
+                  setSelectedRouting('3PL');
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   selectedRouting === '3PL'
                     ? 'bg-amber-600 text-white shadow-xs'
@@ -610,7 +636,10 @@ function AirwayBillContent() {
             {availableCities.length > 0 && (
               <select
                 value={selectedCity || ''}
-                onChange={(e) => setSelectedCity(e.target.value || null)}
+                onChange={(e) => {
+                  setSelectedCity(e.target.value || null);
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-2 text-xs font-semibold border border-outline-variant bg-slate-50/70 hover:bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs cursor-pointer"
               >
                 <option value="">All Destinations ({availableCities.length})</option>
@@ -627,7 +656,10 @@ function AirwayBillContent() {
               <span className="text-slate-500 font-medium">Show:</span>
               <button
                 type="button"
-                onClick={() => setStatusFilter(statusFilter === 'BOOKED_ONLY' ? 'ALL' : 'BOOKED_ONLY')}
+                onClick={() => {
+                  setStatusFilter(statusFilter === 'BOOKED_ONLY' ? 'ALL' : 'BOOKED_ONLY');
+                  setCurrentPage(1);
+                }}
                 className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
                   statusFilter === 'BOOKED_ONLY'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -741,7 +773,7 @@ function AirwayBillContent() {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row) => {
+                  paginatedData.map((row) => {
                     const isSlipEligible = isEligibleForDispatchSlip(row.status);
 
                     return (
@@ -887,6 +919,16 @@ function AirwayBillContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Table Pagination Controls */}
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredData.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="shipments"
+          />
         </div>
       </div>
 

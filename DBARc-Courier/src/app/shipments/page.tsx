@@ -5,6 +5,7 @@ import Link from 'next/link';
 import PortalLayout from '@/components/PortalLayout';
 import { ParcelService } from '@/services/api';
 import { Parcel } from '@/types/generated/parcel.types';
+import TablePagination from '@/components/ui/TablePagination';
 import { 
   Search, 
   Plus, 
@@ -19,8 +20,6 @@ import {
   User, 
   Phone, 
   MapPin, 
-  ChevronLeft,
-  ChevronRight,
   Printer,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -46,15 +45,13 @@ type ShipmentRow = {
 export default function ShipmentsPage() {
   const { isShipperEmployee } = useAuth();
   const [data, setData] = React.useState<ShipmentRow[]>([]);
-  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('All');
   const [isLoading, setIsLoading] = React.useState(true);
 
   // Pagination states
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [pageSize] = React.useState(10);
-  const [totalPages, setTotalPages] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
   const [totalCount, setTotalCount] = React.useState(0);
 
   // Modal / Drawer states
@@ -85,8 +82,9 @@ export default function ShipmentsPage() {
     status: 'Booked',
   });
 
-  const fetchParcels = async () => {
+  const fetchParcels = React.useCallback(async () => {
     try {
+      await Promise.resolve();
       setIsLoading(true);
       const queryParams = new URLSearchParams({
         'populate': '*',
@@ -134,45 +132,39 @@ export default function ShipmentsPage() {
         });
 
         setData(mapped);
-        setFilteredData(mapped);
         if (pagination) {
-          setTotalPages(pagination.pageCount || 1);
           setTotalCount(pagination.total || mapped.length);
         }
       } else {
         setData([]);
-        setFilteredData([]);
-        setTotalPages(1);
         setTotalCount(0);
       }
     } catch (error) {
       console.warn('Could not fetch shipments from backend API:', error);
       setData([]);
-      setFilteredData([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentPage, pageSize, statusFilter]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchParcels();
-  }, [currentPage, statusFilter]);
+  }, [fetchParcels]);
 
-  React.useEffect(() => {
+  const filteredData = React.useMemo(() => {
     if (!searchQuery.trim()) {
-      setFilteredData(data);
-    } else {
-      const lower = searchQuery.toLowerCase();
-      const filtered = data.filter(
-        (row) =>
-          row.trackingNumber.toLowerCase().includes(lower) ||
-          row.customerName.toLowerCase().includes(lower) ||
-          row.address.toLowerCase().includes(lower) ||
-          row.phone.includes(searchQuery) ||
-          row.status.toLowerCase().includes(lower)
-      );
-      setFilteredData(filtered);
+      return data;
     }
+    const lower = searchQuery.toLowerCase();
+    return data.filter(
+      (row) =>
+        row.trackingNumber.toLowerCase().includes(lower) ||
+        row.customerName.toLowerCase().includes(lower) ||
+        row.address.toLowerCase().includes(lower) ||
+        row.phone.includes(searchQuery) ||
+        row.status.toLowerCase().includes(lower)
+    );
   }, [searchQuery, data]);
 
   const handleOpenEdit = (shipment: ShipmentRow) => {
@@ -459,31 +451,19 @@ export default function ShipmentsPage() {
           </div>
 
           {/* Pagination Footer */}
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <p className="text-xs font-semibold text-slate-500">
-              Showing <span className="text-slate-900 font-bold">{filteredData.length}</span> of{' '}
-              <span className="text-slate-900 font-bold">{totalCount}</span> shipments
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Previous
-              </button>
-              <span className="px-3 py-1 bg-primary text-white rounded-xl text-xs font-bold">
-                {currentPage} / {totalPages || 1}
-              </span>
-              <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
-              >
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
+          {!isLoading && (
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={totalCount}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+              itemLabel="shipments"
+            />
+          )}
         </div>
       </div>
 

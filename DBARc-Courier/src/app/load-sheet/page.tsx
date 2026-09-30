@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
+import TablePagination from '@/components/ui/TablePagination';
 import {
   Search,
   Printer,
@@ -131,6 +132,14 @@ export default function LoadSheetPage() {
   // Date Range Filters for History
   const [historyStartDate, setHistoryStartDate] = React.useState('');
   const [historyEndDate, setHistoryEndDate] = React.useState('');
+
+  // Pagination for Tab 1 (Booked Orders)
+  const [bookedCurrentPage, setBookedCurrentPage] = React.useState(1);
+  const [bookedPageSize, setBookedPageSize] = React.useState(10);
+
+  // Pagination for Tab 2 (History)
+  const [historyCurrentPage, setHistoryCurrentPage] = React.useState(1);
+  const [historyPageSize, setHistoryPageSize] = React.useState(10);
 
   // Barcode Scanner Input for Rider Dispatch
   const [scanBarcodeQuery, setScanBarcodeQuery] = React.useState('');
@@ -280,6 +289,17 @@ export default function LoadSheetPage() {
   const totalSelectedPieces = selectedParcels.reduce((sum, p) => sum + (p.pieces || 1), 0);
   const totalSelectedWeight = selectedParcels.reduce((sum, p) => sum + (Number(p.weight) || 0.5), 0);
   const totalSelectedCod = selectedParcels.reduce((sum, p) => sum + (Number(p.cod_amount) || 0), 0);
+
+  // Pagination calculations
+  const bookedTotalPages = Math.max(1, Math.ceil(bookedParcels.length / bookedPageSize));
+  const bookedSafePage = Math.min(bookedCurrentPage, bookedTotalPages);
+  const bookedStartIndex = (bookedSafePage - 1) * bookedPageSize;
+  const paginatedBookedParcels = bookedParcels.slice(bookedStartIndex, bookedStartIndex + bookedPageSize);
+
+  const historyTotalPages = Math.max(1, Math.ceil(loadSheets.length / historyPageSize));
+  const historySafePage = Math.min(historyCurrentPage, historyTotalPages);
+  const historyStartIndex = (historySafePage - 1) * historyPageSize;
+  const paginatedLoadSheets = loadSheets.slice(historyStartIndex, historyStartIndex + historyPageSize);
 
   // -------------------------------------------------------------------------
   // Generate Load Sheet
@@ -602,7 +622,10 @@ export default function LoadSheetPage() {
                   <input
                     type="date"
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setBookedCurrentPage(1);
+                    }}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -615,7 +638,10 @@ export default function LoadSheetPage() {
                   <input
                     type="date"
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setBookedCurrentPage(1);
+                    }}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -623,7 +649,10 @@ export default function LoadSheetPage() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={fetchBookedParcels}
+                  onClick={() => {
+                    setBookedCurrentPage(1);
+                    fetchBookedParcels();
+                  }}
                   className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Search className="w-4 h-4" />
@@ -634,6 +663,7 @@ export default function LoadSheetPage() {
                     onClick={() => {
                       setStartDate('');
                       setEndDate('');
+                      setBookedCurrentPage(1);
                     }}
                     className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-200"
                   >
@@ -753,7 +783,7 @@ export default function LoadSheetPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant">
-                      {bookedParcels.map((p) => {
+                      {paginatedBookedParcels.map((p) => {
                         const isChecked = checkedParcelIds.includes(p.id);
                         return (
                           <tr
@@ -807,6 +837,20 @@ export default function LoadSheetPage() {
                   </table>
                 )}
               </div>
+
+              {!loadingParcels && bookedParcels.length > 0 && (
+                <TablePagination
+                  currentPage={bookedSafePage}
+                  totalItems={bookedParcels.length}
+                  pageSize={bookedPageSize}
+                  onPageChange={setBookedCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setBookedPageSize(newSize);
+                    setBookedCurrentPage(1);
+                  }}
+                  itemLabel="orders"
+                />
+              )}
             </div>
 
           </div>
@@ -827,7 +871,10 @@ export default function LoadSheetPage() {
                   <input
                     type="date"
                     value={historyStartDate}
-                    onChange={(e) => setHistoryStartDate(e.target.value)}
+                    onChange={(e) => {
+                      setHistoryStartDate(e.target.value);
+                      setHistoryCurrentPage(1);
+                    }}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -840,7 +887,10 @@ export default function LoadSheetPage() {
                   <input
                     type="date"
                     value={historyEndDate}
-                    onChange={(e) => setHistoryEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setHistoryEndDate(e.target.value);
+                      setHistoryCurrentPage(1);
+                    }}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -848,7 +898,10 @@ export default function LoadSheetPage() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={fetchLoadSheets}
+                  onClick={() => {
+                    setHistoryCurrentPage(1);
+                    fetchLoadSheets();
+                  }}
                   className="flex-1 h-[38px] bg-primary text-white font-semibold text-xs rounded-xl hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Search className="w-4 h-4" />
@@ -859,6 +912,7 @@ export default function LoadSheetPage() {
                     onClick={() => {
                       setHistoryStartDate('');
                       setHistoryEndDate('');
+                      setHistoryCurrentPage(1);
                     }}
                     className="h-[38px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-200"
                   >
@@ -905,7 +959,7 @@ export default function LoadSheetPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant">
-                      {loadSheets.map((sheet) => {
+                      {paginatedLoadSheets.map((sheet) => {
                         const parcelsList = sheet.parcels || [];
                         const sheetCodTotal = parcelsList.reduce((acc: number, p: any) => acc + (Number(p.cod_amount) || 0), 0);
                         const isDispatched = sheet.status === 'Dispatched' || sheet.status === 'Delivered';
@@ -981,6 +1035,20 @@ export default function LoadSheetPage() {
                   </table>
                 )}
               </div>
+
+              {!loadingSheets && loadSheets.length > 0 && (
+                <TablePagination
+                  currentPage={historySafePage}
+                  totalItems={loadSheets.length}
+                  pageSize={historyPageSize}
+                  onPageChange={setHistoryCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setHistoryPageSize(newSize);
+                    setHistoryCurrentPage(1);
+                  }}
+                  itemLabel="load sheets"
+                />
+              )}
             </div>
 
           </div>
@@ -1028,7 +1096,7 @@ export default function LoadSheetPage() {
                 </div>
                 <div>
                   <span className="text-slate-400 block font-bold text-[10px] uppercase">Date Created</span>
-                  <span className="font-bold text-slate-800">{new Date(selectedSheet.date_created || Date.now()).toLocaleString()}</span>
+                  <span className="font-bold text-slate-800">{selectedSheet.date_created ? new Date(selectedSheet.date_created).toLocaleString() : '-'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block font-bold text-[10px] uppercase">Origin Station</span>
@@ -1168,7 +1236,7 @@ export default function LoadSheetPage() {
                   <div>
                     <span className="text-slate-500 block font-bold text-[9px] uppercase">Date & Time</span>
                     <span className="font-semibold text-slate-800">
-                      {new Date(showPrintView.date_created || Date.now()).toLocaleString()}
+                      {showPrintView.date_created ? new Date(showPrintView.date_created).toLocaleString() : '-'}
                     </span>
                   </div>
                   <div>
@@ -1279,7 +1347,7 @@ export default function LoadSheetPage() {
                   {/* Footer Notice */}
                   <div className="text-[9px] text-slate-400 text-center font-medium">
                     This load sheet serves as legal custody handover between Shipper and DBARC Courier.
-                    Upon rider optical scan of the barcode above, all listed orders automatically transition to "Not Arrived" (In Handover Transit).
+                    Upon rider optical scan of the barcode above, all listed orders automatically transition to &quot;Not Arrived&quot; (In Handover Transit).
                   </div>
 
                 </div>

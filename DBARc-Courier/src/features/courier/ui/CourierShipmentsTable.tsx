@@ -4,6 +4,7 @@ import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
+import TablePagination from '@/components/ui/TablePagination';
 
 type ShipmentRow = {
   id: number | string;
@@ -38,9 +39,12 @@ export const CourierShipmentsTable = ({
   const router = useRouter();
   const { user, activeBusinessId } = useAuth();
   const [data, setData] = React.useState<ShipmentRow[]>([]);
-  const [filteredData, setFilteredData] = React.useState<ShipmentRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
 
   const isShipper = React.useMemo(() => {
     if (!user) return false;
@@ -145,15 +149,12 @@ export const CourierShipmentsTable = ({
             };
           });
           setData(mapped);
-          setFilteredData(mapped);
         } else {
           setData([]);
-          setFilteredData([]);
         }
       } catch (error) {
         console.warn('Could not fetch dynamic shipments:', error);
         setData([]);
-        setFilteredData([]);
       } finally {
         setIsLoading(false);
       }
@@ -163,7 +164,7 @@ export const CourierShipmentsTable = ({
   }, [isShipper, shipperId, fromDate, toDate, user]);
 
   // Filter based on selectedStatus tile and search query
-  React.useEffect(() => {
+  const filteredData = React.useMemo(() => {
     let result = data;
 
     if (selectedStatus && selectedStatus !== 'all') {
@@ -205,7 +206,7 @@ export const CourierShipmentsTable = ({
           row.status.toLowerCase().includes(lower)
       );
     }
-    setFilteredData(result);
+    return result;
   }, [searchQuery, data, selectedStatus]);
 
   const handleExportCSV = () => {
@@ -271,6 +272,11 @@ export const CourierShipmentsTable = ({
     return 'bg-tertiary-fixed text-tertiary';
   };
 
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+
   return (
     <section className="mt-lg bg-white rounded-xl border border-outline-variant shadow-[0px_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
       <div className="p-md border-b border-outline-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
@@ -285,7 +291,10 @@ export const CourierShipmentsTable = ({
               placeholder="Filter by ID or City..."
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">
               filter_list
@@ -351,7 +360,7 @@ export const CourierShipmentsTable = ({
                 </td>
               </tr>
             ) : filteredData.length > 0 ? (
-              filteredData.map((row) => (
+              paginatedData.map((row) => (
                 <tr 
                   className="hover:bg-slate-50 transition-colors cursor-pointer group" 
                   key={row.id}
@@ -425,19 +434,19 @@ export const CourierShipmentsTable = ({
           </tbody>
         </table>
       </div>
-      <div className="p-md flex justify-between items-center bg-slate-50/50">
-        <p className="text-label-md font-label-md text-on-surface-variant">
-          Showing 1-{filteredData.length} of {filteredData.length} items
-        </p>
-        <div className="flex gap-2">
-          <button className="p-2 border border-outline-variant rounded bg-white hover:bg-slate-100 disabled:opacity-50 cursor-pointer" disabled>
-            <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-          </button>
-          <button className="p-2 border border-outline-variant rounded bg-white hover:bg-slate-100 cursor-pointer">
-            <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-          </button>
-        </div>
-      </div>
+      {!isLoading && filteredData.length > 0 && (
+        <TablePagination
+          currentPage={safePage}
+          totalItems={filteredData.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+          itemLabel="shipments"
+        />
+      )}
     </section>
   );
 };
