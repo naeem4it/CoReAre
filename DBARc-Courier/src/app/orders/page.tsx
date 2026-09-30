@@ -608,10 +608,10 @@ function OrderListContent() {
         prev.map((order) =>
           updatedIds.has(order.id)
             ? {
-                ...order,
-                status: 'Cancelled',
-                remarks: bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper',
-              }
+              ...order,
+              status: 'Cancelled',
+              remarks: bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper',
+            }
             : order
         )
       );
@@ -711,11 +711,10 @@ function OrderListContent() {
                 setShowBulkCancelModal(true);
               }}
               disabled={selectedCancellableOrders.length === 0}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm ${
-                selectedCancellableOrders.length > 0
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm ${selectedCancellableOrders.length > 0
                   ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-md cursor-pointer active:scale-95'
                   : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-              }`}
+                }`}
               title={
                 selectedCancellableOrders.length > 0
                   ? `Cancel ${selectedCancellableOrders.length} selected booked order(s)`
@@ -890,9 +889,9 @@ function OrderListContent() {
                 title={eligibleBookedOrders.length > 0 ? 'Select all Booked orders' : 'No Booked orders available'}
               >
                 {filteredData.some(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status)) &&
-                filteredData
-                  .filter(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status))
-                  .every(r => selectedIds.includes(r.id)) ? (
+                  filteredData
+                    .filter(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status))
+                    .every(r => selectedIds.includes(r.id)) ? (
                   <CheckSquare className="w-4 h-4 text-primary" />
                 ) : (
                   <Square className="w-4 h-4 text-slate-400" />
@@ -1009,9 +1008,8 @@ function OrderListContent() {
                     return (
                       <tr
                         key={row.id}
-                        className={`hover:bg-slate-50 transition-colors group ${
-                          isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-default'
-                        } ${selectedIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}
+                        className={`hover:bg-slate-50 transition-colors group ${isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-default'
+                          } ${selectedIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}
                         onClick={() => {
                           if (isSlipEligible || cancellable) {
                             handleToggleRow(row);
@@ -1024,9 +1022,8 @@ function OrderListContent() {
                         <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className={`w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary ${
-                              isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
-                            }`}
+                            className={`w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary ${isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
+                              }`}
                             checked={selectedIds.includes(row.id)}
                             disabled={!isSlipEligible && !cancellable}
                             onChange={() => handleToggleRow(row)}
@@ -1136,7 +1133,10 @@ function OrderListContent() {
                             {/* 2. Cancel Order Button (Locked once in or after transit) */}
                             {cancellable ? (
                               <button
-                                onClick={() => setOrderToCancel(row)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOrderToCancel(row);
+                                }}
                                 className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 rounded-lg font-bold text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
                                 title="Cancel this order (allowed before transit)"
                               >
@@ -1174,61 +1174,43 @@ function OrderListContent() {
         </div>
       </div>
 
-      {/* CANCEL ORDER CONFIRMATION MODAL */}
-      {orderToCancel && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 no-print">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
+      {/* CANCEL ORDER CONFIRMATION MODAL (Portaled to body to guarantee perfect center alignment & prevent layout clipping) */}
+      {orderToCancel && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 no-print overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 9999 }}
+          onClick={() => {
+            if (!isCancelling) {
+              setOrderToCancel(null);
+              setCancelReason('Customer requested cancellation');
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col p-6 sm:p-7 gap-4 text-slate-800 my-auto animate-in zoom-in-95 duration-200"
+            style={{ width: '100%', maxWidth: '520px', minWidth: '320px', flexShrink: 0, boxSizing: 'border-box' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 leading-tight">Cancel Order Booking</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-md border border-slate-200">
+                      {orderToCancel.trackingNumber}
+                    </span>
+                    {orderToCancel.orderReference && (
+                      <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        Ref: {orderToCancel.orderReference}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base text-slate-900">Cancel Order Booking</h3>
-                <p className="text-xs text-slate-500 font-mono">Tracking: {orderToCancel.trackingNumber}</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Consignee:</span>
-                <span className="font-bold text-slate-800">{orderToCancel.customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Destination:</span>
-                <span className="font-bold text-slate-800">{orderToCancel.destination}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">COD Amount:</span>
-                <span className="font-bold text-slate-800">PKR {orderToCancel.codAmount.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Current Status:</span>
-                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                  {orderToCancel.status} (Before Transit)
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Reason for cancellation (optional):</label>
-              <select
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                className="w-full text-xs font-medium border border-outline-variant bg-white rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
-              >
-                <option value="Customer requested cancellation">Customer requested cancellation</option>
-                <option value="Item out of stock">Item out of stock</option>
-                <option value="Duplicate booking">Duplicate booking</option>
-                <option value="Incorrect customer details">Incorrect customer details</option>
-                <option value="Shipper operational reason">Shipper operational reason</option>
-              </select>
-            </div>
-
-            <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200 leading-normal">
-              <strong>Notice:</strong> This order is currently <strong>before transit</strong> ({orderToCancel.status}) and is eligible for cancellation. Once cancelled, riders will not dispatch this shipment.
-            </p>
-
-            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
               <button
                 type="button"
                 disabled={isCancelling}
@@ -1236,44 +1218,140 @@ function OrderListContent() {
                   setOrderToCancel(null);
                   setCancelReason('Customer requested cancellation');
                 }}
-                className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
-                Keep Order
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Order Details Card */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs space-y-2.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-slate-400 font-medium block text-[10.5px] uppercase tracking-wider">Consignee</span>
+                  <span className="font-bold text-slate-900 block truncate">{orderToCancel.customerName}</span>
+                  {orderToCancel.phone && (
+                    <span className="font-mono text-slate-500 text-[11px] block">{orderToCancel.phone}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block text-[10.5px] uppercase tracking-wider">Destination</span>
+                  <span className="font-bold text-slate-900 block">{orderToCancel.destination}</span>
+                  <span className="text-slate-500 text-[11px] truncate block max-w-full" title={orderToCancel.address}>
+                    {orderToCancel.address}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/60">
+                <div>
+                  <span className="text-slate-400 font-medium block text-[10.5px] uppercase tracking-wider">COD Amount</span>
+                  <span className="font-black text-slate-900 text-sm">
+                    {orderToCancel.codAmount > 0 ? `PKR ${orderToCancel.codAmount.toLocaleString()}` : 'Prepaid (PKR 0)'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block text-[10.5px] uppercase tracking-wider">Current Status</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md text-[10.5px] mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                    {orderToCancel.status === 'booked' ? 'Booked' : orderToCancel.status} (Before Transit)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cancellation Reason Dropdown */}
+            <div>
+              <label className="text-xs font-bold text-slate-800 block mb-1.5">
+                Cancellation Reason <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                disabled={isCancelling}
+                className="w-full text-xs font-medium border border-slate-300 bg-white rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 cursor-pointer shadow-2xs"
+              >
+                <option value="Customer requested cancellation">Customer requested cancellation</option>
+                <option value="Customer unreachable / refused on confirmation call">Customer unreachable / refused on confirmation call</option>
+                <option value="Incorrect COD amount or product details">Incorrect COD amount or product details</option>
+                <option value="Item damaged or out of stock">Item damaged or out of stock</option>
+                <option value="Duplicate order booking">Duplicate order booking</option>
+                <option value="Incomplete or unserviceable address">Incomplete or unserviceable address</option>
+                <option value="Shipper operational reason">Shipper operational reason</option>
+              </select>
+            </div>
+
+            {/* Warning Banner */}
+            <div className="text-[11.5px] text-rose-800 bg-rose-50/80 p-3 rounded-xl border border-rose-200/80 flex items-start gap-2 leading-relaxed">
+              <Ban className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Notice:</strong> Once confirmed, this order will be immediately cancelled in the system. Courier riders will not pick up or manifest this shipment.
+              </span>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={() => {
+                  setOrderToCancel(null);
+                  setCancelReason('Customer requested cancellation');
+                }}
+                className="px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+              >
+                Keep Booking
               </button>
               <button
                 type="button"
                 disabled={isCancelling}
                 onClick={handleConfirmCancelOrder}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-75"
               >
                 {isCancelling ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Cancelling...
+                    <span>Cancelling Order...</span>
                   </>
                 ) : (
                   <>
-                    <Ban className="w-3.5 h-3.5" /> Confirm Cancellation
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Confirm Cancellation</span>
                   </>
                 )}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* BULK CANCEL ORDERS CONFIRMATION MODAL */}
-      {showBulkCancelModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 no-print">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between border-b border-outline-variant pb-3">
-              <div className="flex items-center gap-3 text-rose-600">
-                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+      {/* BULK CANCEL ORDERS CONFIRMATION MODAL (Portaled to body to guarantee perfect center alignment) */}
+      {showBulkCancelModal && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 no-print overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 9999 }}
+          onClick={() => {
+            if (!isBulkCancelling) {
+              setShowBulkCancelModal(false);
+              setBulkCancelReason('Customer requested cancellation');
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col p-6 sm:p-7 gap-4 text-slate-800 my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto custom-scrollbar"
+            style={{ width: '100%', maxWidth: '580px', minWidth: '320px', flexShrink: 0, boxSizing: 'border-box' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-3.5 text-rose-600">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0 shadow-xs">
                   <AlertTriangle className="w-5 h-5 text-rose-600" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">Bulk Cancel Orders</h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     {selectedCancellableOrders.length} booked order{selectedCancellableOrders.length > 1 ? 's' : ''} selected for cancellation
                   </p>
                 </div>
@@ -1285,21 +1363,23 @@ function OrderListContent() {
                   setShowBulkCancelModal(false);
                   setBulkCancelReason('Customer requested cancellation');
                 }}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Selected Orders Summary List */}
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-2">
-              <div className="flex items-center justify-between font-bold text-slate-700 pb-1 border-b border-slate-200">
+            {/* Selected Orders Summary Card */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs space-y-2.5">
+              <div className="flex items-center justify-between font-bold text-slate-800 pb-2 border-b border-slate-200">
                 <span>Orders to be cancelled ({selectedCancellableOrders.length}):</span>
-                <span>Total COD: PKR {selectedCancellableOrders.reduce((sum, o) => sum + (Number(o.codAmount) || 0), 0).toLocaleString()}</span>
+                <span className="text-emerald-700 font-black">
+                  Total COD: PKR {selectedCancellableOrders.reduce((sum, o) => sum + (Number(o.codAmount) || 0), 0).toLocaleString()}
+                </span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-200/60 custom-scrollbar">
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-200/60 custom-scrollbar">
                 {selectedCancellableOrders.map((order) => (
-                  <div key={order.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                  <div key={order.id} className="pt-2 first:pt-0 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-primary">{order.trackingNumber}</span>
                       <span className="text-slate-600 font-medium">({order.customerName})</span>
@@ -1313,28 +1393,36 @@ function OrderListContent() {
               </div>
             </div>
 
+            {/* Cancellation Reason Dropdown */}
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Reason for cancellation (applies to all):</label>
+              <label className="text-xs font-bold text-slate-800 block mb-1.5">
+                Reason for cancellation (applies to all): <span className="text-rose-500">*</span>
+              </label>
               <select
                 value={bulkCancelReason}
                 onChange={(e) => setBulkCancelReason(e.target.value)}
                 disabled={isBulkCancelling}
-                className="w-full text-xs font-medium border border-outline-variant bg-white rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+                className="w-full text-xs font-medium border border-slate-300 bg-white rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 cursor-pointer shadow-2xs"
               >
                 <option value="Customer requested cancellation">Customer requested cancellation</option>
                 <option value="Batch cancellation by Shipper">Batch cancellation by Shipper</option>
-                <option value="Item out of stock">Item out of stock</option>
+                <option value="Item out of stock / inventory depleted">Item out of stock / inventory depleted</option>
                 <option value="Duplicate bookings">Duplicate bookings</option>
-                <option value="Incorrect customer details">Incorrect customer details</option>
+                <option value="Incorrect customer details or rates">Incorrect customer details or rates</option>
                 <option value="Shipper operational reason">Shipper operational reason</option>
               </select>
             </div>
 
-            <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200 leading-normal">
-              <strong>Notice:</strong> These {selectedCancellableOrders.length} order(s) are currently <strong>before transit</strong> ({selectedCancellableOrders[0]?.status || 'Booked'}) and will be marked as <strong>'Cancelled'</strong> in the database. Courier riders will not pick up or manifest these orders.
-            </p>
+            {/* Warning Notice */}
+            <div className="text-[11.5px] text-rose-800 bg-rose-50/80 p-3 rounded-xl border border-rose-200/80 flex items-start gap-2 leading-relaxed">
+              <Ban className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Notice:</strong> These {selectedCancellableOrders.length} order(s) are currently <strong>before transit</strong> ({selectedCancellableOrders[0]?.status || 'Booked'}) and will be marked as <strong>'Cancelled'</strong> in the database.
+              </span>
+            </div>
 
-            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 disabled={isBulkCancelling}
@@ -1342,7 +1430,7 @@ function OrderListContent() {
                   setShowBulkCancelModal(false);
                   setBulkCancelReason('Customer requested cancellation');
                 }}
-                className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+                className="px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
               >
                 Keep Orders
               </button>
@@ -1350,22 +1438,24 @@ function OrderListContent() {
                 type="button"
                 disabled={isBulkCancelling}
                 onClick={handleConfirmBulkCancel}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-75"
               >
                 {isBulkCancelling ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Cancelling {selectedCancellableOrders.length} Orders...
+                    <span>Cancelling {selectedCancellableOrders.length} Orders...</span>
                   </>
                 ) : (
                   <>
-                    <Ban className="w-3.5 h-3.5" /> Confirm Cancel ({selectedCancellableOrders.length}) Orders
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Confirm Cancel ({selectedCancellableOrders.length}) Orders</span>
                   </>
                 )}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DISPATCH SLIPS PRINT PREVIEW MODAL */}
@@ -1399,11 +1489,10 @@ function OrderListContent() {
                   <button
                     type="button"
                     onClick={() => setSelectedBatchIndex('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      selectedBatchIndex === 'ALL'
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedBatchIndex === 'ALL'
                         ? 'bg-slate-900 text-white shadow-xs'
                         : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     All ({selectedOrders.length})
                   </button>
@@ -1416,11 +1505,10 @@ function OrderListContent() {
                         key={bIdx}
                         type="button"
                         onClick={() => setSelectedBatchIndex(bIdx)}
-                        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${
-                          isSelected
+                        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${isSelected
                             ? 'bg-primary text-white shadow-xs'
                             : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
+                          }`}
                       >
                         {startNum}–{endNum}
                       </button>
