@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import PortalLayout from '@/components/PortalLayout';
@@ -23,7 +24,8 @@ import {
   Ban,
   AlertTriangle,
   CheckCircle2,
-  Edit3
+  Edit3,
+  RefreshCw
 } from 'lucide-react';
 import { TablePagination } from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -149,6 +151,8 @@ function OrderListContent() {
 
   // Dispatch Slips Print Modal State
   const [showSlipsModal, setShowSlipsModal] = React.useState(false);
+  const [isPrinting, setIsPrinting] = React.useState(false);
+  const [selectedBatchIndex, setSelectedBatchIndex] = React.useState<number | 'ALL'>('ALL');
 
   const isShipper = React.useMemo(() => {
     if (!user) return false;
@@ -449,6 +453,23 @@ function OrderListContent() {
     return data.filter(row => selectedIds.includes(row.id) && isEligibleForDispatchSlip(row.status));
   }, [data, selectedIds]);
 
+  const BATCH_SIZE = 100;
+  const totalBatches = Math.ceil(selectedOrders.length / BATCH_SIZE);
+
+  const ordersToPrint = React.useMemo(() => {
+    if (selectedBatchIndex === 'ALL' || selectedOrders.length <= BATCH_SIZE) {
+      return selectedOrders;
+    }
+    const idx = typeof selectedBatchIndex === 'number' ? selectedBatchIndex : 0;
+    const start = idx * BATCH_SIZE;
+    return selectedOrders.slice(start, start + BATCH_SIZE);
+  }, [selectedOrders, selectedBatchIndex]);
+
+  // Preview only first 5 slips in modal to keep DOM light and responsive
+  const previewOrders = React.useMemo(() => {
+    return ordersToPrint.slice(0, 5);
+  }, [ordersToPrint]);
+
   const selectedCancellableOrders = React.useMemo(() => {
     return data.filter(row => selectedIds.includes(row.id) && canCancelOrder(row.status));
   }, [data, selectedIds]);
@@ -488,6 +509,11 @@ function OrderListContent() {
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
+    if (selectedOrders.length > BATCH_SIZE) {
+      setSelectedBatchIndex(0); // Default to Batch 1 (1–100) for instant preview
+    } else {
+      setSelectedBatchIndex('ALL');
+    }
     setShowSlipsModal(true);
   };
 
@@ -498,11 +524,16 @@ function OrderListContent() {
       return;
     }
     setSelectedIds([row.id]);
+    setSelectedBatchIndex('ALL');
     setShowSlipsModal(true);
   };
 
   const triggerBrowserPrint = () => {
-    window.print();
+    setIsPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 200);
   };
 
   // Handle Order Cancellation (Prohibited once in transit or delivered)
@@ -603,34 +634,44 @@ function OrderListContent() {
       {/* PRINT CSS: 3 to 4 dispatch slips per A4 page */}
       <style dangerouslySetInnerHTML={{
         __html: `
+        @media screen {
+          #dispatch-slips-print-portal {
+            display: none !important;
+          }
+        }
         @media print {
           @page {
             size: A4 portrait;
             margin: 6mm 8mm;
           }
-          body * {
-            visibility: hidden !important;
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            height: auto !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          #dispatch-slips-print-area, #dispatch-slips-print-area * {
-            visibility: visible !important;
+          body > *:not(#dispatch-slips-print-portal) {
+            display: none !important;
           }
-          #dispatch-slips-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          #dispatch-slips-print-portal {
+            display: block !important;
+            position: static !important;
             width: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 4mm !important;
-            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
           }
           .dispatch-slip-card {
+            display: block !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             width: 100% !important;
             box-sizing: border-box !important;
-            border: 1.5px solid #000 !important;
-            margin-bottom: 3mm !important;
+            border: 1.5px solid #000000 !important;
+            margin-bottom: 4mm !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -1348,9 +1389,62 @@ function OrderListContent() {
               </button>
             </div>
 
-            {/* Render realistic slips inside modal */}
+            {/* Batch Controls for Large Selection (e.g. 517 orders) */}
+            {selectedOrders.length > BATCH_SIZE && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="font-semibold text-slate-700">
+                  Total {selectedOrders.length} booked slips. Choose batch or print all:
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBatchIndex('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      selectedBatchIndex === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    All ({selectedOrders.length})
+                  </button>
+                  {Array.from({ length: totalBatches }).map((_, bIdx) => {
+                    const startNum = bIdx * BATCH_SIZE + 1;
+                    const endNum = Math.min((bIdx + 1) * BATCH_SIZE, selectedOrders.length);
+                    const isSelected = selectedBatchIndex === bIdx;
+                    return (
+                      <button
+                        key={bIdx}
+                        type="button"
+                        onClick={() => setSelectedBatchIndex(bIdx)}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {startNum}–{endNum}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Informational Notice when previewing large batches */}
+            {ordersToPrint.length > 5 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 px-3 text-xs text-emerald-800 flex items-center justify-between">
+                <span>
+                  Showing first 5 preview slips. <strong>All {ordersToPrint.length} slips</strong> will be sent to the printer.
+                </span>
+                <span className="font-bold text-[11px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-md">
+                  Fast Preview Active
+                </span>
+              </div>
+            )}
+
+            {/* Render realistic slips inside modal (preview only first 5 to prevent DOM freezing) */}
             <div className="space-y-4 bg-slate-100/70 p-4 rounded-xl border border-slate-200">
-              {selectedOrders.map((order) => (
+              {previewOrders.map((order) => (
                 <DispatchSlipCard
                   key={order.id}
                   order={order}
@@ -1370,25 +1464,37 @@ function OrderListContent() {
               <button
                 type="button"
                 onClick={triggerBrowserPrint}
-                className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+                disabled={isPrinting}
+                className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md hover:bg-primary/90 transition-all cursor-pointer disabled:opacity-75"
               >
-                <Printer className="w-4 h-4" /> Print {selectedOrders.length} Dispatch Slip{selectedOrders.length > 1 ? 's' : ''}
+                {isPrinting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Preparing Print Job...
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4" /> Print {ordersToPrint.length} Dispatch Slip{ordersToPrint.length > 1 ? 's' : ''}
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ISOLATED PRINT STYLED AREA FOR BROWSER PRINT (3-4 SLIPS PER A4 PAGE) */}
-      <div id="dispatch-slips-print-area" className="hidden">
-        {selectedOrders.map((order) => (
-          <DispatchSlipCard
-            key={order.id}
-            order={order}
-            businessName={businessName || 'Shipzo'}
-          />
-        ))}
-      </div>
+      {/* ISOLATED PRINT STYLED AREA FOR BROWSER PRINT (Mounted directly to body via portal for instant zero-lag pagination) */}
+      {showSlipsModal && typeof document !== 'undefined' && createPortal(
+        <div id="dispatch-slips-print-portal">
+          {ordersToPrint.map((order) => (
+            <DispatchSlipCard
+              key={order.id}
+              order={order}
+              businessName={businessName || 'Shipzo'}
+            />
+          ))}
+        </div>,
+        document.body
+      )}
 
       {/* FLOATING SUCCESS TOAST NOTIFICATION */}
       {toastMessage && (

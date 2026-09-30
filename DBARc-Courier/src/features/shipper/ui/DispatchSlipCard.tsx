@@ -42,8 +42,12 @@ export function isEligibleForDispatchSlip(status?: string | null): boolean {
   return s === 'booked' || s === 'total booking' || s === 'pending';
 }
 
-// Clean SVG Barcode Component for High-Precision Thermal and A4 Printing
-export function SlipBarcode({
+// Global path caches for instantaneous O(1) rendering of barcode and QR vectors
+const barcodeCache = new Map<string, string>();
+const qrCache = new Map<string, string>();
+
+// Clean SVG Barcode Component for High-Precision Thermal and A4 Printing (Single Path Vector with O(1) Cache)
+export const SlipBarcode = React.memo(function SlipBarcode({
   text,
   height = 24,
   maxWidth = 150,
@@ -56,16 +60,27 @@ export function SlipBarcode({
   showText?: boolean;
   textSize?: number;
 }) {
-  const bars = React.useMemo(() => {
-    let result = '';
+  const pathData = React.useMemo(() => {
     const clean = (text || '0000').toUpperCase().replace(/[^A-Z0-9-]/g, '') || '0000';
+    if (barcodeCache.has(clean)) {
+      return barcodeCache.get(clean)!;
+    }
+    let result = '';
     for (let i = 0; i < clean.length; i++) {
       const code = clean.charCodeAt(i);
       const pattern = (code * 9301 + 49297) % 233280;
       const bin = (pattern % 64).toString(2).padStart(6, '1');
       result += bin;
     }
-    return (result + '110011001101').slice(0, 56);
+    const bars = (result + '110011001101').slice(0, 56);
+    let d = '';
+    for (let i = 0; i < bars.length; i++) {
+      const x = (i * 1.9 + 2).toFixed(1);
+      const w = bars[i] === '1' ? 1.3 : 0.6;
+      d += `M${x},0h${w}v26h-${w}z`;
+    }
+    barcodeCache.set(clean, d);
+    return d;
   }, [text]);
 
   return (
@@ -74,17 +89,9 @@ export function SlipBarcode({
         height={height}
         viewBox="0 0 110 26"
         style={{ width: '100%', maxWidth: `${maxWidth}px`, height: `${height}px` }}
+        shapeRendering="crispEdges"
       >
-        {bars.split('').map((b, i) => (
-          <rect
-            key={i}
-            x={i * 1.9 + 2}
-            y="0"
-            width={b === '1' ? 1.3 : 0.6}
-            height="26"
-            fill="#000000"
-          />
-        ))}
+        <path d={pathData} fill="#000000" />
       </svg>
       {showText && (
         <span
@@ -96,11 +103,15 @@ export function SlipBarcode({
       )}
     </div>
   );
-}
+});
 
-// Clean 21x21 Vector SVG QR Code with 3 Authentic Corner Markers
-export function SlipQRCode({ value, size = 46 }: { value: string; size?: number }) {
-  const matrix = React.useMemo(() => {
+// Clean 21x21 Vector SVG QR Code with 3 Authentic Corner Markers (Single Path Vector with O(1) Cache)
+export const SlipQRCode = React.memo(function SlipQRCode({ value, size = 42 }: { value: string; size?: number }) {
+  const pathData = React.useMemo(() => {
+    const val = value || '0';
+    if (qrCache.has(val)) {
+      return qrCache.get(val)!;
+    }
     const N = 21;
     const grid: boolean[][] = Array.from({ length: N }, () => Array(N).fill(false));
 
@@ -133,7 +144,6 @@ export function SlipQRCode({ value, size = 46 }: { value: string; size?: number 
 
     // Deterministic data fill based on value string
     let hash = 0;
-    const val = value || '0';
     for (let i = 0; i < val.length; i++) {
       hash = ((hash << 5) - hash) + val.charCodeAt(i);
       hash |= 0;
@@ -155,174 +165,217 @@ export function SlipQRCode({ value, size = 46 }: { value: string; size?: number 
       }
     }
 
-    return grid;
+    let d = '';
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (grid[r][c]) {
+          d += `M${c},${r}h1v1h-1z`;
+        }
+      }
+    }
+    qrCache.set(val, d);
+    return d;
   }, [value]);
 
   return (
     <svg width={size} height={size} viewBox="0 0 21 21" className="shrink-0 bg-white" shapeRendering="crispEdges">
-      {matrix.map((row, r) =>
-        row.map((cell, c) =>
-          cell ? <rect key={`${r}-${c}`} x={c} y={r} width={1} height={1} fill="#000" /> : null
-        )
-      )}
+      <path d={pathData} fill="#000000" />
     </svg>
   );
+});
+
+// Format date into exact 2-line representation matching the reference slip (e.g. "29-09-" and "26")
+function parseSlipDate(dateFormatted?: string, dateCreated?: string): { line1: string; line2: string } {
+  const raw = dateFormatted || dateCreated || '';
+  if (!raw) return { line1: '01-10-', line2: '26' };
+  const clean = raw.replace(/\//g, '-').trim();
+  const parts = clean.split('-');
+  if (parts.length >= 3) {
+    if (parts[0].length === 4) {
+      // YYYY-MM-DD
+      const year = parts[0].slice(-2);
+      return { line1: `${parts[2]}-${parts[1]}-`, line2: year };
+    } else {
+      // DD-MM-YYYY
+      const year = parts[2].slice(-2);
+      return { line1: `${parts[0]}-${parts[1]}-`, line2: year };
+    }
+  }
+  return { line1: clean.slice(0, 6), line2: clean.slice(6) || '26' };
 }
 
-// Pixel-perfect Dispatch Slip Card matching the reference courier standard
-export function DispatchSlipCard({ order, businessName }: { order: OrderRow; businessName?: string }) {
+/**
+ * Pixel-perfect Dispatch Slip Card matching the exact reference layout provided by the user:
+ * - Header: 7 cells with Teal Shipzo logo, Date (2 lines), Destination, COD, Weight, Allow to Open, Top-Right Barcode
+ * - Middle: 3 columns: Shipper Information, Center Tracking Barcode + dual QR codes (Order ID, Tracking ID), Consignee Information
+ * - Bottom: Order Reference, Pieces, Product title, and full-width Remarks
+ */
+export const DispatchSlipCard = React.memo(function DispatchSlipCard({
+  order,
+  businessName,
+}: {
+  order: OrderRow;
+  businessName?: string;
+}) {
+  const { line1: dateLine1, line2: dateLine2 } = React.useMemo(
+    () => parseSlipDate(order.dateFormatted, order.dateCreated),
+    [order.dateFormatted, order.dateCreated]
+  );
+
+  // Top-right partner barcode value (e.g. LE7545194311 or tracking number)
+  const topRightBarcode = order.tplTrackingNo || order.trackingNumber || `LE${order.id}`;
+
   return (
-    <div className="dispatch-slip-card bg-white text-black font-sans border-2 border-black p-0 select-none overflow-hidden text-[9px] leading-tight shadow-sm">
+    <div className="dispatch-slip-card bg-white text-black font-sans border-2 border-black p-0 select-none overflow-hidden text-[9px] leading-tight shadow-xs">
       {/* ===================== TOP ROW: 7 Header Cells ===================== */}
-      <div className="grid grid-cols-[82px_72px_95px_95px_65px_75px_1fr] border-b border-black divide-x divide-black text-center min-h-[46px] bg-white">
-        {/* 1. Logo Block */}
-        <div className="bg-black text-white flex flex-col items-center justify-center px-1 font-black italic tracking-wider text-base">
+      <div className="grid grid-cols-[88px_74px_96px_96px_68px_82px_1fr] border-b border-black divide-x divide-black text-center min-h-[46px] bg-white">
+        {/* 1. Logo Block (Dark Teal Background #0b4d4b) */}
+        <div
+          className="text-white flex items-center justify-center px-1 font-black italic tracking-wide text-base select-none"
+          style={{ backgroundColor: '#0b4d4b' }}
+        >
           <span>{businessName || 'Shipzo'}</span>
         </div>
 
         {/* 2. Date */}
-        <div className="flex flex-col justify-center px-1">
-          <span className="text-[7.5px] uppercase font-bold text-slate-600">Date:</span>
-          <span className="font-extrabold text-[10.5px]">{order.dateFormatted}</span>
+        <div className="flex flex-col justify-center items-center px-1 py-0.5">
+          <span className="text-[7.5px] font-bold text-black leading-none">Date:</span>
+          <span className="font-extrabold text-[10px] text-black leading-tight mt-0.5">{dateLine1}</span>
+          <span className="font-extrabold text-[10px] text-black leading-none">{dateLine2}</span>
         </div>
 
         {/* 3. Destination */}
-        <div className="flex flex-col justify-center px-1">
-          <span className="text-[7.5px] uppercase font-bold text-slate-600">Destination</span>
-          <span className="font-black text-[12px] truncate">{order.destination}</span>
+        <div className="flex flex-col justify-center items-center px-1 py-0.5">
+          <span className="text-[7.5px] font-bold text-black leading-none">Destination</span>
+          <span className="font-black text-[12px] text-black leading-tight mt-0.5 truncate max-w-full">
+            {order.destination}
+          </span>
         </div>
 
         {/* 4. COD */}
-        <div className="flex flex-col justify-center px-1">
-          <span className="text-[7.5px] uppercase font-bold text-slate-600">COD</span>
-          <span className="font-black text-[11px]">
-            {order.codAmount > 0 ? `Rs: ${order.codAmount.toLocaleString()}` : 'Prepaid (Rs 0)'}
+        <div className="flex flex-col justify-center items-center px-1 py-0.5">
+          <span className="text-[7.5px] font-bold text-black leading-none">COD</span>
+          <span className="font-black text-[11.5px] text-black leading-tight mt-0.5">
+            {order.codAmount > 0 ? `Rs: ${order.codAmount.toLocaleString()}` : 'Rs: 0'}
           </span>
         </div>
 
         {/* 5. Weight */}
-        <div className="flex flex-col justify-center px-1">
-          <span className="text-[7.5px] uppercase font-bold text-slate-600">Weight</span>
-          <span className="font-bold text-[9.5px]">Kg: {order.weightKg.toFixed(2)}</span>
+        <div className="flex flex-col justify-center items-center px-1 py-0.5">
+          <span className="text-[7.5px] font-bold text-black leading-none">Weight</span>
+          <span className="font-bold text-[10px] text-black leading-tight mt-0.5">
+            Kg: {order.weightKg.toFixed(2)}
+          </span>
         </div>
 
         {/* 6. Allow to Open */}
-        <div className="flex flex-col justify-center px-1">
-          <span className="text-[7.5px] uppercase font-bold text-slate-600">Allow to Open</span>
-          <span className="font-black text-[11px]">{order.allowToOpen || 'No'}</span>
+        <div className="flex flex-col justify-center items-center px-1 py-0.5">
+          <span className="text-[7.5px] font-bold text-black leading-none">Allow to Open</span>
+          <span className="font-black text-[11.5px] text-black leading-tight mt-0.5">
+            {order.allowToOpen || 'No'}
+          </span>
         </div>
 
-        {/* 7. Barcode 1 (3PL Barcode): Shown ONLY IF 3PL */}
+        {/* 7. Barcode 1 (Top-right Partner/Tracking Barcode with text underneath) */}
         <div className="flex flex-col items-center justify-center p-1 bg-white">
-          {!order.is2PL ? (
-            /* 3PL Partner Barcode (Barcode 1) */
-            <div className="w-full flex flex-col items-center justify-center">
-              <SlipBarcode text={order.tplTrackingNo} height={20} maxWidth={150} textSize={8.5} />
-            </div>
-          ) : (
-            /* 2PL In-House: NO second barcode -> ONLY 1 barcode total on slip */
-            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-[8px] font-bold text-slate-700">
-              <span className="uppercase tracking-wider">2PL Routing</span>
-              <span className="text-[7px] font-medium text-slate-500">In-House Courier Delivery</span>
-            </div>
-          )}
+          <SlipBarcode text={topRightBarcode} height={22} maxWidth={145} textSize={8.5} />
         </div>
       </div>
 
       {/* ===================== MIDDLE ROW: 3 Columns ===================== */}
-      <div className="grid grid-cols-[1fr_1.35fr_1fr] border-b border-black divide-x divide-black bg-white">
+      <div className="grid grid-cols-[1.1fr_1.35fr_1.1fr] border-b border-black divide-x divide-black bg-white">
         {/* Column 1: Shipper Information */}
         <div className="flex flex-col">
-          <div className="bg-slate-200/90 font-black text-center text-[9px] uppercase py-0.5 border-b border-black text-slate-900">
+          <div className="bg-slate-100 font-bold text-center text-[9px] py-0.5 border-b border-black text-black">
             Shipper Information
           </div>
           <div className="divide-y divide-black text-[8.5px] flex-1 flex flex-col justify-between">
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5">
-              <span className="font-bold text-slate-700">Name:</span>
-              <span className="font-bold text-black truncate">{order.shipperName}</span>
+            <div className="flex items-center px-1.5 py-0.5 gap-1.5">
+              <span className="font-bold text-black shrink-0">Name:</span>
+              <span className="font-semibold text-black truncate">{order.shipperName}</span>
             </div>
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5">
-              <span className="font-bold text-slate-700">Contact:</span>
-              <span className="font-mono font-bold text-black">{order.shipperPhone}</span>
+            <div className="flex items-center px-1.5 py-0.5 gap-1.5">
+              <span className="font-bold text-black shrink-0">Contact:</span>
+              <span className="font-semibold text-black">{order.shipperPhone}</span>
             </div>
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5 flex-1">
-              <span className="font-bold text-slate-700">Address:</span>
-              <span className="text-black leading-tight line-clamp-3 font-medium">{order.shipperAddress}</span>
+            <div className="flex items-start px-1.5 py-0.5 gap-1.5 flex-1">
+              <span className="font-bold text-black shrink-0">Address:</span>
+              <span className="text-black leading-tight line-clamp-3 font-normal">{order.shipperAddress}</span>
             </div>
           </div>
         </div>
 
-        {/* Column 2: Center Primary Tracking Number, Main Barcode (Barcode 2), Dual QR Codes */}
+        {/* Column 2: Center Tracking ID, Barcode, Dual QR Codes (Order ID, Tracking ID) */}
         <div className="flex flex-col items-center justify-between p-1.5 text-center bg-white">
-          {/* Primary Tracking Number Header */}
-          <div className="font-black text-[13px] tracking-wide text-black">
+          {/* Tracking ID Header */}
+          <div className="font-black text-[13px] tracking-wide text-black leading-none">
             {order.trackingNumber}
           </div>
 
-          {/* Main Barcode (Barcode 2) */}
-          <div className="my-0.5 w-full flex flex-col items-center justify-center">
-            <SlipBarcode text={order.trackingNumber} height={26} maxWidth={180} textSize={8.5} />
+          {/* Barcode of Tracking Number */}
+          <div className="my-1 w-full flex flex-col items-center justify-center">
+            <SlipBarcode text={order.trackingNumber} height={25} maxWidth={180} textSize={8.5} />
           </div>
 
           {/* Two QR Codes side by side */}
-          <div className="flex items-center justify-center gap-6 mt-1 w-full">
-            {/* Left QR: Order id */}
+          <div className="flex items-center justify-center gap-7 mt-0.5 w-full">
+            {/* Left QR: Order ID */}
             <div className="flex flex-col items-center">
               <SlipQRCode value={String(order.orderReference || order.id)} size={42} />
-              <span className="text-[7.5px] font-bold text-black mt-0.5">Order id</span>
+              <span className="text-[7.5px] font-bold text-black mt-0.5 leading-none">Order ID</span>
             </div>
 
             {/* Right QR: Tracking ID */}
             <div className="flex flex-col items-center">
               <SlipQRCode value={order.trackingNumber} size={42} />
-              <span className="text-[7.5px] font-bold text-black mt-0.5">Tracking ID</span>
+              <span className="text-[7.5px] font-bold text-black mt-0.5 leading-none">Tracking ID</span>
             </div>
           </div>
         </div>
 
         {/* Column 3: Consignee Information */}
         <div className="flex flex-col">
-          <div className="bg-slate-200/90 font-black text-center text-[9px] uppercase py-0.5 border-b border-black text-slate-900">
+          <div className="bg-slate-100 font-bold text-center text-[9px] py-0.5 border-b border-black text-black">
             Consignee Information
           </div>
           <div className="divide-y divide-black text-[8.5px] flex-1 flex flex-col justify-between">
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5">
-              <span className="font-bold text-slate-700">Name:</span>
-              <span className="font-bold text-black truncate">{order.customerName}</span>
+            <div className="flex items-center px-1.5 py-0.5 gap-1.5">
+              <span className="font-bold text-black shrink-0">Name</span>
+              <span className="font-semibold text-black truncate">{order.customerName}</span>
             </div>
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5">
-              <span className="font-bold text-slate-700">Mobile:</span>
-              <span className="font-mono font-bold text-black">{order.phone}</span>
+            <div className="flex items-center px-1.5 py-0.5 gap-1.5">
+              <span className="font-bold text-black shrink-0">Mobile</span>
+              <span className="font-semibold text-black">{order.phone}</span>
             </div>
-            <div className="grid grid-cols-[45px_1fr] px-1.5 py-0.5 flex-1">
-              <span className="font-bold text-slate-700">Address:</span>
-              <span className="text-black leading-tight line-clamp-3 font-medium">{order.address}</span>
+            <div className="flex items-start px-1.5 py-0.5 gap-1.5 flex-1">
+              <span className="font-bold text-black shrink-0">Address</span>
+              <span className="text-black leading-tight line-clamp-3 font-normal">{order.address}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ===================== BOTTOM ROW: Order Reference, Pieces, Product ===================== */}
-      <div className="grid grid-cols-[130px_70px_1fr] border-b border-black divide-x divide-black text-[8.5px] bg-white">
-        <div className="px-1.5 py-1 flex items-center gap-1">
-          <span className="font-bold text-slate-700">Order Reference:</span>
+      {/* ===================== BOTTOM ROW 1: Order Reference, Pieces, Product ===================== */}
+      <div className="grid grid-cols-[145px_70px_1fr] border-b border-black divide-x divide-black text-[8.5px] bg-white">
+        <div className="px-1.5 py-1 flex items-center gap-1.5">
+          <span className="font-bold text-black">Order Reference:</span>
           <span className="font-black text-black">{order.orderReference || `#${order.id}`}</span>
         </div>
         <div className="px-1.5 py-1 flex items-center justify-center gap-1 text-center">
-          <span className="font-bold text-slate-700">Pieces</span>
-          <span className="font-black text-black">{order.pieces}</span>
+          <span className="font-bold text-black">Pieces</span>
+          <span className="font-black text-black ml-1">{order.pieces}</span>
         </div>
-        <div className="px-1.5 py-1 flex items-center gap-1 truncate">
-          <span className="font-bold text-slate-700">Product:</span>
-          <span className="font-bold text-black truncate">{order.product}</span>
+        <div className="px-1.5 py-1 flex items-center gap-1.5 truncate">
+          <span className="font-bold text-black shrink-0">Product:</span>
+          <span className="font-semibold text-black truncate">{order.product}</span>
         </div>
       </div>
 
-      {/* ===================== FOOTER ROW: Remarks ===================== */}
+      {/* ===================== BOTTOM ROW 2: Remarks ===================== */}
       <div className="px-2 py-1 text-[8.5px] flex items-center gap-1.5 bg-white">
-        <span className="font-black text-slate-800">Remarks:</span>
-        <span className="font-medium text-black truncate">{order.remarks}</span>
+        <span className="font-bold text-black shrink-0">Remarks:</span>
+        <span className="font-normal text-black truncate">{order.remarks || 'None'}</span>
       </div>
     </div>
   );
-}
+});

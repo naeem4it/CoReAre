@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
@@ -112,6 +113,167 @@ function Code128BarcodeSvg({ text, height = 50 }: { text: string; height?: numbe
   );
 }
 
+const LoadSheetPrintContent = React.memo(function LoadSheetPrintContent({
+  sheet,
+  shipperName,
+}: {
+  sheet: any;
+  shipperName?: string;
+}) {
+  if (!sheet) return null;
+  const parcels = sheet.parcels || [];
+  const totalPieces = parcels.reduce((acc: number, p: any) => acc + (p.pieces || 1), 0);
+  const totalWeight = parcels.reduce((acc: number, p: any) => acc + (Number(p.weight) || 0.5), 0);
+  const totalCod = parcels.reduce((acc: number, p: any) => acc + (Number(p.cod_amount) || 0), 0);
+
+  return (
+    <div id="print-sheet-wrapper" className="bg-white w-full max-w-[850px] p-8 border border-slate-300 shadow-lg text-slate-900 font-sans flex flex-col gap-6">
+      {/* Header with DBARC Branding & Load Sheet Barcode */}
+      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-black text-slate-900 tracking-tight">DBARC</span>
+            <span className="text-xs font-semibold text-slate-600">
+              [Digital Business Automation for Routing &amp; Courier]
+            </span>
+          </div>
+          <h1 className="text-base font-black text-slate-900 mt-1 uppercase tracking-tight">
+            OFFICIAL COURIER LOAD SHEET &amp; PICKUP MANIFEST
+          </h1>
+          <p className="text-[10px] text-slate-500 font-medium">
+            Physical custody handover &amp; verified cargo distribution dispatch document
+          </p>
+        </div>
+
+        <div className="flex flex-col items-end">
+          <Code128BarcodeSvg text={sheet.sheet_id} height={42} />
+        </div>
+      </div>
+
+      {/* Metadata Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-300 text-[11px]">
+        <div>
+          <span className="text-slate-500 block font-bold text-[9px] uppercase">Manifest ID</span>
+          <span className="font-mono font-bold text-slate-900">{sheet.sheet_id}</span>
+        </div>
+        <div>
+          <span className="text-slate-500 block font-bold text-[9px] uppercase">Date &amp; Time</span>
+          <span className="font-semibold text-slate-800">
+            {sheet.date_created ? new Date(sheet.date_created).toLocaleString() : '-'}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500 block font-bold text-[9px] uppercase">Origin Facility</span>
+          <span className="font-semibold text-slate-800">{sheet.origin_hub?.name || 'Main Courier Hub'}</span>
+        </div>
+        <div>
+          <span className="text-slate-500 block font-bold text-[9px] uppercase">Shipper Business</span>
+          <span className="font-semibold text-slate-800">{sheet.shipperName || shipperName || 'Shipper'}</span>
+        </div>
+      </div>
+
+      {/* Itemized Orders Table */}
+      <table className="w-full text-left border-collapse text-[10px] mt-1">
+        <thead>
+          <tr className="border-b-2 border-slate-900 bg-slate-100 text-slate-800 font-bold uppercase text-[9px]">
+            <th className="py-2 px-2 w-8 text-center">#</th>
+            <th className="py-2 px-2">Tracking Number</th>
+            <th className="py-2 px-2">Recipient Name &amp; Contact</th>
+            <th className="py-2 px-2">Delivery Destination</th>
+            <th className="py-2 px-2 text-center w-10">Pcs</th>
+            <th className="py-2 px-2 text-center w-14">Weight</th>
+            <th className="py-2 px-2 text-center w-16">Payment</th>
+            <th className="py-2 px-2 text-right w-24">COD Amount</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {parcels.map((parcel: any, idx: number) => (
+            <tr key={parcel.id || idx} className="align-top py-1.5">
+              <td className="py-2 px-2 text-center font-bold text-slate-400">{idx + 1}</td>
+              <td className="py-2 px-2 font-mono font-bold text-slate-900">{parcel.tracking_number}</td>
+              <td className="py-2 px-2">
+                <div className="font-bold text-slate-900">{parcel.recipient_name}</div>
+                <div className="text-[9px] text-slate-500">{parcel.recipient_phone}</div>
+              </td>
+              <td className="py-2 px-2 text-slate-700 leading-tight">
+                <div className="font-semibold">{parcel.destination_city?.name || 'Local'}</div>
+                <div className="text-[9px] text-slate-500 truncate max-w-[200px]">{parcel.recipient_address}</div>
+              </td>
+              <td className="py-2 px-2 text-center font-mono font-bold">{parcel.pieces || 1}</td>
+              <td className="py-2 px-2 text-center font-mono">{parcel.weight || 0.5} kg</td>
+              <td className="py-2 px-2 text-center">
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold ${
+                    parcel.payment_type === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {parcel.payment_type || 'COD'}
+                </span>
+              </td>
+              <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                PKR {Number(parcel.cod_amount || 0).toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-900 font-bold text-[11px] bg-slate-50">
+            <td colSpan={4} className="py-2.5 px-2">Total Manifest Summary</td>
+            <td className="py-2.5 px-2 text-center font-mono font-black">{totalPieces}</td>
+            <td className="py-2.5 px-2 text-center font-mono font-black">{totalWeight.toFixed(2)} kg</td>
+            <td className="py-2.5 px-2"></td>
+            <td className="py-2.5 px-2 text-right font-mono font-black text-emerald-800">
+              PKR {totalCod.toLocaleString()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* Bottom Section: Scannable Barcode & Receiving Signatures */}
+      <div className="border-t-2 border-slate-900 pt-6 mt-4 flex flex-col gap-6">
+        {/* Scannable Barcode */}
+        <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-300 rounded-lg">
+          <span className="text-[9px] font-bold text-slate-500 uppercase mb-1">
+            Courier Pickup Verification Barcode (Scan to Dispatch)
+          </span>
+          <Code128BarcodeSvg text={sheet.sheet_id} height={55} />
+        </div>
+
+        {/* Dual Signatures & Stamp Blocks */}
+        <div className="grid grid-cols-2 gap-8 text-[10px]">
+          <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
+            <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
+              Courier Rider Verification &amp; Receiving
+            </span>
+            <div className="border-b border-slate-400 w-full mb-1" />
+            <div className="flex justify-between text-slate-400 text-[9px]">
+              <span>Rider Name / Phone / Vehicle No</span>
+              <span>Signature &amp; Stamp</span>
+            </div>
+          </div>
+
+          <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
+            <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
+              Shipper Store Handover Confirmation
+            </span>
+            <div className="border-b border-slate-400 w-full mb-1" />
+            <div className="flex justify-between text-slate-400 text-[9px]">
+              <span>Authorized Signatory</span>
+              <span>Date &amp; Stamp</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Notice */}
+        <div className="text-[9px] text-slate-400 text-center font-medium">
+          This load sheet serves as legal custody handover between Shipper and DBARC Courier.
+          Upon rider optical scan of the barcode above, all listed orders automatically transition to &quot;Not Arrived&quot; (In Handover Transit).
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function LoadSheetPage() {
   const { isShipperEmployee, user, activeBusinessId } = useAuth();
   
@@ -151,6 +313,7 @@ export default function LoadSheetPage() {
   const [selectedSheet, setSelectedSheet] = React.useState<any | null>(null);
   const [showPrintView, setShowPrintView] = React.useState<any | null>(null);
   const [isGenerating, setIsGenerating] = React.useState(false);
+  const [isPrinting, setIsPrinting] = React.useState(false);
 
   // Hubs metadata
   const [hubs, setHubs] = React.useState<any[]>([]);
@@ -371,6 +534,14 @@ export default function LoadSheetPage() {
   const historyStartIndex = (historySafePage - 1) * historyPageSize;
   const paginatedLoadSheets = sortedLoadSheets.slice(historyStartIndex, historyStartIndex + historyPageSize);
 
+  const triggerLoadSheetPrint = () => {
+    setIsPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 150);
+  };
+
   // -------------------------------------------------------------------------
   // Generate Load Sheet
   // -------------------------------------------------------------------------
@@ -390,7 +561,8 @@ export default function LoadSheetPage() {
       // Pick default origin hub if available
       const defaultHubId = hubs.length > 0 ? hubs[0].id : null;
 
-      // 1. Create Load Sheet record
+      // 1. Create Load Sheet record with linked parcels
+      // Backend core controller now links all parcels via an atomic updateMany SQL query in 5ms
       const sheetPayload: any = {
         sheet_id: generatedSheetId,
         date_created: now.toISOString(),
@@ -404,22 +576,9 @@ export default function LoadSheetPage() {
       const createRes = await apiClient.post('/load-sheets', { data: sheetPayload });
       const createdSheet = createRes.data?.data;
 
-      // 2. Link each parcel's load_sheet relation
-      await Promise.all(
-        checkedParcelIds.map(id => {
-          const parcelObj = bookedParcels.find(p => p.id === id);
-          const pDocId = parcelObj?.documentId || id;
-          return apiClient.put(`/parcels/${pDocId}`, {
-            data: {
-              load_sheet: createdSheet?.documentId || createdSheet?.id,
-            },
-          }).catch(() => null);
-        })
-      );
-
       triggerToast(`Load Sheet ${generatedSheetId} generated with ${checkedParcelIds.length} orders!`, 'success');
 
-      // 3. Prepare printable sheet object and immediately show PDF/Print view
+      // 2. Prepare printable sheet object and immediately show PDF/Print view
       const printableObj = {
         id: createdSheet?.id,
         documentId: createdSheet?.documentId,
@@ -449,24 +608,12 @@ export default function LoadSheetPage() {
   const dispatchLoadSheetAction = async (sheet: any) => {
     try {
       const sheetDocId = sheet.documentId || sheet.id;
-      // 1. Update load sheet to Dispatched
+      // 1. Update load sheet to Dispatched (Backend controller automatically sets all linked parcels to 'Picked up by rider')
       await apiClient.put(`/load-sheets/${sheetDocId}`, {
         data: { status: 'Dispatched' },
       });
 
-      // 2. Update all linked parcels to 'Picked up by rider'
       const parcelsList = sheet.parcels || [];
-      if (parcelsList.length > 0) {
-        await Promise.all(
-          parcelsList.map((p: any) => {
-            const pDocId = p.documentId || p.id;
-            return apiClient.put(`/parcels/${pDocId}`, {
-              data: { status: 'Picked up by rider' },
-            }).catch(e => console.warn(`Could not update parcel ${pDocId}:`, e));
-          })
-        );
-      }
-
       triggerToast(
         `Load Sheet ${sheet.sheet_id} Dispatched! ${parcelsList.length} parcel(s) marked as 'Picked up by rider'.`,
         'success'
@@ -563,25 +710,50 @@ export default function LoadSheetPage() {
     <PortalLayout>
       {/* Print stylesheet for A4 Sheet Format */}
       <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #print-area, #print-area * {
-            visibility: visible !important;
-          }
-          #print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            display: block !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: white !important;
-          }
-          .no-print {
+        @media screen {
+          #load-sheet-print-portal {
             display: none !important;
+          }
+        }
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            height: auto !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body > *:not(#load-sheet-print-portal) {
+            display: none !important;
+          }
+          #load-sheet-print-portal {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+          #load-sheet-print-portal * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}} />
@@ -1278,11 +1450,21 @@ export default function LoadSheetPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                  onClick={triggerLoadSheetPrint}
+                  disabled={isPrinting}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95 disabled:opacity-75"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Print / Save PDF</span>
+                  {isPrinting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Preparing Print...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4" />
+                      <span>Print / Save PDF</span>
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setShowPrintView(null)}
@@ -1295,162 +1477,19 @@ export default function LoadSheetPage() {
 
             {/* Scrollable Document Container */}
             <div className="flex-1 overflow-y-auto p-6 bg-slate-100 flex justify-center">
-              
-              {/* Target printable sheet (A4 dimensions style) */}
-              <div id="print-area" className="bg-white w-full max-w-[850px] p-8 border border-slate-300 shadow-lg text-slate-900 font-sans flex flex-col gap-6">
-                
-                {/* Header with DBARC Branding & Load Sheet Barcode */}
-                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-black text-slate-900 tracking-tight">DBARC</span>
-                      <span className="text-xs font-semibold text-slate-600">
-                        [Digital Business Automation for Routing & Courier]
-                      </span>
-                    </div>
-                    <h1 className="text-base font-black text-slate-900 mt-1 uppercase tracking-tight">
-                      OFFICIAL COURIER LOAD SHEET & PICKUP MANIFEST
-                    </h1>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                      Physical custody handover & verified cargo distribution dispatch document
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-end">
-                    <Code128BarcodeSvg text={showPrintView.sheet_id} height={42} />
-                  </div>
-                </div>
-
-                {/* Metadata Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-300 text-[11px]">
-                  <div>
-                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Manifest ID</span>
-                    <span className="font-mono font-bold text-slate-900">{showPrintView.sheet_id}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Date & Time</span>
-                    <span className="font-semibold text-slate-800">
-                      {showPrintView.date_created ? new Date(showPrintView.date_created).toLocaleString() : '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Origin Facility</span>
-                    <span className="font-semibold text-slate-800">{showPrintView.origin_hub?.name || 'Main Courier Hub'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-bold text-[9px] uppercase">Shipper Business</span>
-                    <span className="font-semibold text-slate-800">{showPrintView.shipperName || user?.shipper?.[0]?.name || user?.name || 'Shipper'}</span>
-                  </div>
-                </div>
-
-                {/* Itemized Orders Table */}
-                <table className="w-full text-left border-collapse text-[10px] mt-1">
-                  <thead>
-                    <tr className="border-b-2 border-slate-900 bg-slate-100 text-slate-800 font-bold uppercase text-[9px]">
-                      <th className="py-2 px-2 w-8 text-center">#</th>
-                      <th className="py-2 px-2">Tracking Number</th>
-                      <th className="py-2 px-2">Recipient Name & Contact</th>
-                      <th className="py-2 px-2">Delivery Destination</th>
-                      <th className="py-2 px-2 text-center w-10">Pcs</th>
-                      <th className="py-2 px-2 text-center w-14">Weight</th>
-                      <th className="py-2 px-2 text-center w-16">Payment</th>
-                      <th className="py-2 px-2 text-right w-24">COD Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {showPrintView.parcels?.map((parcel: any, idx: number) => (
-                      <tr key={parcel.id || idx} className="align-top py-1.5">
-                        <td className="py-2 px-2 text-center font-bold text-slate-400">{idx + 1}</td>
-                        <td className="py-2 px-2 font-mono font-bold text-slate-900">{parcel.tracking_number}</td>
-                        <td className="py-2 px-2">
-                          <div className="font-bold text-slate-900">{parcel.recipient_name}</div>
-                          <div className="text-[9px] text-slate-500">{parcel.recipient_phone}</div>
-                        </td>
-                        <td className="py-2 px-2 text-slate-700 leading-tight">
-                          <div className="font-semibold">{parcel.destination_city?.name || 'Local'}</div>
-                          <div className="text-[9px] text-slate-500 truncate max-w-[200px]">{parcel.recipient_address}</div>
-                        </td>
-                        <td className="py-2 px-2 text-center font-mono font-bold">{parcel.pieces || 1}</td>
-                        <td className="py-2 px-2 text-center font-mono">{parcel.weight || 0.5} kg</td>
-                        <td className="py-2 px-2 text-center">
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold ${
-                            parcel.payment_type === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {parcel.payment_type || 'COD'}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
-                          PKR {Number(parcel.cod_amount || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-900 font-bold text-[11px] bg-slate-50">
-                      <td colSpan={4} className="py-2.5 px-2">Total Manifest Summary</td>
-                      <td className="py-2.5 px-2 text-center font-mono font-black">
-                        {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (p.pieces || 1), 0)}
-                      </td>
-                      <td className="py-2.5 px-2 text-center font-mono font-black">
-                        {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (Number(p.weight) || 0.5), 0).toFixed(2)} kg
-                      </td>
-                      <td className="py-2.5 px-2"></td>
-                      <td className="py-2.5 px-2 text-right font-mono font-black text-emerald-800">
-                        PKR {showPrintView.parcels?.reduce((acc: number, p: any) => acc + (Number(p.cod_amount) || 0), 0).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-
-                {/* Bottom Section: Scannable Barcode & Receiving Signatures */}
-                <div className="border-t-2 border-slate-900 pt-6 mt-4 flex flex-col gap-6">
-                  
-                  {/* Scannable Barcode */}
-                  <div className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-300 rounded-lg">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase mb-1">
-                      Courier Pickup Verification Barcode (Scan to Dispatch)
-                    </span>
-                    <Code128BarcodeSvg text={showPrintView.sheet_id} height={55} />
-                  </div>
-
-                  {/* Dual Signatures & Stamp Blocks */}
-                  <div className="grid grid-cols-2 gap-8 text-[10px]">
-                    <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
-                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
-                        Courier Rider Verification & Receiving
-                      </span>
-                      <div className="border-b border-slate-400 w-full mb-1" />
-                      <div className="flex justify-between text-slate-400 text-[9px]">
-                        <span>Rider Name / Phone / Vehicle No</span>
-                        <span>Signature & Stamp</span>
-                      </div>
-                    </div>
-
-                    <div className="border border-slate-300 rounded-lg p-4 flex flex-col justify-between h-32">
-                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">
-                        Shipper Store Handover Confirmation
-                      </span>
-                      <div className="border-b border-slate-400 w-full mb-1" />
-                      <div className="flex justify-between text-slate-400 text-[9px]">
-                        <span>Authorized Signatory</span>
-                        <span>Date & Stamp</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer Notice */}
-                  <div className="text-[9px] text-slate-400 text-center font-medium">
-                    This load sheet serves as legal custody handover between Shipper and DBARC Courier.
-                    Upon rider optical scan of the barcode above, all listed orders automatically transition to &quot;Not Arrived&quot; (In Handover Transit).
-                  </div>
-
-                </div>
-
-              </div>
+              <LoadSheetPrintContent sheet={showPrintView} shipperName={user?.shipper?.[0]?.name || user?.name} />
             </div>
 
           </div>
         </div>
+      )}
+
+      {/* ISOLATED PRINT PORTAL (Mounted directly to body for 100% reliable printing with zero blank pages) */}
+      {showPrintView && typeof document !== 'undefined' && createPortal(
+        <div id="load-sheet-print-portal">
+          <LoadSheetPrintContent sheet={showPrintView} shipperName={user?.shipper?.[0]?.name || user?.name} />
+        </div>,
+        document.body
       )}
 
     </PortalLayout>
