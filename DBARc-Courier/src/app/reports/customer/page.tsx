@@ -4,6 +4,7 @@ import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { Download, RefreshCw } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
+import TablePagination from '@/components/ui/TablePagination';
 
 interface CustomerReportRow {
   id: string;
@@ -30,12 +31,12 @@ export default function CustomerReportPage() {
   const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
   const [totalCount, setTotalCount] = React.useState(0);
   const [page, setPage] = React.useState(1);
-  const PAGE_SIZE = 25;
+  const [pageSize, setPageSize] = React.useState(25);
 
-  const fetchReport = React.useCallback(async (pg = 1) => {
+  const fetchReport = React.useCallback(async (pg = 1, currentSize = pageSize) => {
     setIsLoading(true);
     try {
-      let url = `/parcels?populate=*&pagination[page]=${pg}&pagination[pageSize]=${PAGE_SIZE}&sort[0]=createdAt:desc`;
+      let url = `/parcels?populate=*&pagination[page]=${pg}&pagination[pageSize]=${currentSize}&sort[0]=createdAt:desc`;
       if (fromDate) url += `&filters[createdAt][$gte]=${fromDate}`;
       if (toDate) url += `&filters[createdAt][$lte]=${toDate}T23:59:59`;
       if (selectedStatus) url += `&filters[status][$eq]=${encodeURIComponent(selectedStatus)}`;
@@ -44,21 +45,21 @@ export default function CustomerReportPage() {
       }
 
       const res = await apiClient.get(url);
-      const parcels: any[] = res.data?.data || [];
+      const parcels = (res.data?.data || []) as Record<string, unknown>[];
       setTotalCount(res.data?.meta?.pagination?.total || 0);
 
       const mapped: CustomerReportRow[] = parcels.map((p, i) => ({
         id: String(p.id),
-        sNo: (pg - 1) * PAGE_SIZE + i + 1,
-        trackingNumber: p.tracking_number || String(p.id),
-        invoiceNo: p.invoice?.invoice_number || p.invoice_no || '-',
-        bookDate: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
-        arrivalDate: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : p.status === 'Arrived' ? 'Arrived' : '-',
-        vendor: p.tpl_name || p.carrier || p.shipper?.name || 'Own Fleet',
-        reference: p.shipper_reference || p.reference || '-',
-        consigneeName: p.recipient_name || '-',
-        consigneeAddress: p.recipient_address || '-',
-        status: p.status || '-',
+        sNo: (pg - 1) * currentSize + i + 1,
+        trackingNumber: String(p.tracking_number || p.id),
+        invoiceNo: String((p.invoice as { invoice_number?: string } | undefined)?.invoice_number || p.invoice_no || '-'),
+        bookDate: p.createdAt ? new Date(String(p.createdAt)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+        arrivalDate: p.arrival_date ? new Date(String(p.arrival_date)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : p.status === 'Arrived' ? 'Arrived' : '-',
+        vendor: String(p.tpl_name || p.carrier || (p.shipper as { name?: string } | undefined)?.name || 'Own Fleet'),
+        reference: String(p.shipper_reference || p.reference || '-'),
+        consigneeName: String(p.recipient_name || '-'),
+        consigneeAddress: String(p.recipient_address || '-'),
+        status: String(p.status || '-'),
         cod: Number(p.cod_amount) || 0,
       }));
 
@@ -69,9 +70,12 @@ export default function CustomerReportPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, selectedCity, selectedStatus]);
+  }, [fromDate, toDate, selectedCity, selectedStatus, pageSize]);
 
-  React.useEffect(() => { fetchReport(1); }, [fetchReport]);
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchReport(1, pageSize);
+  }, [fetchReport, pageSize]);
 
   const handleExportCSV = () => {
     const header = 'S.No,Tracking #,Invoice #,Book Date,Arr. Date,Vendor,Reference,Consignee Name,Consignee Address,Status,COD\n';
@@ -83,8 +87,6 @@ export default function CustomerReportPage() {
     a.download = `Customer_Report_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
     <PortalLayout>
@@ -174,23 +176,6 @@ export default function CustomerReportPage() {
             <span className="font-label-md text-label-md text-on-surface-variant px-sm">
               {isLoading ? 'Loading...' : `SHOWING ${rows.length} OF ${totalCount.toLocaleString()} ENTRIES`}
             </span>
-            <div className="flex gap-xs items-center">
-              <button
-                onClick={() => fetchReport(Math.max(1, page - 1))}
-                disabled={page <= 1 || isLoading}
-                className="p-1 hover:bg-surface-container-high rounded disabled:opacity-40"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-              </button>
-              <span className="text-sm font-bold px-2">{page} / {totalPages}</span>
-              <button
-                onClick={() => fetchReport(Math.min(totalPages, page + 1))}
-                disabled={page >= totalPages || isLoading}
-                className="p-1 hover:bg-surface-container-high rounded disabled:opacity-40"
-              >
-                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-              </button>
-            </div>
           </div>
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full border-collapse">
@@ -242,6 +227,18 @@ export default function CustomerReportPage() {
               </tbody>
             </table>
           </div>
+
+          <TablePagination
+            currentPage={page}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => fetchReport(p, pageSize)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              fetchReport(1, newSize);
+            }}
+            itemLabel="records"
+          />
         </section>
       </div>
 

@@ -3,18 +3,12 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
-import { useAuth } from '@/components/AuthProvider';
+import TablePagination from '@/components/ui/TablePagination';
 import { 
-  Download, 
   Printer, 
   Search, 
-  Calendar, 
-  Building2, 
   CheckCircle2, 
-  Wallet,
-  Clock,
-  Layers,
-  ArrowRight
+  Wallet
 } from 'lucide-react';
 
 interface SettlementParcel {
@@ -28,15 +22,22 @@ interface SettlementParcel {
   netPayout: number;
 }
 
+interface ShipperOption {
+  id: number | string;
+  name: string;
+  contact_person?: string;
+}
+
 export default function CodSettlementPage() {
-  const { user, activeBusinessId } = useAuth();
-  const [shippers, setShippers] = React.useState<any[]>([]);
+  const [shippers, setShippers] = React.useState<ShipperOption[]>([]);
   const [selectedShipperId, setSelectedShipperId] = React.useState<string>('');
   const [fromDate, setFromDate] = React.useState('');
   const [toDate, setToDate] = React.useState('');
   const [parcels, setParcels] = React.useState<SettlementParcel[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
   const [toast, setToast] = React.useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({ show: false, msg: '', type: 'success' });
 
   const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -49,7 +50,7 @@ export default function CodSettlementPage() {
     const fetchShippers = async () => {
       try {
         const res = await apiClient.get('/shippers?pagination[limit]=100');
-        const list = res.data?.data || [];
+        const list = (res.data?.data || []) as ShipperOption[];
         setShippers(list);
         if (list.length > 0) {
           setSelectedShipperId(String(list[0].id));
@@ -66,25 +67,27 @@ export default function CodSettlementPage() {
     if (!selectedShipperId) return;
     setIsLoading(true);
     try {
-      let query = `/parcels?filters[status][$eq]=Delivered&filters[shipper][id][$eq]=${selectedShipperId}&populate=*&pagination[limit]=100`;
+      const query = `/parcels?filters[status][$eq]=Delivered&filters[shipper][id][$eq]=${selectedShipperId}&populate=*&pagination[limit]=100`;
       const res = await apiClient.get(query);
-      const items = res.data?.data || [];
+      const items = (res.data?.data || []) as Record<string, unknown>[];
 
       // Filter for COD orders with collected funds
       const mapped: SettlementParcel[] = items
-        .filter((item: any) => {
+        .filter((item: Record<string, unknown>) => {
           const isPaid = item.payment_type === 'PAID' || Number(item.cod_amount) === 0;
           return !isPaid; // Only COD orders are eligible for COD settlement disbursement
         })
-        .map((item: any) => {
+        .map((item: Record<string, unknown>) => {
           const cod = Number(item.cod_amount) || 0;
           const charge = Number(item.delivery_charges) || 250;
+          const destCity = (item.destination_city as { name?: string } | undefined)?.name;
+          const destAddr = typeof item.recipient_address === 'string' ? item.recipient_address.split(',').pop()?.trim() : undefined;
           return {
-            id: item.id,
-            trackingNumber: item.tracking_number,
-            consigneeName: item.recipient_name || 'Customer',
-            destination: item.destination_city?.name || item.recipient_address?.split(',').pop()?.trim() || 'Pakistan',
-            deliveredDate: item.delivered_date ? new Date(item.delivered_date).toLocaleDateString() : new Date(item.updatedAt).toLocaleDateString(),
+            id: Number(item.id),
+            trackingNumber: String(item.tracking_number || item.id),
+            consigneeName: String(item.recipient_name || 'Customer'),
+            destination: destCity || destAddr || 'Pakistan',
+            deliveredDate: item.delivered_date ? new Date(String(item.delivered_date)).toLocaleDateString() : new Date(String(item.updatedAt)).toLocaleDateString(),
             codCollected: cod,
             deliveryCharge: charge,
             netPayout: Math.max(0, cod - charge),
@@ -92,7 +95,7 @@ export default function CodSettlementPage() {
         });
 
       setParcels(mapped);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching settlement parcels:', err);
       triggerToast('Error loading settlement parcels.', 'error');
     } finally {
@@ -101,6 +104,7 @@ export default function CodSettlementPage() {
   }, [selectedShipperId]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSettlementParcels();
   }, [fetchSettlementParcels]);
 
@@ -148,7 +152,7 @@ export default function CodSettlementPage() {
 
       triggerToast(`Settlement ${settlementBatchId} processed! PKR ${totals.netPayable.toLocaleString()} credited to shipper account.`, 'success');
       fetchSettlementParcels();
-    } catch (err: any) {
+    } catch {
       triggerToast('Failed to process settlement.', 'error');
     } finally {
       setIsProcessing(false);
@@ -156,6 +160,12 @@ export default function CodSettlementPage() {
   };
 
   const selectedShipperName = shippers.find(s => String(s.id) === selectedShipperId)?.name || 'Selected Shipper';
+
+  const totalItems = parcels.length;
+  const startIndex = (page - 1) * pageSize;
+  const paginatedParcels = React.useMemo(() => {
+    return parcels.slice(startIndex, startIndex + pageSize);
+  }, [parcels, startIndex, pageSize]);
 
   return (
     <PortalLayout>
@@ -200,7 +210,10 @@ export default function CodSettlementPage() {
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Select Shipper Account</label>
             <select
               value={selectedShipperId}
-              onChange={(e) => setSelectedShipperId(e.target.value)}
+              onChange={(e) => {
+                setSelectedShipperId(e.target.value);
+                setPage(1);
+              }}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:border-primary"
             >
               {shippers.map((s) => (
@@ -215,7 +228,10 @@ export default function CodSettlementPage() {
               <input
                 type="date"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setPage(1);
+                }}
                 className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none"
               />
             </div>
@@ -224,12 +240,18 @@ export default function CodSettlementPage() {
               <input
                 type="date"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setPage(1);
+                }}
                 className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 outline-none"
               />
             </div>
             <button
-              onClick={fetchSettlementParcels}
+              onClick={() => {
+                setPage(1);
+                fetchSettlementParcels();
+              }}
               className="bg-primary hover:bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 h-[38px] mt-auto"
             >
               <Search className="w-3.5 h-3.5" /> Filter
@@ -297,7 +319,7 @@ export default function CodSettlementPage() {
                     <td colSpan={7} className="px-4 py-12 text-center text-slate-400">No unsettled COD orders found for this shipper.</td>
                   </tr>
                 ) : (
-                  parcels.map((p) => (
+                  paginatedParcels.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-3.5 font-mono font-bold text-primary">{p.trackingNumber}</td>
                       <td className="px-4 py-3.5 text-slate-800 font-semibold">{p.consigneeName}</td>
@@ -312,6 +334,20 @@ export default function CodSettlementPage() {
               </tbody>
             </table>
           </div>
+
+          {totalItems > 0 && (
+            <TablePagination
+              currentPage={page}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(sz) => {
+                setPageSize(sz);
+                setPage(1);
+              }}
+              itemLabel="orders"
+            />
+          )}
         </div>
       </div>
     </PortalLayout>

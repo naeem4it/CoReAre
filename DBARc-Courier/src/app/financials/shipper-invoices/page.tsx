@@ -28,6 +28,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import PaymentMethodConfigBlock, { PaymentMethodData } from '@/components/payment/PaymentMethodConfigBlock';
+import TablePagination from '@/components/ui/TablePagination';
 
 interface ShipperRecord {
   id: number;
@@ -137,9 +138,13 @@ export default function ShipperInvoicesPage() {
     return Array.isArray(user.shipper) ? user.shipper : [user.shipper];
   }, [user]);
 
-  const userBusinessIds = React.useMemo(() => {
-    return userBusinesses.map((b: any) => b.id).filter(Boolean);
+  const userBusinessIdsKey = React.useMemo(() => {
+    return userBusinesses.map((b: any) => b.id).filter(Boolean).sort().join(',');
   }, [userBusinesses]);
+
+  const userBusinessIds = React.useMemo(() => {
+    return userBusinessIdsKey ? userBusinessIdsKey.split(',').map(Number) : [];
+  }, [userBusinessIdsKey]);
 
   // Tab state: Live Statement vs Finalized Invoices History
   const [activeTab, setActiveTab] = React.useState<'statement' | 'history'>('statement');
@@ -168,6 +173,14 @@ export default function ShipperInvoicesPage() {
     const now = new Date();
     return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
   });
+
+  // Pagination for Statement Line Items (Tab 1)
+  const [statementPage, setStatementPage] = React.useState(1);
+  const [statementPageSize, setStatementPageSize] = React.useState(10);
+
+  // Pagination for Finalized Invoices History (Tab 2)
+  const [historyPage, setHistoryPage] = React.useState(1);
+  const [historyPageSize, setHistoryPageSize] = React.useState(10);
 
   // Payout amount & popup modal state
   const [targetPaymentAmount, setTargetPaymentAmount] = React.useState<string>('');
@@ -611,6 +624,17 @@ export default function ShipperInvoicesPage() {
       returnedCount: printItems.filter(it => it.status === 'Returned').length,
     };
   }, [printItems, ibftFee, singularPrintItem]);
+
+  // Pagination calculations
+  const statementTotalPages = Math.max(1, Math.ceil(lineItems.length / statementPageSize));
+  const statementSafePage = Math.min(statementPage, statementTotalPages);
+  const statementStartIndex = (statementSafePage - 1) * statementPageSize;
+  const paginatedLineItems = lineItems.slice(statementStartIndex, statementStartIndex + statementPageSize);
+
+  const historyTotalPages = Math.max(1, Math.ceil(paidInvoices.length / historyPageSize));
+  const historySafePage = Math.min(historyPage, historyTotalPages);
+  const historyStartIndex = (historySafePage - 1) * historyPageSize;
+  const paginatedPaidInvoices = paidInvoices.slice(historyStartIndex, historyStartIndex + historyPageSize);
 
   // Print handlers
   const handlePrintBatch = () => {
@@ -1717,7 +1741,7 @@ export default function ShipperInvoicesPage() {
                         </td>
                       </tr>
                     ) : (
-                      paidInvoices.map((inv: any) => {
+                      paginatedPaidInvoices.map((inv: any) => {
                         const invAttrs = inv.attributes || inv;
                         const invNum = invAttrs.invoice_number || `INV-${inv.id}`;
                         const invDate = invAttrs.invoice_date || (invAttrs.createdAt ? new Date(invAttrs.createdAt).toLocaleDateString('en-GB') : '-');
@@ -1769,6 +1793,20 @@ export default function ShipperInvoicesPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {!loadingPastInvoices && paidInvoices.length > 0 && (
+              <TablePagination
+                currentPage={historySafePage}
+                totalItems={paidInvoices.length}
+                pageSize={historyPageSize}
+                onPageChange={setHistoryPage}
+                onPageSizeChange={(newSize) => {
+                  setHistoryPageSize(newSize);
+                  setHistoryPage(1);
+                }}
+                itemLabel="invoices"
+              />
             )}
           </div>
         ) : (
@@ -1853,7 +1891,7 @@ export default function ShipperInvoicesPage() {
                       </td>
                     </tr>
                   ) : (
-                    lineItems.map((item) => {
+                    paginatedLineItems.map((item) => {
                       const isUnchecked = !item.isSelected;
                       return (
                         <tr 
@@ -1938,6 +1976,19 @@ export default function ShipperInvoicesPage() {
               </table>
             </div>
 
+            {!isLoading && lineItems.length > 0 && (
+              <TablePagination
+                currentPage={statementSafePage}
+                totalItems={lineItems.length}
+                pageSize={statementPageSize}
+                onPageChange={setStatementPage}
+                onPageSizeChange={(newSize) => {
+                  setStatementPageSize(newSize);
+                  setStatementPage(1);
+                }}
+                itemLabel="shipments"
+              />
+            )}
           </div>
         )}
 
