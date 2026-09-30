@@ -5,6 +5,8 @@ import PortalLayout from '@/components/PortalLayout';
 import { List, Save, Printer, RefreshCw, X, Search, FileText, Barcode, CheckCircle2, UserCheck, Shield, Plus, Trash2, Package, Scale, ChevronDown, User, ArrowRight } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { RiderService, DeliverySheetService } from '@/services/api';
+import { RouteService, RouteAssignmentService, RouteItem } from '@/services/route.service';
+import { useAuth } from '@/components/AuthProvider';
 import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
 
@@ -112,8 +114,22 @@ export default function OperationsDeliverySheetPage() {
   const [isRiderDropdownOpen, setIsRiderDropdownOpen] = React.useState<boolean>(false);
   const riderDropdownRef = React.useRef<HTMLDivElement>(null);
 
+  const { user } = useAuth();
+  const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : 2);
+
+  // Route Master states
+  const [routes, setRoutes] = React.useState<RouteItem[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = React.useState<string>('');
+  const [selectedRoute, setSelectedRoute] = React.useState<RouteItem | null>(null);
   const [routeCode, setRouteCode] = React.useState<string>('');
   const [savedSheetId, setSavedSheetId] = React.useState<number | string | null>(null);
+
+  // Fetch active routes from Route Master
+  React.useEffect(() => {
+    RouteService.getAll('?filters[status][$eq]=Active&populate=*&pagination[pageSize]=100')
+      .then(res => setRoutes(res.data || []))
+      .catch(err => console.warn('Could not load active routes:', err));
+  }, []);
 
   // Filtered riders for searchable combobox
   const filteredRiders = React.useMemo(() => {
@@ -191,14 +207,25 @@ export default function OperationsDeliverySheetPage() {
   const loadPastSheet = async (sheetItem: any) => {
     try {
       const targetId = sheetItem.documentId || sheetItem.id;
-      const res = await apiClient.get(`/delivery-sheets/${targetId}?populate[parcels][populate]=*&populate[rider]=true`);
+      const res = await apiClient.get(`/delivery-sheets/${targetId}?populate[parcels][populate]=*&populate[rider]=true&populate[route][populate]=*`);
       const sheet = res.data?.data;
       if (!sheet) return;
 
       const numStr = String(sheet.sheet_number || sheet.id).replace(/\D/g, '') || String(sheet.id);
       setSheetNumber(Number(numStr) || Math.floor(1000000 + Math.random() * 9000000));
       setSavedSheetId(sheet.documentId || sheet.id);
-      if (sheet.route_code) setRouteCode(sheet.route_code);
+      if (sheet.route) {
+        setSelectedRouteId(String(sheet.route.id));
+        setSelectedRoute(sheet.route);
+        setRouteCode(sheet.route.route_code || sheet.route_code || '');
+      } else if (sheet.route_code) {
+        setRouteCode(sheet.route_code);
+        const matching = routes.find(rt => rt.route_code?.toUpperCase() === sheet.route_code.toUpperCase());
+        if (matching) {
+          setSelectedRouteId(String(matching.id));
+          setSelectedRoute(matching);
+        }
+      }
       if (sheet.rider) {
         setSelectedRiderId(String(sheet.rider.id));
         setSelectedRiderName(sheet.rider.name || sheet.rider.fullName || '');
@@ -241,11 +268,15 @@ export default function OperationsDeliverySheetPage() {
       return;
     }
 
+    // City-Wide Flexibility: Rider can pick up or deliver anywhere in the city according to assigned office
+    // No restrictive prompt or block within the city
+
     try {
       const targetDocId = parcel.documentId || parcel.id;
       await apiClient.put(`/parcels/${targetDocId}`, {
         data: {
           status: SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
+          assigned_route: selectedRouteId ? Number(selectedRouteId) : undefined,
         }
       });
 
@@ -439,6 +470,8 @@ export default function OperationsDeliverySheetPage() {
         return;
       }
 
+      // City-Wide Flexibility: Rider can pick up or deliver anywhere in the city without restriction
+
       const targetId = parcel.documentId || parcel.id;
       // Immediately set status to 'Out For delivery' in Strapi backend
       await apiClient.put(`/parcels/${targetId}`, {
@@ -446,6 +479,7 @@ export default function OperationsDeliverySheetPage() {
           status: SHIPMENT_STATUSES.OUT_FOR_DELIVERY,
           pieces: Number(scanPieces) || parcel.pieces || 1,
           weight: Number(scanWeight) || parcel.weight || 0.5,
+          assigned_route: selectedRouteId ? Number(selectedRouteId) : undefined,
         }
       });
 
@@ -513,6 +547,7 @@ export default function OperationsDeliverySheetPage() {
           const updatePayload: any = {
             status: item.status,
             comments: item.remarks || undefined,
+            assigned_route: selectedRouteId ? Number(selectedRouteId) : undefined,
           };
           if (item.status === SHIPMENT_STATUSES.DELIVERED) {
             updatePayload.delivered_date = new Date().toISOString();
@@ -528,6 +563,23 @@ export default function OperationsDeliverySheetPage() {
               data: updatePayload
             });
           }
+
+          // Ensure rider-assignment record exists for rider mobile app query
+          if (selectedRiderId && item.parcelId) {
+            try {
+              await apiClient.post('/rider-assignments', {
+                data: {
+                  rider: Number(selectedRiderId),
+                  parcel: item.parcelId,
+                  assigned_at: new Date().toISOString(),
+                  status: 'assigned',
+                  tenant: Number(tenantId),
+                }
+              });
+            } catch (e) {
+              // ignore duplicate
+            }
+          }
         } catch (e) {
           console.warn(`Could not sync parcel ${item.shipmentNumber}:`, e);
         }
@@ -538,11 +590,20 @@ export default function OperationsDeliverySheetPage() {
         const sheetPayload = {
           sheet_number: String(sheetNumber).startsWith('DS-') ? String(sheetNumber) : `DS-${sheetNumber}`,
           sheet_date: new Date().toISOString().slice(0, 10),
-          route_code: routeCode || undefined,
+          route_code: selectedRoute?.route_code || routeCode || undefined,
+          route: selectedRouteId ? Number(selectedRouteId) : undefined,
+          office: selectedRoute?.office?.id || undefined,
+          tenant: Number(tenantId),
           custom_name: selectedRiderName || selectedRider || undefined,
           status: 'Out For Delivery',
           rider: selectedRiderId ? Number(selectedRiderId) : undefined,
           parcels: shipments.map(s => s.parcelId).filter(Boolean),
+          shipment_count: shipments.length,
+          total_pieces: shipments.reduce((acc, curr) => acc + (Number(curr.pieces) || 1), 0),
+          total_weight: shipments.reduce((acc, curr) => acc + (Number(curr.weight) || 0.5), 0),
+          collection_amount: totalCollect,
+          delivered_count: deliveredCount,
+          return_count: returnCount,
         };
 
         if (savedSheetId) {
@@ -576,6 +637,9 @@ export default function OperationsDeliverySheetPage() {
       setSelectedRiderId('');
       setSelectedRiderName('');
       setSelectedRider('');
+      setSelectedRouteId('');
+      setSelectedRoute(null);
+      setRouteCode('');
       setScanBarcode('');
       setScanPieces(1);
       setScanWeight(0.5);
@@ -718,14 +782,33 @@ export default function OperationsDeliverySheetPage() {
                         return (
                           <div
                             key={r.id}
-                            onClick={() => {
+                            onClick={async () => {
                               setSelectedRiderId(String(r.id));
                               setSelectedRiderName(rName);
                               setSelectedRider(rName);
-                              if (r.route_code || r.zone) {
-                                setRouteCode(r.route_code || r.zone || '');
-                              }
                               setIsRiderDropdownOpen(false);
+
+                              // Auto-determine active route assignment for today
+                              try {
+                                const today = new Date().toISOString().slice(0, 10);
+                                const assignment = await RouteAssignmentService.getByRiderAndDate(r.id, today);
+                                if (assignment?.route) {
+                                  const rt = assignment.route;
+                                  setSelectedRouteId(String(rt.id));
+                                  setSelectedRoute(rt);
+                                  setRouteCode(rt.route_code || '');
+                                  triggerToast(`Auto-assigned Route: ${rt.route_code} - ${rt.name}`, 'success');
+                                } else if (r.route_code) {
+                                  setRouteCode(r.route_code);
+                                  const matching = routes.find(rt => rt.route_code?.toUpperCase() === r.route_code.toUpperCase());
+                                  if (matching) {
+                                    setSelectedRouteId(String(matching.id));
+                                    setSelectedRoute(matching);
+                                  }
+                                }
+                              } catch (e) {
+                                console.warn('Could not query rider route assignment:', e);
+                              }
                             }}
                             className={`p-2 rounded-lg cursor-pointer flex items-center justify-between text-xs transition-colors ${
                               isSelected ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-slate-50 text-slate-700'
@@ -748,14 +831,30 @@ export default function OperationsDeliverySheetPage() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Route Code</label>
-              <input
-                type="text"
-                value={routeCode}
-                onChange={(e) => setRouteCode(e.target.value)}
-                placeholder="e.g. LHR-NORTH-01"
-                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-primary"
-              />
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <span>Route</span>
+                {selectedRoute && (
+                  <span className="text-[10px] text-primary font-bold truncate max-w-[180px]">{selectedRoute.name}</span>
+                )}
+              </label>
+              <select
+                value={selectedRouteId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedRouteId(val);
+                  const found = routes.find(rt => String(rt.id) === val);
+                  setSelectedRoute(found || null);
+                  setRouteCode(found ? found.route_code : '');
+                }}
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="">Select Route from Master...</option>
+                {routes.map(rt => (
+                  <option key={rt.id} value={String(rt.id)}>
+                    {rt.route_code} - {rt.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-1">

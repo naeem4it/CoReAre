@@ -24,16 +24,16 @@ class DeliverySheetModel {
 
   // Derived KPIs
   int get totalParcels => parcels.length;
-  int get deliveredCount => parcels.where((p) => p.status == 'Delivered').length;
-  int get pendingCount => parcels.where((p) => p.status != 'Delivered' && p.status != 'Ready To Return').length;
-  int get failedCount => parcels.where((p) => p.status == 'Failed Attempt' || p.status == 'Ready To Return').length;
+  int get deliveredCount => parcels.where((p) => p.status.toLowerCase() == 'delivered').length;
+  int get pendingCount => parcels.where((p) => p.status.toLowerCase() != 'delivered' && p.status.toLowerCase() != 'ready to return').length;
+  int get failedCount => parcels.where((p) => p.status.toLowerCase().contains('fail') || p.status.toLowerCase().contains('return')).length;
   
   double get totalExpectedCod => parcels
       .where((p) => p.isCod)
       .fold(0.0, (sum, p) => sum + p.codAmount);
 
   double get totalCollectedCod => parcels
-      .where((p) => p.status == 'Delivered' && p.isCod)
+      .where((p) => p.status.toLowerCase() == 'delivered' && p.isCod)
       .fold(0.0, (sum, p) => sum + p.codAmount);
 
   int get paidParcelsCount => parcels.where((p) => p.isPaid).length;

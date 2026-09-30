@@ -39,6 +39,11 @@
     "rider_code": {
       "type": "string",
       "unique": true
+    },
+    "office": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::office.office"
     }
   }
 }

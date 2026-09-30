@@ -58,8 +58,14 @@ class StorageService {
   }
 
   String getBaseUrl() {
-    return _prefs?.getString(AppConstants.keyCustomBaseUrl) ?? 
-      (kIsWeb ? AppConstants.defaultLocalhostUrl : AppConstants.defaultBaseUrl);
+    final custom = _prefs?.getString(AppConstants.keyCustomBaseUrl);
+    if (custom != null && custom.trim().isNotEmpty) {
+      if (kIsWeb && custom.contains('localhost:1337')) {
+        return custom.replaceAll('localhost:1337', '127.0.0.1:1337');
+      }
+      return custom;
+    }
+    return kIsWeb ? AppConstants.defaultLocalhostUrl : AppConstants.defaultBaseUrl;
   }
 
   // User & Rider info

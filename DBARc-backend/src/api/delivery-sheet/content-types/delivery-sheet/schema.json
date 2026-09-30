@@ -29,6 +29,21 @@
     "route_code": {
       "type": "string"
     },
+    "route": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::route.route"
+    },
+    "office": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::office.office"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    },
     "custom_name": {
       "type": "string"
     },
@@ -36,6 +51,24 @@
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::parcel.parcel"
+    },
+    "shipment_count": {
+      "type": "integer"
+    },
+    "total_pieces": {
+      "type": "integer"
+    },
+    "total_weight": {
+      "type": "decimal"
+    },
+    "collection_amount": {
+      "type": "decimal"
+    },
+    "delivered_count": {
+      "type": "integer"
+    },
+    "return_count": {
+      "type": "integer"
     },
     "status": {
       "type": "enumeration",

@@ -859,28 +859,37 @@ export interface ApiDeliverySheetDeliverySheet
     draftAndPublish: false;
   };
   attributes: {
+    collection_amount: Schema.Attribute.Decimal;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     custom_name: Schema.Attribute.String;
+    delivered_count: Schema.Attribute.Integer;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::delivery-sheet.delivery-sheet'
     > &
       Schema.Attribute.Private;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
     parcels: Schema.Attribute.Relation<'manyToMany', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
+    return_count: Schema.Attribute.Integer;
     rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    route: Schema.Attribute.Relation<'manyToOne', 'api::route.route'>;
     route_code: Schema.Attribute.String;
     sheet_date: Schema.Attribute.Date & Schema.Attribute.Required;
     sheet_number: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
+    shipment_count: Schema.Attribute.Integer;
     status: Schema.Attribute.Enumeration<
       ['Pending', 'Out For Delivery', 'Completed']
     > &
       Schema.Attribute.DefaultTo<'Pending'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    total_pieces: Schema.Attribute.Integer;
+    total_weight: Schema.Attribute.Decimal;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1335,6 +1344,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     allow_to_open: Schema.Attribute.Enumeration<['Yes', 'No']> &
       Schema.Attribute.DefaultTo<'No'>;
     arrival_date: Schema.Attribute.DateTime;
+    assigned_route: Schema.Attribute.Relation<'manyToOne', 'api::route.route'>;
     cod_amount: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     comments: Schema.Attribute.Text;
     consignee_alt_phone: Schema.Attribute.String;
@@ -1760,6 +1770,7 @@ export interface ApiRiderRider extends Struct.CollectionTypeSchema {
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::rider.rider'> &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
     phone: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
@@ -1803,6 +1814,90 @@ export interface ApiRoleDefinitionRoleDefinition
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiRouteAssignmentRouteAssignment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'route_assignments';
+  info: {
+    description: 'Daily or shift route assignments for riders';
+    displayName: 'Route Assignment';
+    pluralName: 'route-assignments';
+    singularName: 'route-assignment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    assignment_date: Schema.Attribute.Date & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::route-assignment.route-assignment'
+    > &
+      Schema.Attribute.Private;
+    notes: Schema.Attribute.Text;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    route: Schema.Attribute.Relation<'manyToOne', 'api::route.route'>;
+    shift: Schema.Attribute.Enumeration<
+      ['Morning', 'Evening', 'Night', 'Full Day']
+    > &
+      Schema.Attribute.DefaultTo<'Full Day'>;
+    status: Schema.Attribute.Enumeration<['Active', 'Completed', 'Cancelled']> &
+      Schema.Attribute.DefaultTo<'Active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    vehicle_number: Schema.Attribute.String;
+  };
+}
+
+export interface ApiRouteRoute extends Struct.CollectionTypeSchema {
+  collectionName: 'routes';
+  info: {
+    description: 'Operational courier delivery and pickup routes';
+    displayName: 'Route';
+    pluralName: 'routes';
+    singularName: 'route';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    areas: Schema.Attribute.JSON;
+    city: Schema.Attribute.Relation<'manyToOne', 'api::city.city'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::route.route'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    postal_codes: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    route_code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.Enumeration<['Active', 'Inactive']> &
+      Schema.Attribute.DefaultTo<'Active'>;
+    tenant: Schema.Attribute.Relation<'manyToOne', 'api::tenant.tenant'>;
+    type: Schema.Attribute.Enumeration<
+      ['Delivery', 'Pickup', 'Return', 'Special', 'ThirdParty']
+    > &
+      Schema.Attribute.DefaultTo<'Delivery'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    zone: Schema.Attribute.Relation<'manyToOne', 'api::region.region'>;
   };
 }
 
@@ -2856,6 +2951,8 @@ declare module '@strapi/strapi' {
       'api::rider-location-history.rider-location-history': ApiRiderLocationHistoryRiderLocationHistory;
       'api::rider.rider': ApiRiderRider;
       'api::role-definition.role-definition': ApiRoleDefinitionRoleDefinition;
+      'api::route-assignment.route-assignment': ApiRouteAssignmentRouteAssignment;
+      'api::route.route': ApiRouteRoute;
       'api::sales-person.sales-person': ApiSalesPersonSalesPerson;
       'api::shipper-plan.shipper-plan': ApiShipperPlanShipperPlan;
       'api::shipper-wallet.shipper-wallet': ApiShipperWalletShipperWallet;

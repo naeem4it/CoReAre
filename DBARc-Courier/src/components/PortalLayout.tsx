@@ -463,6 +463,18 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
           </Link>
 
           <Link
+            href="/administration/routes"
+            className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
+              pathname === '/administration/routes'
+                ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-on-secondary-container dark:text-on-secondary-fixed'
+                : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">route</span>
+            <span className="font-label-md text-label-md">Route Setup</span>
+          </Link>
+
+          <Link
             href="/administration/offices"
             className={`flex items-center gap-md p-sm font-semibold rounded-lg cursor-pointer active:opacity-80 transition-all ${
               pathname === '/administration/offices'
@@ -667,6 +679,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 <NavLink href="/operations/bulk-arrivals" icon="upload_file" label="Bulk Arrivals" />
                 <NavLink href="/operations/manifestation" icon="inventory" label="Manifestation" />
                 <NavLink href="/operations/demanifestation" icon="unarchive" label="DeManifestation" />
+                <NavLink href="/operations/route-assignment" icon="alt_route" label="Route Assignment" />
                 <NavLink href="/operations/delivery-sheet" icon="assignment" label="Delivery Sheet" />
               </div>
             )}

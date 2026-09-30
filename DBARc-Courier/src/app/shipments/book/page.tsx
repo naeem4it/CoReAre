@@ -451,7 +451,10 @@ function BookShipmentForm() {
     reset,
     setValue,
     control,
+    formState: { dirtyFields },
   } = methods;
+
+  const userEditedCodRef = React.useRef(false);
 
   const [configuredZones, setConfiguredZones] = React.useState<any[]>([]);
   const [detailedOffices, setDetailedOffices] = React.useState<any[]>([]);
@@ -806,15 +809,17 @@ function BookShipmentForm() {
   const prevPricingTotalRef = React.useRef<number | null>(null);
   React.useEffect(() => {
     if (paymentType === 'COD') {
-      if (pricing.total > 0 && prevPricingTotalRef.current !== pricing.total) {
-        setValue('codAmount', Math.round(pricing.total) || pricing.total, { shouldValidate: true, shouldDirty: true });
-        prevPricingTotalRef.current = pricing.total;
+      if (!userEditedCodRef.current && !dirtyFields.codAmount) {
+        if (pricing.total > 0 && prevPricingTotalRef.current !== pricing.total) {
+          setValue('codAmount', Math.round(pricing.total) || pricing.total, { shouldValidate: true });
+          prevPricingTotalRef.current = pricing.total;
+        }
       }
     } else if (paymentType === 'PAID') {
       setValue('codAmount', 0, { shouldValidate: true });
       prevPricingTotalRef.current = null;
     }
-  }, [pricing.total, paymentType, setValue]);
+  }, [pricing.total, paymentType, dirtyFields.codAmount, setValue]);
 
   // Dynamic 4-step 2PL vs 3PL Routing Calculation
   const logisticsRouting = React.useMemo(() => {
@@ -969,6 +974,8 @@ function BookShipmentForm() {
           productDescription: '',
           specialInstructions: '',
         });
+        userEditedCodRef.current = false;
+        prevPricingTotalRef.current = null;
         setBookingStatus('idle');
       }, 3000);
 
@@ -1841,7 +1848,7 @@ function BookShipmentForm() {
                           type="button"
                           onClick={() => {
                             setValue('paymentType', 'COD');
-                            if (pricing.total > 0) {
+                            if (!userEditedCodRef.current && pricing.total > 0) {
                               setValue('codAmount', Math.round(pricing.total) || pricing.total);
                             }
                           }}
@@ -1875,6 +1882,9 @@ function BookShipmentForm() {
                         placeholder="0"
                         type="number"
                         disabled={paymentType === 'PAID'}
+                        onInput={() => {
+                          userEditedCodRef.current = true;
+                        }}
                       />
                     </div>
 

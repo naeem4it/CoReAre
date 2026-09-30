@@ -4,7 +4,7 @@ class AppConstants {
 
   // Default Base URL for Strapi backend (Production / TestFlight)
   static const String defaultBaseUrl = 'https://api.dbarc.mashrue.com/api';
-  static const String defaultLocalhostUrl = 'http://localhost:1337/api';
+  static const String defaultLocalhostUrl = 'http://127.0.0.1:1337/api';
 
   // Storage Keys
   static const String keyAuthToken = 'dbarc_jwt_token';

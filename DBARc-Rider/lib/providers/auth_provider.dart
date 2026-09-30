@@ -129,21 +129,30 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _fetchAssociatedRider(UserModel user) async {
     try {
-      final res = await _api.dio.get(ApiEndpoints.riders);
+      final res = await _api.dio.get(
+        ApiEndpoints.riders,
+        queryParameters: {'pagination[pageSize]': 100},
+      );
       final list = res.data?['data'] ?? [];
       if (list is List && list.isNotEmpty) {
+        final uName = user.username.toLowerCase();
+        final uClean = uName.split('#').first.trim();
+        final uEmailClean = user.email.toLowerCase().split('#').first.trim();
+
         final matched = list.firstWhere(
           (r) {
             final rId = r['id'];
-            final rEmail = r['email']?.toString() ?? '';
-            final rName = r['name']?.toString().toLowerCase() ?? '';
-            final rCode = r['rider_code']?.toString() ?? '';
-            final uName = user.username.toLowerCase();
+            final rEmail = (r['email']?.toString() ?? '').toLowerCase();
+            final rName = (r['name']?.toString() ?? '').toLowerCase();
+            final rCode = (r['rider_code']?.toString() ?? '').toLowerCase();
+
             return rId == user.id ||
-                rEmail == user.email ||
-                rEmail.startsWith(user.email) ||
-                rName.contains(uName) ||
-                rCode.toLowerCase() == uName;
+                rEmail == user.email.toLowerCase() ||
+                rEmail.contains(uEmailClean) ||
+                rEmail.startsWith(uClean) ||
+                rName.contains(uClean) ||
+                rCode == uClean ||
+                rCode == uName;
           },
           orElse: () => null,
         );

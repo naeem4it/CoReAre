@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/runsheet_provider.dart';
 import '../parcel/parcel_detail_screen.dart';
 import '../pod/delivery_action_sheet.dart';
@@ -15,6 +16,7 @@ class RunsheetListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     final runsheet = context.watch<RunsheetProvider>();
     final sheet = runsheet.activeSheet;
     final parcels = runsheet.filteredParcels;
@@ -47,7 +49,7 @@ class RunsheetListScreen extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(LucideIcons.refreshCw),
-            onPressed: () => runsheet.fetchActiveRunsheet(),
+            onPressed: () => runsheet.fetchActiveRunsheet(riderId: auth.rider?.id ?? auth.user?.id),
           ),
         ],
       ),

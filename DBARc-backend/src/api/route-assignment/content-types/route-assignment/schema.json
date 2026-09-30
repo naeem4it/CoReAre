@@ -1,0 +1,65 @@
+{
+  "kind": "collectionType",
+  "collectionName": "route_assignments",
+  "info": {
+    "singularName": "route-assignment",
+    "pluralName": "route-assignments",
+    "displayName": "Route Assignment",
+    "description": "Daily or shift route assignments for riders"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "assignment_date": {
+      "type": "date",
+      "required": true
+    },
+    "shift": {
+      "type": "enumeration",
+      "enum": [
+        "Morning",
+        "Evening",
+        "Night",
+        "Full Day"
+      ],
+      "default": "Full Day"
+    },
+    "vehicle_number": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "Active",
+        "Completed",
+        "Cancelled"
+      ],
+      "default": "Active"
+    },
+    "notes": {
+      "type": "text"
+    },
+    "office": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::office.office"
+    },
+    "rider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::rider.rider"
+    },
+    "route": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::route.route"
+    },
+    "tenant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::tenant.tenant"
+    }
+  }
+}

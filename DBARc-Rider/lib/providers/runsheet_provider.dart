@@ -10,37 +10,55 @@ import '../models/delivery_sheet_model.dart';
 import '../models/parcel_model.dart';
 import '../models/delivery_attempt_model.dart';
 
+enum RiderOperationMode { delivery, pickup }
+
 class RunsheetProvider extends ChangeNotifier {
   final ApiClient _api = ApiClient();
 
+  RiderOperationMode _mode = RiderOperationMode.delivery;
   DeliverySheetModel? _activeSheet;
+  List<ParcelModel> _pickupParcels = [];
   bool _isLoading = false;
   String? _errorMessage;
-  String _selectedTab = 'All'; // 'All', 'Pending', 'Delivered', 'Failed'
+  String _selectedTab = 'All'; // 'All', 'Pending', 'Delivered'/'Completed', 'Failed'
   String _searchQuery = '';
 
+  RiderOperationMode get mode => _mode;
+  bool get isDeliveryMode => _mode == RiderOperationMode.delivery;
+  bool get isPickupMode => _mode == RiderOperationMode.pickup;
+
   DeliverySheetModel? get activeSheet => _activeSheet;
+  List<ParcelModel> get pickupParcels => _pickupParcels;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String get selectedTab => _selectedTab;
   String get searchQuery => _searchQuery;
 
-  // Filtered parcels based on search and selected tab
+  // Toggle between Deliveries and Pickups
+  void setMode(RiderOperationMode newMode) {
+    if (_mode != newMode) {
+      _mode = newMode;
+      _selectedTab = 'All';
+      notifyListeners();
+    }
+  }
+
+  // Delivery Parcels
+  List<ParcelModel> get deliveryParcels => _activeSheet?.parcels ?? [];
+
+  // Filtered Delivery Parcels
   List<ParcelModel> get filteredParcels {
     if (_activeSheet == null) return [];
-    
     var list = _activeSheet!.parcels;
 
-    // Filter by tab
     if (_selectedTab == 'Pending') {
-      list = list.where((p) => p.status != 'Delivered' && p.status != 'Ready To Return').toList();
+      list = list.where((p) => p.status.toLowerCase() != 'delivered' && p.status.toLowerCase() != 'ready to return').toList();
     } else if (_selectedTab == 'Delivered') {
-      list = list.where((p) => p.status == 'Delivered').toList();
+      list = list.where((p) => p.status.toLowerCase() == 'delivered').toList();
     } else if (_selectedTab == 'Failed') {
-      list = list.where((p) => p.status == 'Failed Attempt' || p.status == 'Ready To Return').toList();
+      list = list.where((p) => p.status.toLowerCase().contains('fail') || p.status.toLowerCase().contains('return')).toList();
     }
 
-    // Filter by search query (tracking number, recipient name, phone, city)
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
       list = list.where((p) =>
@@ -54,6 +72,41 @@ class RunsheetProvider extends ChangeNotifier {
 
     return list;
   }
+
+  // Filtered Pickup Parcels
+  List<ParcelModel> get filteredPickupParcels {
+    var list = _pickupParcels;
+
+    if (_selectedTab == 'Pending') {
+      list = list.where((p) => p.status.toLowerCase().contains('book')).toList();
+    } else if (_selectedTab == 'Delivered' || _selectedTab == 'Picked Up' || _selectedTab == 'Completed') {
+      list = list.where((p) => p.status.toLowerCase().contains('pick')).toList();
+    }
+
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      list = list.where((p) =>
+        p.trackingNumber.toLowerCase().contains(q) ||
+        (p.shipperName != null && p.shipperName!.toLowerCase().contains(q)) ||
+        (p.shipperPhone != null && p.shipperPhone!.toLowerCase().contains(q)) ||
+        (p.shipperAddress != null && p.shipperAddress!.toLowerCase().contains(q)) ||
+        p.recipientName.toLowerCase().contains(q) ||
+        (p.referenceNumber != null && p.referenceNumber!.toLowerCase().contains(q))
+      ).toList();
+    }
+
+    return list;
+  }
+
+  // Active list based on current Mode
+  List<ParcelModel> get currentParcels =>
+      _mode == RiderOperationMode.delivery ? filteredParcels : filteredPickupParcels;
+
+  // Pickup KPI Metrics
+  int get totalPickups => _pickupParcels.length;
+  int get completedPickupsCount => _pickupParcels.where((p) => p.status.toLowerCase().contains('pick')).length;
+  int get pendingPickupsCount => _pickupParcels.where((p) => p.status.toLowerCase().contains('book')).length;
+  int get totalPickupPieces => _pickupParcels.fold(0, (sum, p) => sum + p.pieces);
 
   void setSelectedTab(String tab) {
     _selectedTab = tab;
@@ -83,7 +136,7 @@ class RunsheetProvider extends ChangeNotifier {
     return null;
   }
 
-  // Save offline sync queue in SharedPreferences
+  // Offline queue
   Future<void> _queueOfflineAction(Map<String, dynamic> action) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -96,129 +149,246 @@ class RunsheetProvider extends ChangeNotifier {
     }
   }
 
-  // Sync pending offline actions when connectivity resumes
   Future<void> syncOfflineActions() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final queue = prefs.getStringList('rider_offline_queue') ?? [];
       if (queue.isEmpty) return;
 
-      debugPrint('[Offline Sync] Processing ${queue.length} pending actions...');
-      final remainingQueue = <String>[];
-
-      for (final actionStr in queue) {
+      final remaining = <String>[];
+      for (final raw in queue) {
         try {
-          final action = jsonDecode(actionStr);
-          if (action['type'] == 'DELIVER') {
-            await _api.dio.put(
-              ApiEndpoints.parcelById(action['parcelId']),
-              data: action['payload'],
-            );
-          } else if (action['type'] == 'ATTEMPT') {
-            await _api.dio.post(
-              ApiEndpoints.deliveryAttempts,
-              data: action['payload'],
-            );
-            await _api.dio.put(
-              ApiEndpoints.parcelById(action['parcelId']),
-              data: {'data': {'status': action['status']}},
-            );
+          final action = jsonDecode(raw) as Map<String, dynamic>;
+          final type = action['type'];
+          final parcelId = action['parcelId'];
+
+          if (type == 'DELIVER') {
+            await _api.dio.put(ApiEndpoints.parcelById(parcelId), data: action['payload']);
+          } else if (type == 'PICKUP') {
+            await _api.dio.put(ApiEndpoints.parcelById(parcelId), data: action['payload']);
+          } else if (type == 'ATTEMPT') {
+            await _api.dio.post(ApiEndpoints.deliveryAttempts, data: action['payload']);
+            await _api.dio.put(ApiEndpoints.parcelById(parcelId), data: {'data': {'status': action['status']}});
           }
-        } catch (e) {
-          remainingQueue.add(actionStr);
+        } catch (_) {
+          remaining.add(raw);
         }
       }
-
-      await prefs.setStringList('rider_offline_queue', remainingQueue);
-      debugPrint('[Offline Sync] Remaining queue: ${remainingQueue.length}');
-    } catch (e) {
-      debugPrint('[Offline Sync] Sync error: $e');
-    }
+      await prefs.setStringList('rider_offline_queue', remaining);
+    } catch (_) {}
   }
 
-  // Fetch today's delivery sheet for the rider
+  // Primary loader: Fetches both Deliveries and Pickups bound to the logged-in Rider
   Future<void> fetchActiveRunsheet({int? riderId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    // Trigger offline sync first
+    // Trigger offline sync in background
     syncOfflineActions();
 
     try {
-      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      
-      final Map<String, dynamic> params = {
+      // 1. FETCH DELIVERIES (Explicit populate parameters to avoid Strapi 5 circular validation error)
+      final Map<String, dynamic> sheetParams = {
         'populate[0]': 'parcels',
         'populate[1]': 'parcels.destination_city',
         'populate[2]': 'parcels.shipper',
-        'populate[3]': 'rider',
+        'populate[3]': 'parcels.assigned_route',
+        'populate[4]': 'rider',
+        'populate[5]': 'route',
         'sort[0]': 'id:desc',
       };
 
       if (riderId != null) {
-        params['filters[rider][id][\$eq]'] = riderId;
+        sheetParams['filters[rider][id][\$eq]'] = riderId;
       }
 
-      final res = await _api.dio.get(ApiEndpoints.deliverySheets, queryParameters: params);
-      var list = res.data?['data'] ?? [];
+      var res = await _api.dio.get(ApiEndpoints.deliverySheets, queryParameters: sheetParams);
+      var sheets = res.data?['data'] ?? [];
 
-      if ((list is! List || list.isEmpty) && riderId != null) {
-        // Fallback: query active sheets and find by rider id or latest sheet
+      if ((sheets is! List || sheets.isEmpty) && riderId != null) {
+        // Fallback: search all recent sheets
         final fallbackRes = await _api.dio.get(
           ApiEndpoints.deliverySheets,
           queryParameters: {
             'populate[0]': 'parcels',
             'populate[1]': 'parcels.destination_city',
             'populate[2]': 'parcels.shipper',
-            'populate[3]': 'rider',
+            'populate[3]': 'parcels.assigned_route',
+            'populate[4]': 'rider',
+            'populate[5]': 'route',
             'sort[0]': 'id:desc',
+            'pagination[pageSize]': 10,
           },
         );
-        final allSheets = fallbackRes.data?['data'] ?? [];
-        if (allSheets is List && allSheets.isNotEmpty) {
-          final matched = allSheets.where((s) => s['rider']?['id'] == riderId).toList();
-          list = matched.isNotEmpty ? matched : allSheets;
+        final all = fallbackRes.data?['data'] ?? [];
+        if (all is List && all.isNotEmpty) {
+          final matched = all.where((s) => s['rider']?['id'] == riderId).toList();
+          sheets = matched.isNotEmpty ? matched : all;
         }
       }
 
-      if (list is! List || list.isEmpty) {
-        try {
-          final anyRes = await _api.dio.get(
-            ApiEndpoints.deliverySheets,
-            queryParameters: {
-              'populate[0]': 'parcels',
-              'populate[1]': 'parcels.destination_city',
-              'populate[2]': 'parcels.shipper',
-              'populate[3]': 'rider',
-              'sort[0]': 'id:desc',
-              'pagination[pageSize]': 5,
-            },
-          );
-          final candidates = anyRes.data?['data'] ?? [];
-          if (candidates is List && candidates.isNotEmpty) {
-            list = candidates;
-          }
-        } catch (_) {}
-      }
-
-      if (list is List && list.isNotEmpty) {
-        _activeSheet = DeliverySheetModel.fromJson(list.first);
+      if (sheets is List && sheets.isNotEmpty) {
+        _activeSheet = DeliverySheetModel.fromJson(sheets.first);
       } else {
         _activeSheet = null;
       }
+
+      // Also merge any parcels directly assigned in rider-assignments
+      if (riderId != null) {
+        try {
+          final assignRes = await _api.dio.get(
+            '/rider-assignments',
+            queryParameters: {
+              'filters[rider][id][\$eq]': riderId,
+              'populate[0]': 'parcel',
+              'populate[1]': 'parcel.destination_city',
+              'populate[2]': 'parcel.shipper',
+              'populate[3]': 'parcel.assigned_route',
+              'populate[4]': 'rider',
+              'sort[0]': 'id:desc',
+              'pagination[pageSize]': 100,
+            },
+          );
+          final rawAssignments = assignRes.data?['data'] ?? [];
+          if (rawAssignments is List && rawAssignments.isNotEmpty) {
+            final List<ParcelModel> extraDeliveries = [];
+            final List<ParcelModel> assignedPickups = [];
+
+            for (final a in rawAssignments) {
+              final rawP = a['parcel'];
+              if (rawP != null && rawP is Map<String, dynamic>) {
+                final pm = ParcelModel.fromJson(rawP);
+                final sLower = pm.status.toLowerCase();
+                final isPickupStatus = sLower.contains('book') || sLower.contains('pick');
+                final isDeliveryStatus = sLower.contains('out') ||
+                    sLower.contains('deliver') ||
+                    sLower.contains('attempt') ||
+                    sLower.contains('return');
+
+                if (isPickupStatus) {
+                  if (!assignedPickups.any((x) => x.id == pm.id)) {
+                    assignedPickups.add(pm);
+                  }
+                } else if (isDeliveryStatus) {
+                  if (!extraDeliveries.any((x) => x.id == pm.id) &&
+                      !(_activeSheet?.parcels.any((x) => x.id == pm.id) ?? false)) {
+                    extraDeliveries.add(pm);
+                  }
+                }
+              }
+            }
+
+            // Merge extra deliveries with existing active sheet parcels (deduped)
+            if (extraDeliveries.isNotEmpty) {
+              final currentList = _activeSheet?.parcels ?? [];
+              final Map<int, ParcelModel> parcelMap = {};
+              for (final p in currentList) {
+                parcelMap[p.id] = p;
+              }
+              for (final p in extraDeliveries) {
+                parcelMap[p.id] = p;
+              }
+              final combined = parcelMap.values.toList();
+
+              _activeSheet = DeliverySheetModel(
+                id: _activeSheet?.id ?? 1,
+                sheetNumber: _activeSheet?.sheetNumber ?? 'DS-RUNSHEET',
+                sheetDate: _activeSheet?.sheetDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                routeCode: _activeSheet?.routeCode ?? 'DEFAULT',
+                customName: _activeSheet?.customName ?? 'Today\'s Dispatch',
+                status: _activeSheet?.status ?? 'Out For Delivery',
+                rider: _activeSheet?.rider,
+                parcels: combined,
+              );
+            }
+
+            if (assignedPickups.isNotEmpty) {
+              _pickupParcels = assignedPickups;
+            }
+          }
+        } catch (assignErr) {
+          debugPrint('[Runsheet] Rider assignments fetch note: $assignErr');
+        }
+      }
+
+      // 2. DIRECT FALLBACK: If active sheet is still empty, query all Out for Delivery parcels
+      if (_activeSheet == null || _activeSheet!.parcels.isEmpty) {
+        try {
+          final outRes = await _api.dio.get(
+            ApiEndpoints.parcels,
+            queryParameters: {
+              'filters[status][\$in][0]': 'Out for Delivery',
+              'filters[status][\$in][1]': 'Out For delivery',
+              'populate[0]': 'destination_city',
+              'populate[1]': 'shipper',
+              'populate[2]': 'assigned_route',
+              'sort[0]': 'updatedAt:desc',
+              'pagination[pageSize]': 100,
+            },
+          );
+          final rawOut = outRes.data?['data'] ?? [];
+          if (rawOut is List && rawOut.isNotEmpty) {
+            final directDeliveries = rawOut.map<ParcelModel>((item) => ParcelModel.fromJson(item)).toList();
+            _activeSheet = DeliverySheetModel(
+              id: 1,
+              sheetNumber: 'DS-DISPATCH',
+              sheetDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+              routeCode: 'CITY-WIDE',
+              customName: 'City-Wide Out for Delivery',
+              status: 'Out For Delivery',
+              parcels: directDeliveries,
+            );
+          }
+        } catch (directErr) {
+          debugPrint('[Runsheet] Direct out of delivery fetch: $directErr');
+        }
+      }
+
+      // 3. FETCH PICKUPS (Booked parcels ready for rider collection from merchants)
+      try {
+        final pickupRes = await _api.dio.get(
+          ApiEndpoints.parcels,
+          queryParameters: {
+            'filters[status][\$in][0]': 'Booked',
+            'filters[status][\$in][1]': 'Total Booking',
+            'filters[status][\$in][2]': 'Picked up by rider',
+            'populate[0]': 'destination_city',
+            'populate[1]': 'shipper',
+            'populate[2]': 'pickup_location',
+            'sort[0]': 'updatedAt:desc',
+            'pagination[pageSize]': 100,
+          },
+        );
+        final rawPickups = pickupRes.data?['data'] ?? [];
+        if (rawPickups is List && rawPickups.isNotEmpty) {
+          final fetched = rawPickups.map<ParcelModel>((item) => ParcelModel.fromJson(item)).toList();
+          
+          // Merge with any assigned pickups without duplicates
+          final Map<int, ParcelModel> pickupMap = {};
+          for (final p in _pickupParcels) {
+            pickupMap[p.id] = p;
+          }
+          for (final p in fetched) {
+            pickupMap[p.id] = p;
+          }
+          _pickupParcels = pickupMap.values.toList();
+        }
+      } catch (pickupErr) {
+        debugPrint('[Runsheet] Error fetching pickups: $pickupErr');
+      }
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      debugPrint('[Runsheet] Error fetching runsheet: $e');
-      _activeSheet = null;
-      _errorMessage = 'Unable to fetch runsheet: $e';
+      debugPrint('[Runsheet] Error fetching data: $e');
+      _errorMessage = 'Unable to fetch runsheet data: $e';
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Mark parcel as DELIVERED (e-POD)
+  // Mark parcel as DELIVERED (Receiver e-POD)
   Future<bool> markParcelDelivered({
     required int parcelId,
     String? signatureBase64,
@@ -226,7 +396,6 @@ class RunsheetProvider extends ChangeNotifier {
     String? receiverName,
     String? receiverRelation,
   }) async {
-    // 1. Upload photo if present
     int? photoId;
     if (photoPath != null && photoPath.isNotEmpty) {
       photoId = await uploadMediaFile(photoPath);
@@ -243,13 +412,11 @@ class RunsheetProvider extends ChangeNotifier {
     };
 
     try {
-      // 2. Update on backend
       await _api.dio.put(
         ApiEndpoints.parcelById(parcelId),
         data: payload,
       );
     } catch (e) {
-      // Queue offline
       await _queueOfflineAction({
         'type': 'DELIVER',
         'parcelId': parcelId,
@@ -258,7 +425,6 @@ class RunsheetProvider extends ChangeNotifier {
       });
     }
 
-    // 3. Update local state
     if (_activeSheet != null) {
       final updatedList = _activeSheet!.parcels.map<ParcelModel>((p) {
         if (p.id == parcelId) {
@@ -279,6 +445,61 @@ class RunsheetProvider extends ChangeNotifier {
       );
       notifyListeners();
     }
+    return true;
+  }
+
+  // Mark parcel as PICKED UP (Sender Handover Verification & Signature)
+  Future<bool> markParcelPickedUp({
+    required int parcelId,
+    String? signatureBase64,
+    String? photoPath,
+    String? senderName,
+    String? senderPhone,
+    int? actualPieces,
+    double? actualWeight,
+  }) async {
+    int? photoId;
+    if (photoPath != null && photoPath.isNotEmpty) {
+      photoId = await uploadMediaFile(photoPath);
+    }
+
+    final commentMsg = 'Picked up from Sender: ${senderName ?? "Merchant"} (${senderPhone ?? ""})${photoId != null ? " [Pickup Photo #$photoId attached]" : ""}';
+
+    final payload = {
+      'data': {
+        'status': 'Picked up by rider',
+        'comments': commentMsg,
+        if (actualPieces != null) 'pieces': actualPieces,
+        if (actualWeight != null) 'weight': actualWeight,
+      }
+    };
+
+    try {
+      await _api.dio.put(
+        ApiEndpoints.parcelById(parcelId),
+        data: payload,
+      );
+    } catch (e) {
+      await _queueOfflineAction({
+        'type': 'PICKUP',
+        'parcelId': parcelId,
+        'payload': payload,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    }
+
+    // Update local pickup list
+    _pickupParcels = _pickupParcels.map<ParcelModel>((p) {
+      if (p.id == parcelId) {
+        return p.copyWith(
+          status: 'Picked up by rider',
+          comments: commentMsg,
+        );
+      }
+      return p;
+    }).toList();
+
+    notifyListeners();
     return true;
   }
 
@@ -311,13 +532,11 @@ class RunsheetProvider extends ChangeNotifier {
     };
 
     try {
-      // 1. Create delivery_attempt record in Strapi backend for Shipper Advise
       await _api.dio.post(
         ApiEndpoints.deliveryAttempts,
         data: attemptPayload,
       );
 
-      // 2. Update parcel status
       await _api.dio.put(
         ApiEndpoints.parcelById(parcelId),
         data: {
@@ -327,7 +546,6 @@ class RunsheetProvider extends ChangeNotifier {
         },
       );
     } catch (e) {
-      // Queue offline
       await _queueOfflineAction({
         'type': 'ATTEMPT',
         'parcelId': parcelId,
@@ -337,7 +555,6 @@ class RunsheetProvider extends ChangeNotifier {
       });
     }
 
-    // 3. Update local state
     final newAttempt = DeliveryAttemptModel(
       id: DateTime.now().millisecondsSinceEpoch,
       attemptTime: DateTime.now().toIso8601String(),
@@ -373,122 +590,52 @@ class RunsheetProvider extends ChangeNotifier {
     return true;
   }
 
-  // Find parcel by barcode or QR tracking number
+  // Find parcel by barcode across both Deliveries and Pickups
   ParcelModel? findParcelByTracking(String scannedCode) {
-    if (_activeSheet == null) return null;
     final code = scannedCode.trim().toLowerCase();
+
+    // Check delivery parcels
+    if (_activeSheet != null) {
+      try {
+        final found = _activeSheet!.parcels.firstWhere(
+          (p) => p.trackingNumber.toLowerCase() == code ||
+                 (p.referenceNumber != null && p.referenceNumber!.toLowerCase() == code),
+        );
+        return found;
+      } catch (_) {}
+    }
+
+    // Check pickup parcels
     try {
-      return _activeSheet!.parcels.firstWhere(
+      final found = _pickupParcels.firstWhere(
         (p) => p.trackingNumber.toLowerCase() == code ||
                (p.referenceNumber != null && p.referenceNumber!.toLowerCase() == code),
       );
-    } catch (e) {
-      return null;
-    }
+      return found;
+    } catch (_) {}
+
+    return null;
   }
 
-  // Realistic sample demonstration runsheet
-  DeliverySheetModel _generateDemoSheet(String dateStr) {
-    return DeliverySheetModel(
-      id: 101,
-      sheetNumber: 'DS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-      sheetDate: dateStr,
-      routeCode: 'KHI-DEF-04',
-      customName: 'DHA Phase 5 & 6 Route',
-      status: 'Out For Delivery',
-      parcels: [
-        ParcelModel(
-          id: 1001,
-          trackingNumber: 'DBA-98231',
-          status: 'Out For delivery',
-          codAmount: 3450.0,
-          weight: 1.5,
-          deliveryCharges: 250.0,
-          recipientName: 'Zeeshan Ahmed',
-          recipientPhone: '0300-1234567',
-          recipientAddress: 'Flat 402, Al-Rehman Heights, DHA Phase 5, Karachi',
-          allowToOpen: 'Yes',
-          pieces: 1,
-          serviceType: 'Overnight',
-          shipperName: 'Outfitters Store',
-          destinationCityName: 'Karachi, PK',
-          comments: 'Call before arriving',
-          deliveryAttempts: [
-            DeliveryAttemptModel(
-              id: 1,
-              attemptTime: DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-              status: 'Attempt 1',
-              failureReason: 'Consignee Not Available / Phone Unreachable',
-              shipperAdvice: 'Customer requested evening delivery after 4:00 PM. Call alternate: 0333-7654321',
-              adviceStatus: 'Resolved',
-            )
-          ],
-          latestShipperAdvice: 'Customer requested evening delivery after 4:00 PM. Call alternate: 0333-7654321',
-          latestAdviceStatus: 'Resolved',
-        ),
-        ParcelModel(
-          id: 1002,
-          trackingNumber: 'DBA-98105',
-          status: 'Out For delivery',
-          codAmount: 1850.0,
-          weight: 0.8,
-          deliveryCharges: 200.0,
-          recipientName: 'Mariam Khan',
-          recipientPhone: '0321-9876543',
-          recipientAddress: 'House 42, Street 5, Phase 6, Defence, Karachi',
-          allowToOpen: 'No',
-          pieces: 1,
-          serviceType: 'Overnight',
-          shipperName: 'Sana Safinaz Official',
-          destinationCityName: 'Karachi, PK',
-          comments: 'Ring second gate bell',
-          deliveryAttempts: [],
-        ),
-        ParcelModel(
-          id: 1003,
-          trackingNumber: 'DBA-97992',
-          status: 'Failed Attempt',
-          codAmount: 5200.0,
-          weight: 2.2,
-          deliveryCharges: 300.0,
-          recipientName: 'Dr. Faisal Qureshi',
-          recipientPhone: '0312-5551234',
-          recipientAddress: 'Consultant Clinic 4, Medical Complex, Sunset Blvd, Karachi',
-          allowToOpen: 'No',
-          pieces: 2,
-          serviceType: 'Rush',
-          shipperName: 'Khaadi Healthcare',
-          destinationCityName: 'Karachi, PK',
-          comments: 'Deliver between 10am - 2pm',
-          deliveryAttempts: [
-            DeliveryAttemptModel(
-              id: 2,
-              attemptTime: DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-              status: 'Attempt 1',
-              failureReason: 'Consignee Refused (COD Dispute)',
-              adviceStatus: 'Awaiting advice',
-              riderNotes: 'Customer claims price should be 4500 PKR not 5200 PKR',
-            )
-          ],
-        ),
-        ParcelModel(
-          id: 1004,
-          trackingNumber: 'DBA-97881',
-          status: 'Delivered',
-          codAmount: 4100.0,
-          weight: 1.0,
-          deliveryCharges: 200.0,
-          recipientName: 'Imran Shah',
-          recipientPhone: '0345-8889900',
-          recipientAddress: 'Office 12, Saima Trade Tower, I.I. Chundrigar Road, Karachi',
-          allowToOpen: 'Yes',
-          pieces: 1,
-          serviceType: 'Overnight',
-          shipperName: 'J. Junaid Jamshed',
-          destinationCityName: 'Karachi, PK',
-          deliveryAttempts: [],
-        ),
-      ],
-    );
+  // Dynamic backend lookup for barcodes not in local memory
+  Future<ParcelModel?> lookupParcelFromBackend(String trackingNumber) async {
+    final code = trackingNumber.trim();
+    try {
+      final res = await _api.dio.get(
+        ApiEndpoints.parcels,
+        queryParameters: {
+          'filters[tracking_number][\$eq]': code,
+          'populate': '*',
+        },
+      );
+      final list = res.data?['data'];
+      if (list is List && list.isNotEmpty) {
+        final p = ParcelModel.fromJson(list.first);
+        return p;
+      }
+    } catch (e) {
+      debugPrint('[Lookup] Error looking up parcel #$code: $e');
+    }
+    return null;
   }
 }
