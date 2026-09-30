@@ -254,10 +254,10 @@ export default function OrderApiPage() {
 {`{
   "data": {
     "id": 1042,
-    "tracking_number": "DBA-9821-X9",
+    "tracking_number": "SHZ100001134",
     "status": "Booked",
     "cod_amount": 3500,
-    "tracking_url": "https://track.dbarc.com/DBA-9821-X9"
+    "tracking_url": "https://track.dbarc.com/SHZ100001134"
   }
 }`}
                       </pre>

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { apiClient } from '@/shared/api/api-client';
+import { generateTrackingId } from '@/shared/utils/tracking';
 import { 
   ShoppingBag, 
   Check, 
@@ -125,7 +126,7 @@ export default function SampleShirtStorePage() {
     setIsSubmitting(true);
 
     try {
-      const trackingNumber = `DBA-${Math.floor(100000 + Math.random() * 900000)}-PK`;
+      const trackingNumber = generateTrackingId('shipper');
       const isCod = paymentType === 'COD';
       const actualCod = isCod ? totalPrice : 0;
       const cityName = cities.find(c => String(c.id) === selectedCityId)?.name || 'Destination City';

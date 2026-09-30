@@ -302,20 +302,28 @@ export const ShipmentTable = () => {
     columnHelper.display({
       id: 'actions',
       header: 'Actions',
-      cell: (info) => (
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-lg"
-          onClick={() => {
-            setSelectedShipment(info.row.original);
-            setIsEditModalOpen(true);
-          }}
-        >
-          <Edit className="h-4 w-4 mr-1" />
-          Edit
-        </Button>
-      ),
+      cell: (info) => {
+        const s = (info.row.original.status || '').toLowerCase().trim();
+        const isBooked = s === 'booked' || s === 'total booking';
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!isBooked}
+            className={cn('rounded-lg', !isBooked && 'opacity-50 cursor-not-allowed text-slate-400')}
+            title={isBooked ? 'Edit Booked Order' : `Cannot edit: Only Booked orders can be edited (Current: ${info.row.original.status})`}
+            onClick={() => {
+              if (isBooked) {
+                setSelectedShipment(info.row.original);
+                setIsEditModalOpen(true);
+              }
+            }}
+          >
+            <Edit className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
+        );
+      },
     }),
   ];
 

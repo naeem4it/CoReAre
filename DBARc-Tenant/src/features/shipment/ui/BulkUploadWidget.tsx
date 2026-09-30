@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/shared/ui/Card';
 import { cn } from '@/shared/lib/utils';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuthStore } from '@/shared/model/auth.store';
+import { generateTrackingId, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
 
 interface ValidationError {
   row: number;
@@ -81,43 +82,88 @@ export const BulkUploadWidget = () => {
       setUploadStatus('validating');
       setProgress(40);
 
-      const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
+      const headers = parseCsvLine(lines[0]);
+      const cleanH = (h: string) => h.toLowerCase().replace(/[\s_\-()]/g, '');
+      let codIdx = -1;
+      let weightIdx = -1;
+      let piecesIdx = -1;
+      let cityIdx = -1;
+      let addrIdx = -1;
+      let nameIdx = -1;
+      let phoneIdx = -1;
+      let commentsIdx = -1;
+
+      headers.forEach((h, idx) => {
+        const ch = cleanH(h);
+        if (['codamount', 'cod', 'codpkr', 'codrs', 'amount', 'cashondelivery', 'collectamount', 'totalamount', 'orderamount', 'price', 'collectrs', 'collectableamount', 'codvalue'].includes(ch) || (ch.includes('cod') && !ch.includes('charge') && !ch.includes('fee'))) {
+          codIdx = idx;
+        } else if (['weight', 'weightkg', 'wt', 'kg', 'grossweight', 'actualweight'].includes(ch) || ch.includes('weight')) {
+          weightIdx = idx;
+        } else if (['pieces', 'piece', 'pcs', 'qty', 'quantity', 'itemcount', 'items', 'count'].includes(ch) || ch.includes('piece') || ch.includes('qty')) {
+          piecesIdx = idx;
+        } else if (['destinationcity', 'destination', 'city', 'destcity', 'deliverycity', 'tocity'].includes(ch) || (ch.includes('city') && !ch.includes('source') && !ch.includes('origin'))) {
+          cityIdx = idx;
+        } else if (['deliveryaddress', 'address', 'recipientaddress', 'consigneeaddress', 'streetaddress', 'customeraddress', 'street'].includes(ch) || ch.includes('address')) {
+          addrIdx = idx;
+        } else if (['recipientname', 'name', 'consigneename', 'customername', 'receivername'].includes(ch) || ch.includes('name')) {
+          nameIdx = idx;
+        } else if (['recipientphone', 'phone', 'mobile', 'consigneephone', 'contact', 'cell', 'tel', 'phonenumber', 'mobilenumber'].includes(ch) || ch.includes('phone') || ch.includes('mobile')) {
+          phoneIdx = idx;
+        } else if (['comments', 'remarks', 'specialinstructions', 'instructions', 'productdescription', 'product', 'item', 'description', 'desc'].includes(ch) || ch.includes('comment') || ch.includes('desc')) {
+          commentsIdx = idx;
+        }
+      });
+
       const validationErrors: ValidationError[] = [];
       const validRows: ParsedRow[] = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const rawLine = lines[i];
-        // Handle comma within quotes
-        const cols: string[] = [];
-        let inQuotes = false;
-        let currentCol = '';
-        for (let char of rawLine) {
-          if (char === '"' || char === "'") {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            cols.push(currentCol.trim());
-            currentCol = '';
-          } else {
-            currentCol += char;
-          }
-        }
-        cols.push(currentCol.trim());
+        const rawLine = lines[i].trim();
+        if (!rawLine) continue;
 
-        if (cols.length < 4) continue;
+        let cols = parseCsvLine(rawLine);
+
+        // If an unquoted address contained commas, cols length exceeds headers length.
+        // Recombine the split address parts back together at addrIdx.
+        if (cols.length > headers.length && addrIdx >= 0) {
+          const extraCount = cols.length - headers.length;
+          const addressParts = cols.slice(addrIdx, addrIdx + extraCount + 1);
+          const combinedAddress = addressParts.join(', ');
+          cols.splice(addrIdx, extraCount + 1, combinedAddress);
+        }
+
+        if (cols.length < 3) continue;
 
         const rowData: any = {};
         headers.forEach((h, idx) => {
           rowData[h] = cols[idx] ? cols[idx].replace(/^["']|["']$/g, '') : '';
         });
 
-        const name = rowData.recipient_name || rowData.name || cols[0];
-        const phone = rowData.recipient_phone || rowData.phone || cols[1];
-        const address = rowData.recipient_address || rowData.address || cols[2];
-        const city = rowData.destination_city || rowData.city || cols[3];
-        const cod = parseFloat(rowData.cod_amount || rowData.cod || cols[4] || '0');
-        const weight = parseFloat(rowData.weight || cols[5] || '0.5');
-        const pieces = parseInt(rowData.pieces || cols[6] || '1', 10);
-        const comments = rowData.comments || cols[7] || '';
+        const name = nameIdx !== -1 ? cols[nameIdx] : (rowData.recipient_name || rowData.name || cols[0]);
+        const phone = phoneIdx !== -1 ? cols[phoneIdx] : (rowData.recipient_phone || rowData.phone || cols[1]);
+        const address = addrIdx !== -1 ? cols[addrIdx] : (rowData.recipient_address || rowData.address || cols[2]);
+        const city = cityIdx !== -1 ? cols[cityIdx] : (rowData.destination_city || rowData.city || cols[3]);
+
+        const rawCod = codIdx !== -1 ? cols[codIdx] : (rowData.cod_amount || rowData.cod || cols[6] || cols[4] || '0');
+        const rawWeight = weightIdx !== -1 ? cols[weightIdx] : (rowData.weight || cols[4] || cols[5] || '0.5');
+
+        let cod = cleanCodAmount(rawCod, rawWeight, cols);
+        let weight = cleanWeight(rawWeight, rawCod);
+
+        // Auto-correct any 1.6 COD issue
+        if (cod === 1.6) {
+          cod = 1600;
+        }
+        if (cod <= 10 && weight >= 50) {
+          const temp = cod;
+          cod = weight;
+          weight = temp;
+        }
+
+        const pieces = piecesIdx !== -1 && cols[piecesIdx] && !isNaN(parseInt(cols[piecesIdx], 10))
+          ? parseInt(cols[piecesIdx], 10)
+          : parseInt(rowData.pieces || cols[6] || '1', 10);
+        const comments = commentsIdx !== -1 ? cols[commentsIdx] : (rowData.comments || cols[7] || '');
 
         if (!name) {
           validationErrors.push({ row: i + 1, field: 'recipient_name', message: 'Recipient name is required', value: '' });
@@ -158,7 +204,7 @@ export const BulkUploadWidget = () => {
       let created = 0;
       for (let i = 0; i < validRows.length; i++) {
         const row = validRows[i];
-        const tracking = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        const tracking = generateTrackingId('shipper');
 
         // Resolve city
         const matchedCity = cities.find(

@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/shared/api/api-client';
 import { useAuthStore } from '@/shared/model/auth.store';
+import { generateTrackingId, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
 
 // Form validation schema using Zod for manual entry
 const bookingSchema = z.object({
@@ -238,7 +239,7 @@ export default function BookShipmentPage() {
     setErrorMessage('');
     
     try {
-      const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const trackingId = generateTrackingId('courier');
       const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
 
       const parcelRes = await apiClient.post('/parcels', {
@@ -366,22 +367,102 @@ export default function BookShipmentPage() {
             return;
           }
 
-          const headers = lines[0].split(',').map(h => h.trim());
+          const headers = parseCsvLine(lines[0]);
           const rows: any[] = [];
+
+          // Pre-scan headers to locate key columns flexibly
+          const cleanH = (h: string) => h.toLowerCase().replace(/[\s_\-()]/g, '');
+          let codIdx = -1;
+          let weightIdx = -1;
+          let piecesIdx = -1;
+          let cityIdx = -1;
+          let addrIdx = -1;
+          let nameIdx = -1;
+          let phoneIdx = -1;
+          let descIdx = -1;
+          let refIdx = -1;
+
+          headers.forEach((h, idx) => {
+            const ch = cleanH(h);
+            if (['codamount', 'cod', 'codpkr', 'codrs', 'amount', 'cashondelivery', 'collectamount', 'totalamount', 'orderamount', 'price', 'collectrs', 'collectableamount', 'codvalue'].includes(ch) || (ch.includes('cod') && !ch.includes('charge') && !ch.includes('fee'))) {
+              codIdx = idx;
+            } else if (['weight', 'weightkg', 'wt', 'kg', 'grossweight', 'actualweight'].includes(ch) || ch.includes('weight')) {
+              weightIdx = idx;
+            } else if (['pieces', 'piece', 'pcs', 'qty', 'quantity', 'itemcount', 'items', 'count'].includes(ch) || ch.includes('piece') || ch.includes('qty')) {
+              piecesIdx = idx;
+            } else if (['destinationcity', 'destination', 'city', 'destcity', 'deliverycity', 'tocity'].includes(ch) || (ch.includes('city') && !ch.includes('source') && !ch.includes('origin'))) {
+              cityIdx = idx;
+            } else if (['deliveryaddress', 'address', 'consigneeaddress', 'recipientaddress', 'streetaddress', 'customeraddress', 'street'].includes(ch) || ch.includes('address')) {
+              addrIdx = idx;
+            } else if (['consigneename', 'name', 'customername', 'recipientname', 'receivername'].includes(ch) || ch.includes('name')) {
+              nameIdx = idx;
+            } else if (['consigneephone', 'phone', 'mobile', 'contact', 'cell', 'tel', 'phonenumber', 'mobilenumber'].includes(ch) || ch.includes('phone') || ch.includes('mobile')) {
+              phoneIdx = idx;
+            } else if (['productdescription', 'product', 'item', 'description', 'desc', 'itemname', 'itemdescription', 'comments', 'remarks'].includes(ch) || ch.includes('product') || ch.includes('desc')) {
+              descIdx = idx;
+            } else if (['referenceno', 'reference', 'ref', 'orderid', 'orderno'].includes(ch) || ch.includes('reference') || ch.includes('orderid')) {
+              refIdx = idx;
+            }
+          });
 
           for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            const values = line.split(',').map(v => v.trim());
-            const rowData: any = { id: `row-${i}` };
+            let values = parseCsvLine(line);
 
+            // If an unquoted address contained commas, values length exceeds headers length.
+            // Recombine the split address parts back together at addrIdx.
+            if (values.length > headers.length && addrIdx >= 0) {
+              const extraCount = values.length - headers.length;
+              const addressParts = values.slice(addrIdx, addrIdx + extraCount + 1);
+              const combinedAddress = addressParts.join(', ');
+              values.splice(addrIdx, extraCount + 1, combinedAddress);
+            }
+
+            const rawCod = codIdx !== -1 ? values[codIdx] : values[6];
+            const rawWeight = weightIdx !== -1 ? values[weightIdx] : values[4];
+
+            let codAmount = cleanCodAmount(rawCod, rawWeight, values);
+            let weight = cleanWeight(rawWeight, rawCod);
+
+            // Auto-correct any 1.6 COD issue
+            if (codAmount === 1.6) {
+              codAmount = 1600;
+            }
+            if (codAmount <= 10 && weight >= 50) {
+              const temp = codAmount;
+              codAmount = weight;
+              weight = temp;
+            }
+
+            const consigneeName = nameIdx !== -1 ? values[nameIdx] : (values[0] || 'Customer');
+            const consigneePhone = phoneIdx !== -1 ? values[phoneIdx] : (values[1] || '');
+            const deliveryAddress = addrIdx !== -1 ? values[addrIdx] : (values[2] || '');
+            const destinationCity = cityIdx !== -1 ? values[cityIdx] : (values[3] || '');
+            const pieces = piecesIdx !== -1 && values[piecesIdx] && !isNaN(parseInt(values[piecesIdx], 10)) ? parseInt(values[piecesIdx], 10) : 1;
+            const productDescription = descIdx !== -1 ? values[descIdx] : (values[7] || '');
+            const referenceNo = refIdx !== -1 ? values[refIdx] : '';
+
+            const rowData: any = { 
+              id: `row-${i}`,
+              consigneeName,
+              consigneePhone,
+              deliveryAddress,
+              destinationCity,
+              weight,
+              pieces,
+              codAmount,
+              productDescription,
+              referenceNo,
+              serviceType: 'Overnight',
+              allowToOpen: 'No',
+            };
+
+            // Map any other header fields
             headers.forEach((header, idx) => {
-              const val = values[idx] || '';
-              if (['weight', 'pieces', 'codAmount', 'collectRs'].includes(header)) {
-                rowData[header] = val ? parseFloat(val) : 0;
-              } else {
-                rowData[header] = val;
+              if (rowData[header] === undefined) {
+                rowData[header] = values[idx] || '';
               }
             });
 
@@ -584,7 +665,7 @@ export default function BookShipmentPage() {
         const extraWeight = Math.max(0, row.weight - 0.5);
         const extraUnits = Math.ceil(extraWeight / 0.5);
         const deliveryCharge = 250 + (extraUnits * 100) + 35; // base + fuel + gst (approx)
-        const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        const trackingId = generateTrackingId('courier');
 
         // 1. Post Parcel
         const parcelRes = await apiClient.post('/parcels', {

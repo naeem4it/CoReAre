@@ -45,12 +45,26 @@ export interface ShipperStatsGridProps {
   isLoading?: boolean;
 }
 
+interface StatCardItem {
+  icon: any;
+  isPrimaryDark?: boolean;
+  iconColor?: string;
+  bottomBarColor?: string;
+  href: string;
+  key?: string;
+  label: string;
+  value: number;
+  percentage?: number;
+  codAmount?: number;
+  queryStatus?: string;
+}
+
 export function ShipperStatsGrid({ metrics, isLoading = false }: ShipperStatsGridProps) {
   const formatRs = (amount: number) => {
     return `Rs ${amount.toLocaleString('en-US')}`;
   };
 
-  const cards = [
+  const cards: StatCardItem[] = [
     // 1. TOTAL BOOKING
     {
       ...metrics.totalBooking,
@@ -173,7 +187,7 @@ export function ShipperStatsGrid({ metrics, isLoading = false }: ShipperStatsGri
                 {isLoading ? (
                   <span className="inline-block w-16 h-3 bg-white/10 animate-pulse rounded" />
                 ) : (
-                  formatRs(card.codAmount)
+                  formatRs(card.codAmount || 0)
                 )}
               </div>
             </Link>
@@ -215,7 +229,7 @@ export function ShipperStatsGrid({ metrics, isLoading = false }: ShipperStatsGri
                 {isLoading ? (
                   <span className="inline-block w-12 h-3 bg-slate-100 animate-pulse rounded" />
                 ) : (
-                  formatRs(card.codAmount)
+                  formatRs(card.codAmount || 0)
                 )}
               </div>
 

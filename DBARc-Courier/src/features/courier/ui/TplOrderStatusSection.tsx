@@ -170,7 +170,7 @@ export function TplOrderStatusSection({ fromDate, toDate }: TplOrderStatusSectio
         const currentStatus = typeof p.status === 'string' ? p.status : (typeof p.delivery_status === 'string' ? p.delivery_status : 'In Transit');
         const translation = translate3PLStatus(pProviderCode, currentStatus);
 
-        const trackingNum = p.tracking_number || `DBA-${100000 + (p.id || idx)}`;
+        const trackingNum = p.tracking_number || `SHZ${100000000 + (p.id || idx)}`;
         const tplTrackingNum = p.secondary_barcode || p.tpl_tracking_number || `${pProviderCode.toUpperCase()}-${Math.floor(20000000 + Math.random() * 80000000)}`;
 
         const destCityName = typeof p.destination_city === 'string' 

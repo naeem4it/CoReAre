@@ -39,7 +39,10 @@ import {
   HelpCircle,
   Navigation,
   MapPin,
-  Building2
+  Building2,
+  Lock,
+  Edit3,
+  CheckCircle2
 } from 'lucide-react';
 
 import PortalLayout from '@/components/PortalLayout';
@@ -49,7 +52,9 @@ import { TextBox } from '@/components/ui/form/text-box';
 import { TextAreaInput } from '@/components/ui/form/text-area';
 import { SearchableDropdown } from '@/components/ui/form/searchable-dropdown';
 import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
+import { findPakistanLocation, FLAT_PAKISTAN_LOCATIONS } from '@/shared/data/pakistan-locations';
 import { evaluateLogisticsRouting, TPLPartnerModel } from '@/shared/data/pakistan-3pl-city-mappings';
+import { generateTrackingId, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
 
 const PAKISTAN_CITY_COORDINATES = [
   { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
@@ -240,6 +245,77 @@ export function calculateDeliveryCharge(
 
   return Math.round(charge);
 }
+
+// Robust helper to extract destination city from various Strapi relation shapes, strings, or addresses
+const extractDestinationCity = (parcelOrAttrs: any): string => {
+  if (!parcelOrAttrs) return '';
+  const attrs = parcelOrAttrs.attributes || parcelOrAttrs;
+
+  // 1. Relational object with CityName / city_name / name / tehsil (Strapi v4/v5)
+  const dObj = attrs.destination_city?.data?.attributes || attrs.destination_city?.attributes || attrs.destination_city;
+  if (dObj && typeof dObj === 'object') {
+    const name = dObj.CityName || dObj.city_name || dObj.cityName || dObj.name || dObj.tehsil || dObj.title;
+    if (name && typeof name === 'string' && name.trim() && isNaN(Number(name))) {
+      return name.trim();
+    }
+  }
+
+  // 2. Direct string fields
+  if (typeof attrs.destination_city === 'string' && attrs.destination_city.trim() && isNaN(Number(attrs.destination_city))) {
+    return attrs.destination_city.trim();
+  }
+  if (attrs.destination_city_name && typeof attrs.destination_city_name === 'string' && attrs.destination_city_name.trim()) {
+    return attrs.destination_city_name.trim();
+  }
+  if (attrs.destinationCity && typeof attrs.destinationCity === 'string' && attrs.destinationCity.trim()) {
+    return attrs.destinationCity.trim();
+  }
+  if (attrs.destination && typeof attrs.destination === 'string' && attrs.destination.trim() && attrs.destination.trim().toLowerCase() !== 'dest') {
+    return attrs.destination.trim();
+  }
+
+  // 3. Fallback: Parse from recipient_address (e.g. "Street 4, Sector G-9, Islamabad")
+  const addr = attrs.recipient_address || attrs.consigneeAddress || attrs.delivery_address || attrs.address || '';
+  if (addr && typeof addr === 'string') {
+    const parts = addr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (!part || part.toLowerCase() === 'pakistan' || part.toLowerCase() === 'pk') continue;
+      const matched = findPakistanLocation(part);
+      if (matched) return matched.tehsil;
+      if (!/\d/.test(part) && part.length >= 3 && part.length <= 25) {
+        return part;
+      }
+    }
+  }
+
+  return '';
+};
+
+const extractSourceCity = (parcelOrAttrs: any): string => {
+  if (!parcelOrAttrs) return '';
+  const attrs = parcelOrAttrs.attributes || parcelOrAttrs;
+
+  const sObj = attrs.source_city?.data?.attributes || attrs.source_city?.attributes || attrs.source_city;
+  if (sObj && typeof sObj === 'object') {
+    const name = sObj.CityName || sObj.city_name || sObj.cityName || sObj.name || sObj.tehsil || sObj.title;
+    if (name && typeof name === 'string' && name.trim() && isNaN(Number(name))) {
+      return name.trim();
+    }
+  }
+
+  if (typeof attrs.source_city === 'string' && attrs.source_city.trim() && isNaN(Number(attrs.source_city))) {
+    return attrs.source_city.trim();
+  }
+  if (attrs.source_city_name && typeof attrs.source_city_name === 'string' && attrs.source_city_name.trim()) {
+    return attrs.source_city_name.trim();
+  }
+  if (attrs.sourceCity && typeof attrs.sourceCity === 'string' && attrs.sourceCity.trim()) {
+    return attrs.sourceCity.trim();
+  }
+
+  return '';
+};
 
 function BookShipmentForm() {
   const router = useRouter();
@@ -455,6 +531,395 @@ function BookShipmentForm() {
   } = methods;
 
   const userEditedCodRef = React.useRef(false);
+
+  // Edit Existing Booked Order States
+  const [editingParcel, setEditingParcel] = React.useState<{
+    id: number | string;
+    documentId?: string;
+    trackingNumber: string;
+    status: string;
+    customerName?: string;
+  } | null>(null);
+  const [showEditOrderModal, setShowEditOrderModal] = React.useState(false);
+  const [bookedOrdersList, setBookedOrdersList] = React.useState<any[]>([]);
+  const [loadingBookedOrders, setLoadingBookedOrders] = React.useState(false);
+  const [bookedOrdersSearch, setBookedOrdersSearch] = React.useState('');
+  const [filterOnlyBooked, setFilterOnlyBooked] = React.useState(true);
+
+  const fetchBookedOrders = React.useCallback(async () => {
+    setLoadingBookedOrders(true);
+    try {
+      const res = await apiClient.get('/parcels?populate=*&sort=createdAt:desc&pagination[limit]=100');
+      const raw = res.data?.data || [];
+      const mapped = raw.map((item: any) => {
+        const attrs = item.attributes || item;
+        const destCity = extractDestinationCity(attrs);
+        const srcCity = extractSourceCity(attrs);
+        return {
+          id: item.id,
+          documentId: attrs.documentId || item.documentId,
+          trackingNumber: attrs.tracking_number || attrs.trackingNumber || `SHZ${item.id}`,
+          customerName: attrs.recipient_name || attrs.customerName || 'Customer',
+          phone: attrs.recipient_phone || attrs.phone || '',
+          address: attrs.recipient_address || attrs.address || '',
+          destinationCity: destCity,
+          sourceCity: srcCity,
+          codAmount: Number(attrs.cod_amount) || 0,
+          weight: Number(attrs.weight) || 0.5,
+          pieces: Number(attrs.pieces) || 1,
+          status: attrs.status || 'Booked',
+          paymentType: attrs.payment_type || (attrs.cod_amount > 0 ? 'COD' : 'PAID'),
+          allowToOpen: attrs.allow_to_open || 'No',
+          comments: attrs.comments || attrs.product_description || '',
+          productDescription: attrs.comments || attrs.product_description || '',
+          originOffice: attrs.origin_office?.id || attrs.origin_office,
+          createdAt: attrs.createdAt || attrs.created_at || new Date().toISOString(),
+        };
+      });
+      setBookedOrdersList(mapped);
+    } catch (err: any) {
+      console.error('Failed to fetch booked orders:', err);
+    } finally {
+      setLoadingBookedOrders(false);
+    }
+  }, []);
+
+  const handleOpenEditModal = () => {
+    setShowEditOrderModal(true);
+    fetchBookedOrders();
+  };
+
+  const handleSelectOrderToEdit = React.useCallback((order: any) => {
+    const s = String(order.status || '').toLowerCase().trim();
+    if (s && s !== 'booked' && s !== 'total booking' && s !== 'pending') {
+      alert(`Cannot edit order ${order.trackingNumber}: Current status is '${order.status}'. Only orders in 'Booked' status can be modified.`);
+      return;
+    }
+
+    userEditedCodRef.current = true;
+    setBookingMode('manual');
+    setEditingParcel({
+      id: order.id,
+      documentId: order.documentId,
+      trackingNumber: order.trackingNumber,
+      status: order.status || 'Booked',
+      customerName: order.customerName,
+    });
+
+    let cleanAddress = order.address || '';
+    if (order.destinationCity && cleanAddress.toLowerCase().endsWith(`, ${order.destinationCity.toLowerCase()}`)) {
+      cleanAddress = cleanAddress.substring(0, cleanAddress.length - (order.destinationCity.length + 2)).trim();
+    }
+
+    const formValues: BookingFormValues = {
+      consigneeName: order.customerName || '',
+      consigneePhone: order.phone || '',
+      deliveryAddress: cleanAddress || order.address || '',
+      destinationCity: order.destinationCity || '',
+      destinationCityName: order.destinationCity || '',
+      weight: Number(order.weight) || 0.5,
+      pieces: Number(order.pieces) || 1,
+      codAmount: Number(order.codAmount) || 0,
+      paymentType: order.paymentType || (Number(order.codAmount) > 0 ? 'COD' : 'PAID'),
+      allowToOpen: order.allowToOpen || 'No',
+      comments: order.comments || '',
+      productDescription: order.productDescription || order.comments || 'General Goods',
+      pickupLocation: order.originOffice ? String(order.originOffice) : '',
+      sourceCity: order.sourceCity || '',
+      sourceCityName: order.sourceCity || '',
+      consigneeEmail: order.email || '',
+      consigneeAltPhone: order.altPhone || '',
+      area: order.area || '',
+      referenceNo: order.referenceNo || '',
+      specialInstructions: order.specialInstructions || '',
+      serviceType: order.serviceType || 'Overnight',
+      pickupDate: todayStr,
+      pickupTimeSlot: 'Morning (09 AM - 12 PM)',
+      collectReplacement: 'No',
+      collectRs: 0,
+      parcelDetail: '',
+    };
+
+    reset(formValues);
+
+    // Explicitly update individual inputs to trigger any registered listeners
+    setValue('consigneeName', formValues.consigneeName, { shouldDirty: true });
+    setValue('consigneePhone', formValues.consigneePhone, { shouldDirty: true });
+    setValue('deliveryAddress', formValues.deliveryAddress, { shouldDirty: true });
+    setValue('destinationCity', formValues.destinationCity, { shouldDirty: true });
+    setValue('destinationCityName', formValues.destinationCityName, { shouldDirty: true });
+    setValue('weight', formValues.weight, { shouldDirty: true });
+    setValue('pieces', formValues.pieces, { shouldDirty: true });
+    setValue('codAmount', formValues.codAmount, { shouldDirty: true });
+    setValue('paymentType', formValues.paymentType, { shouldDirty: true });
+    setValue('allowToOpen', formValues.allowToOpen, { shouldDirty: true });
+    setValue('comments', formValues.comments, { shouldDirty: true });
+    setValue('productDescription', formValues.productDescription, { shouldDirty: true });
+    if (formValues.pickupLocation) {
+      setValue('pickupLocation', formValues.pickupLocation, { shouldDirty: true });
+    }
+    if (formValues.sourceCity) {
+      setValue('sourceCity', formValues.sourceCity, { shouldDirty: true });
+      setValue('sourceCityName', formValues.sourceCityName, { shouldDirty: true });
+    }
+    if (formValues.consigneeEmail) {
+      setValue('consigneeEmail', formValues.consigneeEmail, { shouldDirty: true });
+    }
+    if (formValues.consigneeAltPhone) {
+      setValue('consigneeAltPhone', formValues.consigneeAltPhone, { shouldDirty: true });
+    }
+    if (formValues.area) {
+      setValue('area', formValues.area, { shouldDirty: true });
+    }
+
+    setShowEditOrderModal(false);
+    setBookingStatus('idle');
+    setErrorMessage('');
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [setValue, reset, todayStr]);
+
+  const handleCancelEditing = React.useCallback(() => {
+    setEditingParcel(null);
+    reset({
+      sourceCity: '',
+      sourceCityName: '',
+      weight: 0.5,
+      pieces: 1,
+      paymentType: 'COD',
+      codAmount: 0,
+      serviceType: 'Overnight',
+      allowToOpen: 'No',
+      collectReplacement: 'No',
+      collectRs: 0,
+      consigneeEmail: '',
+      consigneeAltPhone: '',
+      comments: '',
+      referenceNo: '',
+      parcelDetail: '',
+      pickupDate: todayStr,
+      pickupTimeSlot: 'Morning (09 AM - 12 PM)',
+      consigneeName: '',
+      consigneePhone: '',
+      deliveryAddress: '',
+      destinationCity: '',
+      area: '',
+      productDescription: '',
+      specialInstructions: '',
+    });
+    setBookingStatus('idle');
+    setErrorMessage('');
+  }, [reset, todayStr]);
+
+  const filteredModalOrders = React.useMemo(() => {
+    return bookedOrdersList.filter(order => {
+      const s = String(order.status || '').toLowerCase().trim();
+      const isBooked = s === 'booked' || s === 'total booking' || s === 'pending';
+      if (filterOnlyBooked && !isBooked) return false;
+
+      if (!bookedOrdersSearch.trim()) return true;
+      const q = bookedOrdersSearch.toLowerCase().trim();
+      return (
+        order.trackingNumber.toLowerCase().includes(q) ||
+        order.customerName.toLowerCase().includes(q) ||
+        order.phone.toLowerCase().includes(q) ||
+        order.destinationCity.toLowerCase().includes(q) ||
+        order.address.toLowerCase().includes(q)
+      );
+    });
+  }, [bookedOrdersList, filterOnlyBooked, bookedOrdersSearch]);
+
+  const lastLoadedEditKeyRef = React.useRef<string | null>(null);
+  const [isLoadingDirectOrder, setIsLoadingDirectOrder] = React.useState(false);
+
+  // Handle URL edit params (e.g. ?editId=372 or ?editTracking=SHZ100001134 or ?documentId=...)
+  React.useEffect(() => {
+    const editId = searchParams?.get('editId');
+    const editTracking = searchParams?.get('editTracking');
+    const docId = searchParams?.get('documentId') || searchParams?.get('editDocId');
+    if (!editId && !editTracking && !docId) return;
+
+    const currentKey = `${editId || ''}_${editTracking || ''}_${docId || ''}`;
+    if (lastLoadedEditKeyRef.current === currentKey) return;
+
+    const loadDirectOrder = async () => {
+      setIsLoadingDirectOrder(true);
+      try {
+        let orderItem: any = null;
+        const cleanId = editId ? String(editId).trim() : '';
+        const cleanTracking = editTracking ? String(editTracking).trim() : '';
+        const cleanDocId = docId ? String(docId).trim() : '';
+
+        // Strategy 0: Check if already present in bookedOrdersList state
+        if (bookedOrdersList && bookedOrdersList.length > 0) {
+          const cached = bookedOrdersList.find(o => 
+            (cleanId && (String(o.id) === cleanId || o.documentId === cleanId)) ||
+            (cleanDocId && o.documentId === cleanDocId) ||
+            (cleanTracking && o.trackingNumber === cleanTracking)
+          );
+          if (cached) {
+            orderItem = cached;
+          }
+        }
+
+        // Strategy 1: Direct documentId route if docId is available
+        if (!orderItem && cleanDocId) {
+          try {
+            const res = await apiClient.get(`/parcels/${encodeURIComponent(cleanDocId)}?populate=*`);
+            const data = res.data?.data;
+            if (Array.isArray(data) && data.length > 0) {
+              orderItem = data[0];
+            } else if (data && !Array.isArray(data) && (data.id || data.attributes)) {
+              orderItem = data;
+            }
+          } catch (e) {
+            console.warn('DocId fetch failed:', e);
+          }
+        }
+
+        // Strategy 2: Tracking number filter (Exact match)
+        if (!orderItem && cleanTracking) {
+          try {
+            const res = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${encodeURIComponent(cleanTracking)}&populate=*`);
+            const list = res.data?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              orderItem = list[0];
+            }
+          } catch (e) {
+            console.warn('Tracking filter failed:', e);
+          }
+        }
+
+        // Strategy 3: Direct route /parcels/:id
+        if (!orderItem && cleanId) {
+          try {
+            const res = await apiClient.get(`/parcels/${encodeURIComponent(cleanId)}?populate=*`);
+            const data = res.data?.data;
+            if (Array.isArray(data) && data.length > 0) {
+              orderItem = data[0];
+            } else if (data && !Array.isArray(data) && (data.id || data.attributes)) {
+              orderItem = data;
+            }
+          } catch (e) {
+            console.warn('Direct id endpoint failed:', e);
+          }
+        }
+
+        // Strategy 4: Numeric ID filter (Handled in Strapi v4 or enhanced v5 controller)
+        if (!orderItem && cleanId && !isNaN(Number(cleanId))) {
+          try {
+            const res = await apiClient.get(`/parcels?filters[id][$eq]=${cleanId}&populate=*`);
+            const list = res.data?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              orderItem = list[0];
+            }
+          } catch (e) {
+            console.warn('id filter failed:', e);
+          }
+        }
+
+        // Strategy 5: Tracking number contains cleanId or tracking number matches SHZ + cleanId
+        if (!orderItem && cleanId) {
+          try {
+            const res = await apiClient.get(`/parcels?filters[tracking_number][$contains]=${encodeURIComponent(cleanId)}&populate=*`);
+            const list = res.data?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              orderItem = list.find((item: any) => {
+                const attrs = item.attributes || item;
+                return String(item.id) === cleanId || attrs.tracking_number?.endsWith(cleanId);
+              }) || list[0];
+            }
+          } catch (e) {
+            console.warn('Tracking contains cleanId failed:', e);
+          }
+        }
+
+        // Strategy 6: Collection Scan (Fetches recent parcels and matches in memory)
+        if (!orderItem) {
+          try {
+            const res = await apiClient.get('/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100');
+            const list = res.data?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              orderItem = list.find((item: any) => {
+                const attrs = item.attributes || item;
+                const pId = String(item.id || '');
+                const pDoc = String(item.documentId || attrs.documentId || '');
+                const pTrack = String(attrs.tracking_number || item.tracking_number || '');
+                return (
+                  (cleanId && (pId === cleanId || pDoc === cleanId)) ||
+                  (cleanDocId && (pDoc === cleanDocId || pId === cleanDocId)) ||
+                  (cleanTracking && pTrack === cleanTracking) ||
+                  (cleanId && pTrack.endsWith(cleanId))
+                );
+              });
+            }
+          } catch (e) {
+            console.warn('Collection scan fallback failed:', e);
+          }
+        }
+
+        if (!orderItem) {
+          console.warn(`Order #${editId || editTracking || docId} could not be loaded from database.`);
+          setErrorMessage(`Order #${editId || editTracking || docId} could not be loaded. Please ensure the order exists.`);
+          return;
+        }
+
+        lastLoadedEditKeyRef.current = currentKey;
+
+        const attrs = orderItem.attributes || orderItem;
+        const s = String(attrs.status || '').toLowerCase().trim();
+        if (s && s !== 'booked' && s !== 'total booking' && s !== 'pending') {
+          setErrorMessage(`Order #${attrs.tracking_number || editId} is currently '${attrs.status}'. Only orders in 'Booked' status can be modified.`);
+          setBookingStatus('error');
+          return;
+        }
+
+        const destCity = extractDestinationCity(attrs);
+        const srcCity = extractSourceCity(attrs);
+
+        const orderShipperId = attrs.shipper?.data?.id || attrs.shipper?.id || (typeof attrs.shipper === 'number' ? attrs.shipper : null);
+        if (orderShipperId) {
+          setSelectedCourierShipperId(orderShipperId);
+        }
+
+        userEditedCodRef.current = true;
+        setBookingMode('manual');
+        handleSelectOrderToEdit({
+          id: orderItem.id,
+          documentId: attrs.documentId || orderItem.documentId,
+          trackingNumber: attrs.tracking_number || attrs.trackingNumber || `SHZ${orderItem.id}`,
+          customerName: attrs.recipient_name || attrs.customerName || 'Customer',
+          phone: attrs.recipient_phone || attrs.phone || '',
+          address: attrs.recipient_address || attrs.address || '',
+          email: attrs.consignee_email || attrs.email || '',
+          altPhone: attrs.consignee_alt_phone || attrs.alt_phone || '',
+          area: attrs.area || '',
+          destinationCity: destCity,
+          sourceCity: srcCity,
+          codAmount: Number(attrs.cod_amount) || 0,
+          weight: Number(attrs.weight) || 0.5,
+          pieces: Number(attrs.pieces) || 1,
+          status: attrs.status || 'Booked',
+          paymentType: attrs.payment_type || (attrs.cod_amount > 0 ? 'COD' : 'PAID'),
+          allowToOpen: attrs.allow_to_open || 'No',
+          comments: attrs.comments || attrs.product_description || '',
+          productDescription: attrs.comments || attrs.product_description || 'General Goods',
+          originOffice: attrs.origin_office?.id || attrs.origin_office,
+          referenceNo: attrs.reference_no || '',
+          specialInstructions: attrs.special_instructions || '',
+          serviceType: attrs.service_type || 'Overnight',
+        });
+      } catch (err: any) {
+        console.error('Failed to load order for direct edit:', err);
+        setErrorMessage('Failed to load order for editing: ' + (err.response?.data?.error?.message || err.message));
+      } finally {
+        setIsLoadingDirectOrder(false);
+      }
+    };
+
+    loadDirectOrder();
+  }, [searchParams, handleSelectOrderToEdit, bookedOrdersList]);
 
   const [configuredZones, setConfiguredZones] = React.useState<any[]>([]);
   const [detailedOffices, setDetailedOffices] = React.useState<any[]>([]);
@@ -881,7 +1346,42 @@ function BookShipmentForm() {
     }
     
     try {
-      const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      // If editing an existing booked order, update it in place
+      if (editingParcel) {
+        const originOfficeId = data.pickupLocation && !isNaN(Number(data.pickupLocation)) ? Number(data.pickupLocation) : null;
+        const parcelId = editingParcel.documentId || editingParcel.id;
+
+        await apiClient.put(`/parcels/${parcelId}`, {
+          data: {
+            recipient_name: data.consigneeName,
+            recipient_phone: data.consigneePhone,
+            recipient_address: `${data.deliveryAddress}${data.area ? `, ${data.area}` : ''}, ${data.destinationCityName || data.destinationCity}`,
+            source_city: selectedShipperBusiness?.city || data.sourceCityName || data.sourceCity || 'Lahore',
+            destination_city: data.destinationCityName || data.destinationCity,
+            payment_type: data.paymentType || (data.codAmount > 0 ? 'COD' : 'PAID'),
+            cod_amount: data.paymentType === 'PAID' ? 0 : (Number(data.codAmount) || 0),
+            weight: Number(data.weight) || 0.5,
+            pieces: Number(data.pieces) || 1,
+            delivery_charges: pricing.total,
+            consignee_email: data.consigneeEmail || '',
+            consignee_alt_phone: data.consigneeAltPhone || '',
+            allow_to_open: data.allowToOpen || 'No',
+            comments: data.comments || data.productDescription || '',
+            origin_office: originOfficeId,
+            is_3pl: Boolean(logisticsRouting?.is3PL),
+          }
+        });
+
+        setCreatedTrackingId(editingParcel.trackingNumber);
+        setBookingStatus('success');
+
+        setTimeout(() => {
+          setBookingStatus('idle');
+        }, 3500);
+        return;
+      }
+
+      const trackingId = generateTrackingId(isShipper ? 'shipper' : 'courier');
       const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
       const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
       const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
@@ -1046,36 +1546,102 @@ function BookShipmentForm() {
             return;
           }
 
-          const headers = lines[0].split(',').map(h => h.trim());
+          const headers = parseCsvLine(lines[0]);
           const rows: any[] = [];
+
+          // Pre-scan headers to locate key columns flexibly
+          const cleanH = (h: string) => h.toLowerCase().replace(/[\s_\-()]/g, '');
+          let codIdx = -1;
+          let weightIdx = -1;
+          let piecesIdx = -1;
+          let cityIdx = -1;
+          let addrIdx = -1;
+          let nameIdx = -1;
+          let phoneIdx = -1;
+          let descIdx = -1;
+          let refIdx = -1;
+
+          headers.forEach((h, idx) => {
+            const ch = cleanH(h);
+            if (['codamount', 'cod', 'codpkr', 'codrs', 'amount', 'cashondelivery', 'collectamount', 'totalamount', 'orderamount', 'price', 'collectrs', 'collectableamount', 'codvalue'].includes(ch) || (ch.includes('cod') && !ch.includes('charge') && !ch.includes('fee'))) {
+              codIdx = idx;
+            } else if (['weight', 'weightkg', 'wt', 'kg', 'grossweight', 'actualweight'].includes(ch) || ch.includes('weight')) {
+              weightIdx = idx;
+            } else if (['pieces', 'piece', 'pcs', 'qty', 'quantity', 'itemcount', 'items', 'count'].includes(ch) || ch.includes('piece') || ch.includes('qty')) {
+              piecesIdx = idx;
+            } else if (['destinationcity', 'destination', 'city', 'destcity', 'deliverycity', 'tocity'].includes(ch) || (ch.includes('city') && !ch.includes('source') && !ch.includes('origin'))) {
+              cityIdx = idx;
+            } else if (['deliveryaddress', 'address', 'consigneeaddress', 'recipientaddress', 'streetaddress', 'customeraddress', 'street'].includes(ch) || ch.includes('address')) {
+              addrIdx = idx;
+            } else if (['consigneename', 'name', 'customername', 'recipientname', 'receivername'].includes(ch) || ch.includes('name')) {
+              nameIdx = idx;
+            } else if (['consigneephone', 'phone', 'mobile', 'contact', 'cell', 'tel', 'phonenumber', 'mobilenumber'].includes(ch) || ch.includes('phone') || ch.includes('mobile')) {
+              phoneIdx = idx;
+            } else if (['productdescription', 'product', 'item', 'description', 'desc', 'itemname', 'itemdescription', 'comments', 'remarks'].includes(ch) || ch.includes('product') || ch.includes('desc')) {
+              descIdx = idx;
+            } else if (['referenceno', 'reference', 'ref', 'orderid', 'orderno'].includes(ch) || ch.includes('reference') || ch.includes('orderid')) {
+              refIdx = idx;
+            }
+          });
 
           for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            const values = line.split(',').map(v => v.trim());
+            let values = parseCsvLine(line);
+
+            // If an unquoted address contained commas, values length exceeds headers length.
+            // Recombine the split address parts back together at addrIdx.
+            if (values.length > headers.length && addrIdx >= 0) {
+              const extraCount = values.length - headers.length;
+              const addressParts = values.slice(addrIdx, addrIdx + extraCount + 1);
+              const combinedAddress = addressParts.join(', ');
+              values.splice(addrIdx, extraCount + 1, combinedAddress);
+            }
+
+            const rawCod = codIdx !== -1 ? values[codIdx] : values[6];
+            const rawWeight = weightIdx !== -1 ? values[weightIdx] : values[4];
+
+            let codAmount = cleanCodAmount(rawCod, rawWeight, values);
+            let weight = cleanWeight(rawWeight, rawCod);
+
+            // Auto-correct any 1.6 COD issue
+            if (codAmount === 1.6) {
+              codAmount = 1600;
+            }
+            if (codAmount <= 10 && weight >= 50) {
+              const temp = codAmount;
+              codAmount = weight;
+              weight = temp;
+            }
+
+            const consigneeName = nameIdx !== -1 ? values[nameIdx] : (values[0] || 'Customer');
+            const consigneePhone = phoneIdx !== -1 ? values[phoneIdx] : (values[1] || '');
+            const deliveryAddress = addrIdx !== -1 ? values[addrIdx] : (values[2] || '');
+            const destinationCity = cityIdx !== -1 ? values[cityIdx] : (values[3] || '');
+            const pieces = piecesIdx !== -1 && values[piecesIdx] && !isNaN(parseInt(values[piecesIdx])) ? parseInt(values[piecesIdx]) : 1;
+            const productDescription = descIdx !== -1 ? values[descIdx] : (values[7] || '');
+            const referenceNo = refIdx !== -1 ? values[refIdx] : '';
+
             const rowData: any = { 
               id: `row-${i}`,
+              consigneeName,
+              consigneePhone,
+              deliveryAddress,
+              destinationCity,
+              weight,
+              pieces,
+              codAmount,
+              productDescription,
+              referenceNo,
               serviceType: 'Overnight',
               allowToOpen: 'No',
-              pieces: 1,
-              weight: 0.5,
-              codAmount: 0,
             };
 
+            // Map any custom raw header fields
             headers.forEach((header, idx) => {
-              const val = values[idx] || '';
-              const hLower = header.toLowerCase().trim();
-              if (hLower === 'codamount' || hLower === 'codamour' || hLower === 'cod' || hLower === 'cod_amount') {
-                rowData.codAmount = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
-              } else if (hLower === 'weight') {
-                rowData.weight = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0.5;
-              } else if (hLower === 'pieces') {
-                rowData.pieces = val !== '' && !isNaN(Number(val)) ? parseInt(val) : 1;
-              } else if (hLower === 'collectrs') {
-                rowData.collectRs = val !== '' && !isNaN(Number(val)) ? parseFloat(val) : 0;
-              } else {
-                rowData[header] = val;
+              if (!rowData[header]) {
+                rowData[header] = values[idx] || '';
               }
             });
 
@@ -1130,8 +1696,8 @@ function BookShipmentForm() {
     const orderMap: { [orderId: string]: GroupedBulkOrder } = {};
 
     lines.forEach((line, idx) => {
-      const parts = line.split(',').map(p => p.trim());
-      if (parts.length < 5) return;
+      const parts = parseCsvLine(line);
+      if (parts.length < 3) return;
 
       const orderId = parts[0] || `ORD-${Date.now()}-${idx}`;
       const consigneeName = parts[1] || 'Unknown Consignee';
@@ -1140,7 +1706,7 @@ function BookShipmentForm() {
       const shipperName = parts[4] || 'Shipper Business';
       const shipperAddress = parts[5] || 'Warehouse Center';
       const itemName = parts[6] || 'Item Product';
-      const codAmount = Number(parts[7]) || 0;
+      const codAmount = cleanCodAmount(parts[7], undefined, parts);
       const shippingType = (parts[8]?.toUpperCase() === '3PL' ? '3PL' : 'In-House') as 'In-House' | '3PL';
       const secondary3PLBarcode = parts[9] || (shippingType === '3PL' ? `3PL-${Math.floor(100000 + Math.random() * 900000)}` : undefined);
 
@@ -1153,7 +1719,7 @@ function BookShipmentForm() {
           shipperName,
           shipperAddress,
           shippingType,
-          primaryBarcode: `DBA-${orderId}`,
+          primaryBarcode: generateTrackingId(isShipper ? 'shipper' : 'courier'),
           secondary3PLBarcode,
           items: [],
           totalCod: 0,
@@ -1286,7 +1852,7 @@ function BookShipmentForm() {
         const originCity = selectedShipperBusiness?.city || 'Lahore';
         const destCity = row.destinationCity || 'Lahore';
         const deliveryCharge = row.serviceCharge || calculateDeliveryCharge(originCity, destCity, row.weight, selectedShipperBusiness?.shipper_plan);
-        const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        const trackingId = generateTrackingId(isShipper ? 'shipper' : 'courier');
 
         // Check dynamically against courier offices loaded from database (detailedOffices)
         const is2PLCourierCity = detailedOffices && detailedOffices.length > 0
@@ -1421,13 +1987,25 @@ function BookShipmentForm() {
               <span className="text-on-surface">{bookingMode === 'manual' || !isShipper ? 'Book Order' : 'Bulk Booking'}</span>
             </nav>
             <h1 className="font-display-lg text-display-lg text-on-surface">
-              {bookingMode === 'manual' || !isShipper ? 'Book New Order' : 'Bulk Booking Orders'}
+              {editingParcel
+                ? `Edit Order #${editingParcel.trackingNumber}`
+                : (bookingMode === 'manual' || !isShipper ? 'Book New Order' : 'Bulk Booking Orders')}
             </h1>
           </div>
           
           {/* Header Action Buttons, Live Price Summary & Selected Business Badge */}
           <div className="flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-2.5">
+              {(bookingMode === 'manual' || !isShipper) && (
+                <button
+                  type="button"
+                  onClick={handleOpenEditModal}
+                  className="px-4 py-2.5 font-semibold text-sm rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-primary transition-all shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Edit3 className="w-4 h-4 text-primary" />
+                  <span>{editingParcel ? 'Select Different Order' : 'Edit Booked Order'}</span>
+                </button>
+              )}
               
               {bookingMode === 'manual' || !isShipper ? (
                 <button 
@@ -1436,30 +2014,32 @@ function BookShipmentForm() {
                   className={`px-5 py-2.5 font-semibold text-sm rounded-xl shadow-sm transition-all flex items-center gap-2 text-white cursor-pointer
                     ${bookingStatus === 'success' 
                       ? 'bg-emerald-600 hover:bg-emerald-700' 
-                      : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
+                      : editingParcel
+                        ? 'bg-amber-600 hover:bg-amber-700 active:scale-95'
+                        : 'bg-primary hover:bg-[#003ec7] active:scale-95'}`}
                 >
                   {bookingStatus === 'submitting' && (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing...
+                      {editingParcel ? 'Updating...' : 'Processing...'}
                     </>
                   )}
                   {bookingStatus === 'success' && (
                     <>
                       <CheckCircle className="h-4 w-4" />
-                      Booked!
+                      {editingParcel ? 'Updated!' : 'Booked!'}
                     </>
                   )}
                   {bookingStatus === 'idle' && (
                     <>
                       <Save className="h-4 w-4" />
-                      Create Order
+                      {editingParcel ? 'Update Order' : 'Create Order'}
                     </>
                   )}
                   {bookingStatus === 'error' && (
                     <>
                       <Save className="h-4 w-4" />
-                      Retry Order
+                      {editingParcel ? 'Retry Update' : 'Retry Order'}
                     </>
                   )}
                 </button>
@@ -1523,12 +2103,57 @@ function BookShipmentForm() {
         </div>
 
         {/* Status Banners */}
+        {isLoadingDirectOrder && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-200">
+            <div className="animate-spin h-5 w-5 text-blue-600 border-2 border-solid border-current border-r-transparent rounded-full shrink-0" />
+            <div>
+              <p className="font-bold text-sm">Loading Booked Order for Editing...</p>
+              <p className="text-xs text-blue-600">Retrieving details and populating form.</p>
+            </div>
+          </div>
+        )}
+
         {bookingMode === 'manual' && bookingStatus === 'success' && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300">
             <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
             <div>
-              <p className="font-bold">Order Booked Successfully!</p>
-              <p className="text-sm">Tracking ID generated: <strong className="font-mono text-slate-900">{createdTrackingId}</strong></p>
+              <p className="font-bold">{editingParcel ? 'Order Updated Successfully!' : 'Order Booked Successfully!'}</p>
+              <p className="text-sm">Tracking ID: <strong className="font-mono text-slate-900">{createdTrackingId}</strong></p>
+            </div>
+          </div>
+        )}
+
+        {/* Active Edit Order Banner */}
+        {editingParcel && (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center font-bold shrink-0">
+                <Edit3 className="w-5 h-5 text-amber-800" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold text-slate-900 text-base">Editing Booked Order:</span>
+                  <span className="font-mono font-black text-primary text-base">{editingParcel.trackingNumber}</span>
+                  <span className="px-2.5 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
+                    Booked
+                  </span>
+                  {editingParcel.customerName && (
+                    <span className="text-xs font-semibold text-slate-600">({editingParcel.customerName})</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Modifying fields will directly update this existing order in the database. Only Booked orders can be modified.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCancelEditing}
+                className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+              >
+                <X className="w-4 h-4 text-slate-500" /> Cancel Edit & Book New
+              </button>
             </div>
           </div>
         )}
@@ -1963,7 +2588,7 @@ function BookShipmentForm() {
                       <div className="relative">
                         <input 
                           type="text" 
-                          placeholder="Search tracking # (DBA-...)"
+                          placeholder="Search tracking # (e.g. SHZ100001134)..."
                           value={refSearchQuery}
                           onChange={(e) => {
                             setRefSearchQuery(e.target.value);
@@ -2491,6 +3116,197 @@ function BookShipmentForm() {
         </div>
 
         {/* Modal for Pasting CSV Lines */}
+        {/* SELECT BOOKED ORDER TO EDIT MODAL */}
+        {showEditOrderModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div 
+              style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh' }}
+              className="bg-white rounded-2xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-start border-b border-outline-variant pb-3 shrink-0">
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                    <Edit3 className="w-5 h-5 text-primary" /> Select Booked Order to Edit
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Only orders currently in <span className="font-bold text-emerald-700">Booked</span> status can be modified. Orders in transit or delivered are strictly locked.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowEditOrderModal(false)} 
+                  className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0">
+                <div className="relative w-full sm:w-80">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search tracking #, name, city, phone..."
+                    value={bookedOrdersSearch}
+                    onChange={(e) => setBookedOrdersSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  />
+                  {bookedOrdersSearch && (
+                    <button 
+                      onClick={() => setBookedOrdersSearch('')} 
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFilterOnlyBooked(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      filterOnlyBooked 
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Only Booked (Eligible)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterOnlyBooked(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      !filterOnlyBooked 
+                        ? 'bg-slate-800 text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    All Recent Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchBookedOrders}
+                    title="Refresh orders"
+                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingBookedOrders ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Orders Table Container */}
+              <div className="overflow-y-auto border border-slate-200 rounded-xl max-h-[50vh]">
+                {loadingBookedOrders ? (
+                  <div className="py-16 text-center flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="w-7 h-7 text-primary animate-spin" />
+                    <p className="text-xs text-slate-500 font-medium">Loading orders from database...</p>
+                  </div>
+                ) : filteredModalOrders.length === 0 ? (
+                  <div className="py-16 text-center flex flex-col items-center justify-center gap-2">
+                    <Package className="w-8 h-8 text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-700">No matching orders found</p>
+                    <p className="text-xs text-slate-500">
+                      {filterOnlyBooked ? 'No orders are currently in Booked status.' : 'Try adjusting your search criteria.'}
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10">
+                      <tr>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600">Tracking #</th>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600">Consignee</th>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600">Destination</th>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600">COD / Wt</th>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600">Status</th>
+                        <th className="px-3.5 py-2.5 font-bold text-slate-600 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredModalOrders.map((order) => {
+                        const s = String(order.status || '').toLowerCase().trim();
+                        const isBooked = s === 'booked' || s === 'total booking' || s === 'pending';
+
+                        return (
+                          <tr 
+                            key={order.id} 
+                            className={`transition-colors ${isBooked ? 'hover:bg-primary-50/30' : 'bg-slate-50/50 opacity-75'}`}
+                          >
+                            <td className="px-3.5 py-3 font-mono font-bold text-primary">
+                              {order.trackingNumber}
+                            </td>
+                            <td className="px-3.5 py-3">
+                              <div className="font-semibold text-slate-800">{order.customerName}</div>
+                              <div className="text-[11px] text-slate-500 font-mono">{order.phone}</div>
+                            </td>
+                            <td className="px-3.5 py-3 max-w-[200px]">
+                              <div className="font-bold text-slate-800 truncate flex items-center gap-1" title={order.address}>
+                                <MapPin className="w-3 h-3 text-primary shrink-0" />
+                                <span>{order.destinationCity || 'City Not Set'}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 truncate" title={order.address}>{order.address}</div>
+                            </td>
+                            <td className="px-3.5 py-3 whitespace-nowrap">
+                              <div className="font-bold text-slate-900">PKR {Number(order.codAmount).toLocaleString()}</div>
+                              <div className="text-[11px] text-slate-500">{order.weight} kg</div>
+                            </td>
+                            <td className="px-3.5 py-3 whitespace-nowrap">
+                              {isBooked ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  Booked
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                                  {order.status}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                              {isBooked ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectOrderToEdit(order)}
+                                  className="px-3 py-1.5 bg-primary hover:bg-[#003ec7] text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 ml-auto cursor-pointer active:scale-95"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" /> Edit Order
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="px-3 py-1.5 bg-slate-100 text-slate-400 font-medium text-xs rounded-lg border border-slate-200 flex items-center gap-1.5 ml-auto cursor-not-allowed opacity-60"
+                                  title={`Cannot edit: order is in '${order.status}' status. Only Booked orders can be edited.`}
+                                >
+                                  <Lock className="w-3 h-3 text-slate-400" /> Locked
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-between items-center border-t border-outline-variant pt-3 shrink-0">
+                <span className="text-xs text-slate-500">
+                  Showing {filteredModalOrders.length} order{filteredModalOrders.length === 1 ? '' : 's'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowEditOrderModal(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showPasteModal && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div 

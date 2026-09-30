@@ -17,6 +17,7 @@ export const SHIPMENT_STATUSES = {
   READY_FOR_RETURN: 'Ready for Return',
   RETURN_TO_SHIPPER: 'Return to Shipper',
   LOST_DAMAGE: 'Lost / Damage',
+  CANCELLED: 'Cancelled',
 } as const;
 
 export type ShipmentStatus = typeof SHIPMENT_STATUSES[keyof typeof SHIPMENT_STATUSES];
@@ -34,14 +35,20 @@ export const ALL_12_SHIPMENT_STATUSES: ShipmentStatus[] = [
   SHIPMENT_STATUSES.READY_FOR_RETURN,
   SHIPMENT_STATUSES.RETURN_TO_SHIPPER,
   SHIPMENT_STATUSES.LOST_DAMAGE,
+  SHIPMENT_STATUSES.CANCELLED,
 ];
 
 /**
- * Normalizes legacy database status strings to one of the 12 canonical statuses.
+ * Normalizes legacy database status strings to one of the canonical statuses.
  */
 export function normalizeShipmentStatus(status?: string | null): ShipmentStatus {
   if (!status) return SHIPMENT_STATUSES.BOOKED;
   const s = status.trim();
+
+  // Cancellation
+  if (s.toLowerCase().includes('cancel')) {
+    return SHIPMENT_STATUSES.CANCELLED;
+  }
 
   // 1. Booked
   if (s.toLowerCase() === 'booked' || s.toLowerCase() === 'total booking') {

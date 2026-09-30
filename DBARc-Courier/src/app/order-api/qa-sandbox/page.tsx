@@ -3,6 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { apiClient } from '@/shared/api/api-client';
+import { generateTrackingId } from '@/shared/utils/tracking';
 import { 
   ShoppingBag, 
   CreditCard, 
@@ -101,7 +102,7 @@ export default function QaOrderSandboxPage() {
     try {
       const isCod = paymentType === 'COD';
       const actualCod = isCod ? Number(orderAmount) : 0;
-      const trackingNumber = `DBA-${Math.floor(100000 + Math.random() * 900000)}-PK`;
+      const trackingNumber = generateTrackingId('shipper');
 
       // Live payload matching exactly what class-dbarc-order-sync.php sends
       const payload = {

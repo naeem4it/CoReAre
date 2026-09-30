@@ -168,6 +168,11 @@ export default function ShipmentsPage() {
   }, [searchQuery, data]);
 
   const handleOpenEdit = (shipment: ShipmentRow) => {
+    const s = (shipment.status || '').toLowerCase().trim();
+    if (s !== 'booked' && s !== 'total booking' && s !== 'pending') {
+      triggerToast(`Cannot edit: shipment is currently '${shipment.status}'. Only Booked shipments can be edited.`, 'error');
+      return;
+    }
     setEditingShipment(shipment);
     setEditForm({
       recipient_name: shipment.customerName,
@@ -425,13 +430,23 @@ export default function ShipmentsPage() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleOpenEdit(row)}
-                            title="Edit Consignee & Details"
-                            className="p-2 rounded-xl bg-slate-100 hover:bg-primary hover:text-white text-slate-600 transition-all cursor-pointer"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
+                          {((row.status || '').toLowerCase().trim() === 'booked' || (row.status || '').toLowerCase().trim() === 'total booking') ? (
+                            <button
+                              onClick={() => handleOpenEdit(row)}
+                              title="Edit Consignee & Details (Booked order)"
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-primary hover:text-white text-slate-600 transition-all cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              title={`Cannot edit: only Booked shipments can be edited (Current: ${row.status})`}
+                              className="p-2 rounded-xl bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
                           {!isShipperEmployee && (
                             <button
                               onClick={() => setDeletingShipment(row)}

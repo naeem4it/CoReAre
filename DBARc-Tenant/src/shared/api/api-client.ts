@@ -48,3 +48,49 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * Automatically fetches all records across paginated Strapi responses,
+ * overcoming default maxLimit restrictions by requesting large pages and fetching remaining pages if pageCount > 1.
+ */
+export async function fetchAllPaginated<T = any>(url: string, config: any = {}): Promise<T[]> {
+  const urlObj = new URL(url, 'http://dummy.local');
+  const baseParams: Record<string, any> = { ...(config.params || {}) };
+
+  // Copy search params from URL string into baseParams
+  urlObj.searchParams.forEach((val, key) => {
+    if (baseParams[key] === undefined) {
+      baseParams[key] = val;
+    }
+  });
+
+  const pathname = urlObj.pathname;
+  if (!baseParams['pagination[pageSize]'] && !baseParams['pagination[limit]'] && !baseParams.pagination?.pageSize) {
+    baseParams['pagination[pageSize]'] = 2000;
+  }
+  baseParams['pagination[page]'] = 1;
+
+  const firstRes = await apiClient.get(pathname, { ...config, params: baseParams });
+  const firstData = firstRes.data?.data || firstRes.data || [];
+  let allItems: T[] = Array.isArray(firstData) ? [...firstData] : [];
+
+  const pagination = firstRes.data?.meta?.pagination;
+  if (pagination && pagination.pageCount > 1) {
+    const pagePromises = [];
+    for (let p = 2; p <= pagination.pageCount; p++) {
+      const pageParams = { ...baseParams, 'pagination[page]': p };
+      pagePromises.push(
+        apiClient.get(pathname, { ...config, params: pageParams }).then((r) => r.data?.data || r.data || [])
+      );
+    }
+    const pages = await Promise.all(pagePromises);
+    for (const batch of pages) {
+      if (Array.isArray(batch)) {
+        allItems = allItems.concat(batch);
+      }
+    }
+  }
+
+  return allItems;
+}
+

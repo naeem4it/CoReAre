@@ -12,6 +12,7 @@ import { Package, User, MapPin, BadgeDollarSign, Navigation } from 'lucide-react
 
 import { apiClient } from '@/shared/api/api-client';
 import { useAuthStore } from '@/shared/model/auth.store';
+import { generateTrackingId } from '@/shared/utils/tracking';
 
 const PAKISTAN_CITY_COORDINATES = [
   { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
@@ -108,7 +109,7 @@ export const CreateShipmentForm = () => {
   const onSubmit = async (data: ShipmentFormValues) => {
     try {
       // Generate tracking number
-      const trackingId = `DBA-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const trackingId = generateTrackingId('shipper');
 
       await apiClient.post('/parcels', {
         data: {
@@ -165,7 +166,7 @@ export const CreateShipmentForm = () => {
               <Controller
                 name="sourceCity"
                 control={control}
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <PakistanLocationSelect
                     value={field.value ?? ''}
                     onChange={(val) => field.onChange(val)}
@@ -181,7 +182,7 @@ export const CreateShipmentForm = () => {
               <Controller
                 name="destinationCity"
                 control={control}
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <PakistanLocationSelect
                     value={field.value ?? ''}
                     onChange={(val) => field.onChange(val)}

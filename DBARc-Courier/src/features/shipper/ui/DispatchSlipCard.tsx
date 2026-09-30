@@ -4,6 +4,7 @@ import * as React from 'react';
 
 export type OrderRow = {
   id: number | string;
+  documentId?: string;
   trackingNumber: string;
   orderReference: string;
   customerName: string;

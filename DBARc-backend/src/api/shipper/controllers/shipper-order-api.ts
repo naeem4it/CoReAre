@@ -48,15 +48,36 @@ async function authenticateShipper(ctx: Context, strapi: any) {
   };
 }
 
-// Generate unique tracking number
-async function generateUniqueTrackingNumber(strapi: any): Promise<string> {
+// Generate unique tracking number in format [PREFIX][NUMERIC] e.g. SHZ100001134
+async function generateUniqueTrackingNumber(strapi: any, preferredPrefix?: string): Promise<string> {
+  const prefix = (preferredPrefix || 'SHZ').toUpperCase().trim();
+  
+  // Find highest existing numeric tracking number with this prefix
+  const lastParcel = await strapi.db.query('api::parcel.parcel').findOne({
+    where: {
+      tracking_number: {
+        $startsWith: prefix,
+      },
+    },
+    orderBy: { id: 'desc' },
+  });
+
+  let nextSequence = 100001134;
+  if (lastParcel && lastParcel.tracking_number) {
+    const numericPart = lastParcel.tracking_number.replace(prefix, '');
+    const parsed = parseInt(numericPart, 10);
+    if (!isNaN(parsed) && parsed >= 100000000) {
+      nextSequence = parsed + 1;
+    }
+  }
+
   let isUnique = false;
   let trackingNumber = '';
-  
-  while (!isUnique) {
-    const timestampPart = Date.now().toString().slice(-6);
-    const randomPart = Math.floor(1000 + Math.random() * 9000).toString();
-    trackingNumber = `DBA${timestampPart}${randomPart}`;
+  let attempts = 0;
+
+  while (!isUnique && attempts < 100) {
+    attempts++;
+    trackingNumber = `${prefix}${nextSequence}`;
 
     const existing = await strapi.db.query('api::parcel.parcel').findOne({
       where: { tracking_number: trackingNumber }
@@ -64,7 +85,13 @@ async function generateUniqueTrackingNumber(strapi: any): Promise<string> {
 
     if (!existing) {
       isUnique = true;
+    } else {
+      nextSequence++;
     }
+  }
+
+  if (!isUnique) {
+    trackingNumber = `${prefix}${Date.now().toString().slice(-9)}`;
   }
 
   return trackingNumber;
@@ -199,7 +226,8 @@ export default {
     }
 
     // 5. Generate Tracking Number
-    const trackingNumber = await generateUniqueTrackingNumber(strapi);
+    const customPrefix = shipper.tenant?.features?.tracking_settings?.shipperPrefix || 'SHZ';
+    const trackingNumber = await generateUniqueTrackingNumber(strapi, customPrefix);
 
     // 6. Persist Parcel Entity
     try {

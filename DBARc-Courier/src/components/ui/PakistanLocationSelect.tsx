@@ -53,6 +53,7 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
   const [districtSearch, setDistrictSearch] = React.useState('');
   const [tehsilSearch, setTehsilSearch] = React.useState('');
   const [directSearch, setDirectSearch] = React.useState('');
+  const [isTypingSearch, setIsTypingSearch] = React.useState(false);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -61,6 +62,7 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     const handleOutsideClick = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpenDropdown(null);
+        setIsTypingSearch(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
@@ -75,14 +77,27 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
         setSelectedProvince(match.province);
         setSelectedDistrict(match.district);
         setSelectedTehsil(match.tehsil);
+        setDirectSearch(match.fullName || `${match.tehsil}, ${match.district}`);
       } else if (typeof value === 'string') {
-        setSelectedTehsil(value);
+        const strVal = value.trim();
+        setSelectedTehsil(strVal);
+        setDirectSearch(strVal);
+        const sub = FLAT_PAKISTAN_LOCATIONS.find(l => 
+          l.tehsil.toLowerCase().includes(strVal.toLowerCase()) || 
+          l.district.toLowerCase().includes(strVal.toLowerCase())
+        );
+        if (sub) {
+          setSelectedProvince(sub.province);
+          setSelectedDistrict(sub.district);
+        }
       }
     } else {
       setSelectedProvince('');
       setSelectedDistrict('');
       setSelectedTehsil('');
+      setDirectSearch('');
     }
+    setIsTypingSearch(false);
   }, [value]);
 
   // Province list
@@ -139,16 +154,16 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     return list;
   }, [selectedProvince, selectedDistrict, tehsilSearch]);
 
-  // Unified direct search results
+  // Unified direct search results - only filter when user is actively searching
   const directSearchResults = React.useMemo(() => {
-    if (!directSearch.trim()) return [];
+    if (!directSearch.trim() || !isTypingSearch) return [];
     const q = directSearch.toLowerCase().trim();
     return FLAT_PAKISTAN_LOCATIONS.filter(item =>
       item.tehsil.toLowerCase().includes(q) ||
       item.district.toLowerCase().includes(q) ||
       item.province.toLowerCase().includes(q)
     ).slice(0, 15);
-  }, [directSearch]);
+  }, [directSearch, isTypingSearch]);
 
   // Notify parent component
   const emitChange = (prov: string, dist: string, teh: string) => {
@@ -175,6 +190,10 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     setSelectedTehsil(newTeh);
     setOpenDropdown(null);
     setProvinceSearch('');
+    if (newTeh && newDist) {
+      setDirectSearch(`${newTeh}, ${newDist}, ${prov}`);
+    }
+    setIsTypingSearch(false);
     emitChange(prov, newDist, newTeh);
   };
 
@@ -189,6 +208,8 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     setSelectedTehsil(newTeh);
     setOpenDropdown(null);
     setDistrictSearch('');
+    setDirectSearch(`${newTeh}, ${distName}, ${provName}`);
+    setIsTypingSearch(false);
     emitChange(provName, distName, newTeh);
   };
 
@@ -198,7 +219,8 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     setSelectedTehsil(item.tehsil);
     setOpenDropdown(null);
     setTehsilSearch('');
-    setDirectSearch('');
+    setDirectSearch(item.fullName || `${item.tehsil}, ${item.district}`);
+    setIsTypingSearch(false);
     emitChange(item.province, item.district, item.tehsil);
   };
 
@@ -207,6 +229,7 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
     setSelectedDistrict('');
     setSelectedTehsil('');
     setDirectSearch('');
+    setIsTypingSearch(false);
     setOpenDropdown(null);
     const emptyDetails = { province: '', district: '', tehsil: '', cityName: '', fullName: '' };
     onChange('', emptyDetails, emptyDetails);
@@ -242,10 +265,11 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
             value={directSearch}
             onChange={(e) => {
               setDirectSearch(e.target.value);
-              if (!openDropdown) setOpenDropdown('search');
+              setIsTypingSearch(true);
+              setOpenDropdown('search');
             }}
-            onFocus={() => {
-              if (directSearch.trim()) setOpenDropdown('search');
+            onFocus={(e) => {
+              e.target.select();
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -260,18 +284,19 @@ export const PakistanLocationSelect: React.FC<PakistanLocationSelectProps> = ({
                 }
               }
             }}
-            placeholder={isComplete ? `${selectedTehsil}, ${selectedDistrict}, ${selectedProvince}` : placeholder}
+            placeholder={placeholder}
             className={`w-full text-xs pl-9 pr-8 py-2 bg-white dark:bg-slate-900 border rounded-xl outline-none transition-all ${
               error 
                 ? 'border-red-400 focus:ring-2 focus:ring-red-400/20' 
                 : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary'
-            } text-slate-900 dark:text-white placeholder-slate-400`}
+            } text-slate-900 dark:text-white font-medium placeholder-slate-400`}
           />
           {directSearch && (
             <button
               type="button"
-              onClick={() => setDirectSearch('')}
+              onClick={handleReset}
               className="absolute right-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+              title="Clear Location"
             >
               <X className="w-3.5 h-3.5" />
             </button>

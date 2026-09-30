@@ -13,6 +13,23 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       data.status = 'Booked';
     }
 
+    // Auto-generate tracking number with SHZ prefix and numeric sequence if not provided
+    if (!data.tracking_number) {
+      const prefix = 'SHZ';
+      const lastParcel = await strapi.db.query('api::parcel.parcel').findOne({
+        where: { tracking_number: { $startsWith: prefix } },
+        orderBy: { id: 'desc' }
+      });
+      let nextSeq = 100001134;
+      if (lastParcel && lastParcel.tracking_number) {
+        const num = parseInt(lastParcel.tracking_number.replace(prefix, ''), 10);
+        if (!isNaN(num) && num >= 100000000) {
+          nextSeq = num + 1;
+        }
+      }
+      data.tracking_number = `${prefix}${nextSeq}`;
+    }
+
     // Map and sanitize non-schema routing parameters
     if (data.fulfillment_type) {
       if (data.fulfillment_type === '3PL' || data.fulfillment_type === '3PL Partner') {
@@ -125,6 +142,102 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
 
     // Call default create controller
     return await super.create(ctx);
+  },
+
+  async find(ctx: any) {
+    // If client queries by numeric id e.g. filters[id][$eq]=372, translate to documentId
+    if (ctx.query?.filters?.id) {
+      const idVal = ctx.query.filters.id.$eq || ctx.query.filters.id;
+      if (idVal && !isNaN(Number(idVal))) {
+        const item = await strapi.db.query('api::parcel.parcel').findOne({
+          where: { id: Number(idVal) },
+        });
+        if (item && item.documentId) {
+          ctx.query.filters.documentId = { $eq: item.documentId };
+          delete ctx.query.filters.id;
+        }
+      }
+    }
+    return await super.find(ctx);
+  },
+
+  async findOne(ctx: any) {
+    const { id } = ctx.params;
+    const existing = await strapi.db.query('api::parcel.parcel').findOne({
+      where: { $or: [{ id: isNaN(Number(id)) ? 0 : Number(id) }, { documentId: String(id) }] },
+      populate: true,
+    });
+
+    if (!existing) {
+      return ctx.notFound('Parcel not found');
+    }
+
+    if (existing.documentId) {
+      ctx.params.id = existing.documentId;
+    }
+
+    return await super.findOne(ctx);
+  },
+
+  async update(ctx: any) {
+    const { id } = ctx.params;
+    const { data } = ctx.request.body || {};
+
+    // Validate that parcel exists and check status
+    const existing = await strapi.db.query('api::parcel.parcel').findOne({
+      where: { $or: [{ id: isNaN(Number(id)) ? 0 : Number(id) }, { documentId: String(id) }] }
+    });
+
+    if (!existing) {
+      return ctx.notFound('Parcel not found');
+    }
+
+    // Ensure ctx.params.id is the documentId required by Strapi 5 core update controller
+    if (existing.documentId) {
+      ctx.params.id = existing.documentId;
+    }
+
+    // Business Rule: Only parcels in 'Booked' status can have their order/booking details updated
+    const statusNormalized = String(existing.status || '').toLowerCase().trim();
+    const isBooked = statusNormalized === 'booked' || statusNormalized === 'total booking';
+    
+    // Strict Cancellation Rule: Cannot cancel if order is already in transit or completed
+    if (data?.status === 'Cancelled') {
+      const nonCancellable = ['in transit', 'arrived at destination', 'arrived at warehouse (dest)', 'out for delivery', 'delivered', 'delivery failed', 'ready for return', 'return to shipper', 'lost / damage'];
+      if (nonCancellable.some(st => statusNormalized.includes(st))) {
+        return ctx.badRequest(`Cannot cancel order: Order is already in transit or completed (Current status: '${existing.status}').`);
+      }
+    }
+
+    // If order is beyond booked status and customer/order details are being edited
+    if (!isBooked && data && (
+      data.recipient_name !== undefined ||
+      data.recipient_phone !== undefined ||
+      data.recipient_address !== undefined ||
+      data.cod_amount !== undefined ||
+      data.weight !== undefined ||
+      data.destination_city !== undefined
+    )) {
+      return ctx.badRequest(`Cannot edit order: Only orders in 'Booked' status can be modified. (Current status: '${existing.status}')`);
+    }
+
+    // Safely resolve source_city if string city name was provided
+    if (data?.source_city && typeof data.source_city === 'string' && isNaN(Number(data.source_city))) {
+      const foundCity = await strapi.db.query('api::city.city').findOne({
+        where: { CityName: { $eqi: data.source_city.trim() } }
+      });
+      data.source_city = foundCity ? foundCity.id : null;
+    }
+
+    // Safely resolve destination_city if string city name was provided
+    if (data?.destination_city && typeof data.destination_city === 'string' && isNaN(Number(data.destination_city))) {
+      const foundCity = await strapi.db.query('api::city.city').findOne({
+        where: { CityName: { $eqi: data.destination_city.trim() } }
+      });
+      data.destination_city = foundCity ? foundCity.id : null;
+    }
+
+    return await super.update(ctx);
   },
 
   async getStats(ctx: any) {

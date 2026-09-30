@@ -290,6 +290,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                     <Link href="/auth/change-password" onClick={() => setProfileDropdownOpen(false)} className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-slate-50 rounded-lg flex items-center gap-2 transition-colors">
                       <Key className="w-4 h-4 text-primary" /> Change Password
                     </Link>
+                    <Link href="/settings" onClick={() => setProfileDropdownOpen(false)} className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-slate-50 rounded-lg flex items-center gap-2 transition-colors">
+                      <span className="material-symbols-outlined text-[18px] text-primary">settings</span> Settings
+                    </Link>
                   </div>
                   <div className="p-2 border-t border-outline-variant">
                     <button
@@ -726,10 +729,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
 
       {/* Settings */}
       <div className="flex flex-col gap-1 border-t border-outline-variant pt-2 mt-1">
-        <a className="flex items-center gap-md p-sm text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-lg cursor-pointer active:opacity-80 transition-all">
-          <span className="material-symbols-outlined">settings</span>
-          <span className="font-label-md text-label-md">Settings</span>
-        </a>
+        <NavLink href="/settings" icon="settings" label="Settings" />
       </div>
     </nav>
   );

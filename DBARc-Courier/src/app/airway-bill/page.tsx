@@ -4,11 +4,12 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import PortalLayout from '@/components/PortalLayout';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
+import { getDefaultDateRange, toLocalDateString } from '@/shared/utils/date';
 import { ShipperDateRangePicker } from '@/features/shipper/ui/ShipperDateRangePicker';
 import {
   DispatchSlipCard,
@@ -117,12 +118,10 @@ function AirwayBillContent() {
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = React.useState(0);
 
-  // Date Range State for Airway Bills (default: past 30 days)
-  const now = new Date();
-  const past30Days = new Date();
-  past30Days.setDate(past30Days.getDate() - 30);
-  const [fromDate, setFromDate] = React.useState<string>(past30Days.toISOString().split('T')[0]);
-  const [toDate, setToDate] = React.useState<string>(now.toISOString().split('T')[0]);
+  // Date Range State for Airway Bills (default: past 30 days up to today in local time)
+  const defaultRange = React.useMemo(() => getDefaultDateRange(30), []);
+  const [fromDate, setFromDate] = React.useState<string>(defaultRange.fromDate);
+  const [toDate, setToDate] = React.useState<string>(defaultRange.toDate);
 
   // Tenant 2PL self-service cities & 3PL partner state
   const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null);
@@ -143,14 +142,15 @@ function AirwayBillContent() {
   }, [user]);
 
   const shipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
     if (user?.shipper) {
-      if (Array.isArray(user.shipper) && user.shipper.length > 0) return user.shipper[0].id;
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) return user.shipper[0].id || user.shipper[0];
       if (typeof user.shipper === 'object' && 'id' in user.shipper) {
         return (user.shipper as { id?: number }).id || null;
       }
       if (typeof user.shipper === 'number') return user.shipper;
     }
-    return activeBusinessId || null;
+    return null;
   }, [user, activeBusinessId]);
 
   // Fetch Tenant routing setups
@@ -198,16 +198,14 @@ function AirwayBillContent() {
 
     const loadShipments = async () => {
       try {
-        let endpoint = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
+        let endpoint = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=2000';
 
         if (isShipper && shipperId) {
           endpoint += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
         }
 
-        const res = await apiClient.get<StrapiCollectionResponse<Parcel>>(endpoint);
+        const rawData = await fetchAllPaginated(endpoint);
         if (!isMounted) return;
-
-        const rawData = res.data?.data || [];
 
         if (Array.isArray(rawData) && rawData.length > 0) {
           const mapped: OrderRow[] = rawData.map((item) => {
@@ -339,13 +337,13 @@ function AirwayBillContent() {
         if (!matchSearch) return false;
       }
 
-      // 2. Date Range Filter
+      // 2. Date Range Filter (local time conversion)
       if (fromDate) {
-        const rowDate = (row.dateCreated || '').split('T')[0];
+        const rowDate = toLocalDateString(row.dateCreated);
         if (rowDate && rowDate < fromDate) return false;
       }
       if (toDate) {
-        const rowDate = (row.dateCreated || '').split('T')[0];
+        const rowDate = toLocalDateString(row.dateCreated);
         if (rowDate && rowDate > toDate) return false;
       }
 

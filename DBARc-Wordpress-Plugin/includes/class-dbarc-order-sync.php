@@ -114,8 +114,9 @@ class DBARc_Order_Sync {
         $default_service = get_option('dbarc_default_service_type', 'Overnight');
         $reference_number = 'WC-#' . $order->get_order_number();
 
-        // Generate tracking ID
-        $tracking_number = 'DBA-' . strtoupper(wp_generate_password(8, false));
+        // Generate tracking ID in format [PREFIX][NUMERIC] e.g. SHZ100001134
+        $tracking_prefix = get_option('dbarc_tracking_prefix', 'SHZ');
+        $tracking_number = $tracking_prefix . (100000000 + (int)$order->get_id());
 
         // Prepare Strapi parcel payload
         $parcel_data = [

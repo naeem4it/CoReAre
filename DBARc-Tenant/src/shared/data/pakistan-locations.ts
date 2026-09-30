@@ -1230,8 +1230,64 @@ export const FLAT_PAKISTAN_LOCATIONS: FlatPakistanLocation[] = (() => {
  * Fast lookup helper to resolve any search string or city name to its full hierarchy
  */
 export function findPakistanLocation(query: string | number): FlatPakistanLocation | null {
-  if (!query) return null;
-  const str = String(query).trim().toLowerCase();
+  if (!query && query !== 0) return null;
+  const rawStr = String(query).trim();
+  if (!rawStr) return null;
+
+  // Handle compound or comma-separated addresses: check tokens from right to left
+  if (rawStr.includes(',')) {
+    const parts = rawStr.split(',').map(s => s.trim()).filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (!part || part.toLowerCase() === 'pakistan' || part.toLowerCase() === 'pk') continue;
+      const res = findPakistanLocation(part);
+      if (res) return res;
+    }
+  }
+
+  const str = rawStr.toLowerCase();
+
+  // Major metro quick aliases
+  if (str === 'karachi' || str.startsWith('karachi')) {
+    const khi = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.district.toLowerCase().includes('karachi'));
+    if (khi) return { ...khi, tehsil: 'Karachi', cityName: 'Karachi' };
+  }
+  if (str === 'lahore') {
+    const lhr = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'lahore');
+    if (lhr) return lhr;
+  }
+  if (str === 'islamabad') {
+    const isb = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'islamabad');
+    if (isb) return isb;
+  }
+  if (str === 'rawalpindi') {
+    const rwp = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'rawalpindi');
+    if (rwp) return rwp;
+  }
+  if (str === 'faisalabad') {
+    const fsd = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'faisalabad');
+    if (fsd) return fsd;
+  }
+  if (str === 'multan') {
+    const mux = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'multan');
+    if (mux) return mux;
+  }
+  if (str === 'peshawar') {
+    const pew = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'peshawar');
+    if (pew) return pew;
+  }
+  if (str === 'quetta') {
+    const uet = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'quetta');
+    if (uet) return uet;
+  }
+  if (str === 'sialkot') {
+    const skt = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'sialkot');
+    if (skt) return skt;
+  }
+  if (str === 'gujranwala') {
+    const guj = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === 'gujranwala');
+    if (guj) return guj;
+  }
 
   // 1. Exact tehsil match
   const exactTehsil = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.tehsil.toLowerCase() === str);
@@ -1241,7 +1297,14 @@ export function findPakistanLocation(query: string | number): FlatPakistanLocati
   const exactDist = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.district.toLowerCase() === str);
   if (exactDist) return exactDist;
 
-  // 3. Substring match
+  // 3. Match by ID if numeric
+  const num = Number(str);
+  if (!isNaN(num) && num > 0) {
+    const idMatch = FLAT_PAKISTAN_LOCATIONS.find(loc => loc.id === num);
+    if (idMatch) return idMatch;
+  }
+
+  // 4. Substring match
   const subMatch = FLAT_PAKISTAN_LOCATIONS.find(loc => 
     loc.tehsil.toLowerCase().includes(str) || 
     loc.district.toLowerCase().includes(str) ||
@@ -1249,3 +1312,4 @@ export function findPakistanLocation(query: string | number): FlatPakistanLocati
   );
   return subMatch || null;
 }
+

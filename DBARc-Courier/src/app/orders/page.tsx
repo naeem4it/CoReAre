@@ -4,12 +4,13 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import PortalLayout from '@/components/PortalLayout';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
 import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
+import { getDefaultDateRange, toLocalDateString } from '@/shared/utils/date';
 import { ShipperDateRangePicker } from '@/features/shipper/ui/ShipperDateRangePicker';
 import {
   Printer,
@@ -21,7 +22,8 @@ import {
   Square,
   Ban,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Edit3
 } from 'lucide-react';
 import { TablePagination } from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -85,6 +87,16 @@ export function canCancelOrder(status: string): boolean {
   return !nonCancellable.includes(norm as string);
 }
 
+/**
+ * Business Rule: Orders can ONLY be edited when in 'Booked' status.
+ * Once in transit, arrived at destination, out for delivery, or completed, editing is locked.
+ */
+export function isOrderEditable(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase().trim();
+  return s === 'booked' || s === 'total booking' || s === 'pending';
+}
+
 import {
   isEligibleForDispatchSlip,
   DispatchSlipCard,
@@ -107,18 +119,21 @@ function OrderListContent() {
   const [selectedCity, setSelectedCity] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Date Range State for Booking Orders List (default: past 30 days up to today)
-  const now = new Date();
-  const past30Days = new Date();
-  past30Days.setDate(past30Days.getDate() - 30);
-  const [fromDate, setFromDate] = React.useState<string>(past30Days.toISOString().split('T')[0]);
-  const [toDate, setToDate] = React.useState<string>(now.toISOString().split('T')[0]);
+  // Date Range State for Booking Orders List (default: past 30 days up to today in local time)
+  const defaultRange = React.useMemo(() => getDefaultDateRange(30), []);
+  const [fromDate, setFromDate] = React.useState<string>(defaultRange.fromDate);
+  const [toDate, setToDate] = React.useState<string>(defaultRange.toDate);
 
-  // Cancel Order Modal State
+  // Cancel Order Modal State (Single)
   const [orderToCancel, setOrderToCancel] = React.useState<OrderRow | null>(null);
   const [cancelReason, setCancelReason] = React.useState<string>('Customer requested cancellation');
   const [isCancelling, setIsCancelling] = React.useState(false);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
+
+  // Bulk Cancel Orders Modal State
+  const [showBulkCancelModal, setShowBulkCancelModal] = React.useState(false);
+  const [bulkCancelReason, setBulkCancelReason] = React.useState<string>('Customer requested cancellation');
+  const [isBulkCancelling, setIsBulkCancelling] = React.useState(false);
 
   // Derive active filters: user selection takes priority over URL query params
   const statusFilter = selectedStatus !== null ? selectedStatus : (urlStatus || '');
@@ -143,15 +158,17 @@ function OrderListContent() {
   }, [user]);
 
   const shipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
     if (user?.shipper) {
       if (Array.isArray(user.shipper) && user.shipper.length > 0) {
-        const matching = user.shipper.find((s: { id?: number }) => s.id === activeBusinessId);
-        return matching ? matching.id : user.shipper[0].id;
+        return user.shipper[0].id || user.shipper[0];
       } else if (typeof user.shipper === 'object' && user.shipper.id) {
         return user.shipper.id;
+      } else if (typeof user.shipper === 'number') {
+        return user.shipper;
       }
     }
-    return activeBusinessId || null;
+    return null;
   }, [user, activeBusinessId]);
 
   // Load configured 2PL self-service cities for courier tenant
@@ -204,15 +221,20 @@ function OrderListContent() {
     const fetchParcels = async () => {
       try {
         setIsLoading(true);
-        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=100';
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
-        let parcels = response.data?.data || [];
+        let parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=2000';
+        if (isShipper && shipperId) {
+          parcelsUrl += `&filters[$or][0][shipper][id][$eq]=${shipperId}&filters[$or][1][pickup_location][shipper][id][$eq]=${shipperId}`;
+        }
+        const parcelsRaw = await fetchAllPaginated(parcelsUrl);
+        let parcels = Array.isArray(parcelsRaw) ? parcelsRaw : [];
 
         if (isShipper && shipperId && parcels.length > 0) {
           parcels = parcels.filter((item: any) => {
-            const itemShipper = (item.shipper || item.pickup_location?.shipper) as { id?: number } | undefined;
-            if (!itemShipper) return true;
-            return itemShipper.id === shipperId;
+            const s = item.shipper || item.attributes?.shipper || item.pickup_location?.shipper || item.pickup_location?.attributes?.shipper;
+            if (!s) return true;
+            const pId = typeof s === 'number' ? s : (s.id || s.data?.id);
+            if (pId === undefined || pId === null) return true;
+            return Number(pId) === Number(shipperId);
           });
         }
 
@@ -296,6 +318,7 @@ function OrderListContent() {
 
             return {
               id: raw.id,
+              documentId: (raw as any).documentId || (raw as any).attributes?.documentId,
               trackingNumber: `${raw.tracking_number}`,
               orderReference,
               customerName,
@@ -355,7 +378,11 @@ function OrderListContent() {
     if (statusFilter) {
       const normRow = normalizeShipmentStatus(row.status);
       const normFilter = normalizeShipmentStatus(statusFilter);
-      const matchStatus = normRow === normFilter || row.status.toLowerCase().includes(statusFilter.toLowerCase());
+      let matchStatus = normRow === normFilter || row.status.toLowerCase().includes(statusFilter.toLowerCase());
+      // Shipper mental model: 'Not Arrived' covers Booked orders awaiting arrival at origin warehouse
+      if (!matchStatus && (normFilter === SHIPMENT_STATUSES.NOT_ARRIVED || statusFilter.toLowerCase().includes('not arrived'))) {
+        matchStatus = (normRow === SHIPMENT_STATUSES.BOOKED || normRow === SHIPMENT_STATUSES.NOT_ARRIVED);
+      }
       if (!matchStatus) return false;
     }
 
@@ -365,13 +392,13 @@ function OrderListContent() {
       if (!matchCity) return false;
     }
 
-    // Date Range Filter
+    // Date Range Filter (local time conversion)
     if (fromDate) {
-      const rowDate = (row.dateCreated || '').split('T')[0];
+      const rowDate = toLocalDateString(row.dateCreated);
       if (rowDate && rowDate < fromDate) return false;
     }
     if (toDate) {
-      const rowDate = (row.dateCreated || '').split('T')[0];
+      const rowDate = toLocalDateString(row.dateCreated);
       if (rowDate && rowDate > toDate) return false;
     }
 
@@ -413,13 +440,23 @@ function OrderListContent() {
     return filteredData.filter((r) => isEligibleForDispatchSlip(r.status));
   }, [filteredData]);
 
+  // Business Rule: Cancellation is permitted before transit (Booked, Pending, etc.)
+  const eligibleCancellableOrders = React.useMemo(() => {
+    return filteredData.filter((r) => canCancelOrder(r.status));
+  }, [filteredData]);
+
   const selectedOrders = React.useMemo(() => {
     return data.filter(row => selectedIds.includes(row.id) && isEligibleForDispatchSlip(row.status));
   }, [data, selectedIds]);
 
+  const selectedCancellableOrders = React.useMemo(() => {
+    return data.filter(row => selectedIds.includes(row.id) && canCancelOrder(row.status));
+  }, [data, selectedIds]);
+
   const handleToggleRow = (row: OrderRow) => {
-    if (!isEligibleForDispatchSlip(row.status)) {
-      setToastMessage(`Dispatch slips can only be generated for Booked orders. (Order ${row.trackingNumber} is ${row.status})`);
+    const isSelectable = isEligibleForDispatchSlip(row.status) || canCancelOrder(row.status);
+    if (!isSelectable) {
+      setToastMessage(`Order ${row.trackingNumber} is ${row.status} and cannot be modified.`);
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
@@ -429,17 +466,18 @@ function OrderListContent() {
   };
 
   const handleToggleSelectAll = () => {
-    if (eligibleBookedOrders.length === 0) {
-      setToastMessage('No Booked orders available to select for dispatch slips.');
+    const selectable = filteredData.filter(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status));
+    if (selectable.length === 0) {
+      setToastMessage('No eligible orders available to select.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
-    const allEligibleSelected = eligibleBookedOrders.every(r => selectedIds.includes(r.id));
-    if (allEligibleSelected) {
-      const eligibleIds = new Set(eligibleBookedOrders.map(r => r.id));
-      setSelectedIds(prev => prev.filter(id => !eligibleIds.has(id)));
+    const allSelected = selectable.every(r => selectedIds.includes(r.id));
+    if (allSelected) {
+      const selectableIds = new Set(selectable.map(r => r.id));
+      setSelectedIds(prev => prev.filter(id => !selectableIds.has(id)));
     } else {
-      const newSelected = Array.from(new Set([...selectedIds, ...eligibleBookedOrders.map(r => r.id)]));
+      const newSelected = Array.from(new Set([...selectedIds, ...selectable.map(r => r.id)]));
       setSelectedIds(newSelected);
     }
   };
@@ -472,8 +510,9 @@ function OrderListContent() {
     if (!orderToCancel) return;
     try {
       setIsCancelling(true);
+      const parcelId = orderToCancel.documentId || orderToCancel.id;
       try {
-        await apiClient.put(`/parcels/${orderToCancel.id}`, {
+        await apiClient.put(`/parcels/${parcelId}`, {
           data: {
             status: 'Cancelled',
             remarks: cancelReason ? `Cancelled: ${cancelReason}` : 'Cancelled by Shipper',
@@ -496,6 +535,9 @@ function OrderListContent() {
         )
       );
 
+      // Deselect if currently selected
+      setSelectedIds((prev) => prev.filter((id) => id !== orderToCancel.id));
+
       setToastMessage(`Order ${orderToCancel.trackingNumber} has been successfully cancelled.`);
       setTimeout(() => setToastMessage(null), 4500);
     } finally {
@@ -503,6 +545,57 @@ function OrderListContent() {
       setOrderToCancel(null);
       setCancelReason('Customer requested cancellation');
     }
+  };
+
+  // Handle Bulk Order Cancellation
+  const handleConfirmBulkCancel = async () => {
+    if (selectedCancellableOrders.length === 0) return;
+    setIsBulkCancelling(true);
+    let successCount = 0;
+    let failedCount = 0;
+    const updatedIds = new Set<string | number>();
+
+    for (const order of selectedCancellableOrders) {
+      try {
+        const parcelId = order.documentId || order.id;
+        await apiClient.put(`/parcels/${parcelId}`, {
+          data: {
+            status: 'Cancelled',
+            remarks: bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper',
+          },
+        });
+        successCount++;
+        updatedIds.add(order.id);
+      } catch (err) {
+        console.warn(`Failed to cancel order ${order.trackingNumber}:`, err);
+        failedCount++;
+      }
+    }
+
+    if (updatedIds.size > 0) {
+      setData((prev) =>
+        prev.map((order) =>
+          updatedIds.has(order.id)
+            ? {
+                ...order,
+                status: 'Cancelled',
+                remarks: bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper',
+              }
+            : order
+        )
+      );
+      setSelectedIds((prev) => prev.filter((id) => !updatedIds.has(id)));
+    }
+
+    setIsBulkCancelling(false);
+    setShowBulkCancelModal(false);
+
+    if (failedCount === 0) {
+      setToastMessage(`Successfully cancelled ${successCount} order${successCount > 1 ? 's' : ''}.`);
+    } else {
+      setToastMessage(`Cancelled ${successCount} order(s), but ${failedCount} order(s) failed to cancel.`);
+    }
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   return (
@@ -564,7 +657,34 @@ function OrderListContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            {/* Bulk Cancel Orders Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedCancellableOrders.length === 0) {
+                  setToastMessage('Please select at least one Booked order to cancel.');
+                  setTimeout(() => setToastMessage(null), 4000);
+                  return;
+                }
+                setShowBulkCancelModal(true);
+              }}
+              disabled={selectedCancellableOrders.length === 0}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm ${
+                selectedCancellableOrders.length > 0
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-md cursor-pointer active:scale-95'
+                  : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+              }`}
+              title={
+                selectedCancellableOrders.length > 0
+                  ? `Cancel ${selectedCancellableOrders.length} selected booked order(s)`
+                  : 'Select booked orders to cancel'
+              }
+            >
+              <Ban className="w-4 h-4" />
+              Bulk Cancel {selectedCancellableOrders.length > 0 && `(${selectedCancellableOrders.length})`}
+            </button>
+
             {/* Generate Slips Action Button */}
             <button
               onClick={handlePrintSelected}
@@ -720,21 +840,51 @@ function OrderListContent() {
 
         {/* Orders Table */}
         <div className="bg-white border border-outline-variant rounded-2xl overflow-hidden shadow-sm flex flex-col">
-          <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50">
-            <div className="flex items-center gap-3">
+          <div className="p-4 border-b border-outline-variant flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={handleToggleSelectAll}
                 className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-primary transition-colors cursor-pointer select-none"
-                title={eligibleBookedOrders.length > 0 ? 'Select all Booked orders for dispatch slip generation' : 'No Booked orders available'}
+                title={eligibleBookedOrders.length > 0 ? 'Select all Booked orders' : 'No Booked orders available'}
               >
-                {eligibleBookedOrders.length > 0 && eligibleBookedOrders.every(r => selectedIds.includes(r.id)) ? (
+                {filteredData.some(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status)) &&
+                filteredData
+                  .filter(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status))
+                  .every(r => selectedIds.includes(r.id)) ? (
                   <CheckSquare className="w-4 h-4 text-primary" />
                 ) : (
                   <Square className="w-4 h-4 text-slate-400" />
                 )}
                 <span>Select All ({eligibleBookedOrders.length} Booked)</span>
               </button>
+
+              {selectedIds.length > 0 && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                    {selectedIds.length} Selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="text-xs text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                  >
+                    Clear selection
+                  </button>
+                  {selectedCancellableOrders.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkCancelModal(true)}
+                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title={`Cancel ${selectedCancellableOrders.length} selected orders`}
+                    >
+                      <Ban className="w-3.5 h-3.5 text-rose-600" /> Cancel Selected ({selectedCancellableOrders.length})
+                    </button>
+                  )}
+                </>
+              )}
+
               <span className="text-slate-300">|</span>
               <h4 className="font-bold text-sm text-on-surface flex items-center gap-2">
                 <Package className="w-4 h-4 text-primary" /> Booked Orders Listing
@@ -753,10 +903,15 @@ function OrderListContent() {
                     <input
                       type="checkbox"
                       className="w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                      checked={eligibleBookedOrders.length > 0 && eligibleBookedOrders.every(r => selectedIds.includes(r.id))}
-                      disabled={eligibleBookedOrders.length === 0}
+                      checked={
+                        filteredData.some(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status)) &&
+                        filteredData
+                          .filter(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status))
+                          .every(r => selectedIds.includes(r.id))
+                      }
+                      disabled={!filteredData.some(r => isEligibleForDispatchSlip(r.status) || canCancelOrder(r.status))}
                       onChange={handleToggleSelectAll}
-                      title={eligibleBookedOrders.length > 0 ? "Select all Booked orders" : "No Booked orders available to select"}
+                      title="Select all eligible Booked orders"
                     />
                   </th>
                   <th className="px-4 py-3">
@@ -806,19 +961,21 @@ function OrderListContent() {
                 ) : (
                   paginatedData.map((row) => {
                     const isSlipEligible = isEligibleForDispatchSlip(row.status);
+                    const isEditable = isOrderEditable(row.status);
                     const cancellable = canCancelOrder(row.status);
                     const isCancelled = row.status.toLowerCase().includes('cancel');
 
                     return (
                       <tr
                         key={row.id}
-                        className={`hover:bg-slate-50 transition-colors group ${isSlipEligible ? 'cursor-pointer' : 'cursor-default'
-                          } ${selectedIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}
+                        className={`hover:bg-slate-50 transition-colors group ${
+                          isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-default'
+                        } ${selectedIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}
                         onClick={() => {
-                          if (isSlipEligible) {
+                          if (isSlipEligible || cancellable) {
                             handleToggleRow(row);
                           } else {
-                            setToastMessage(`Dispatch slips can only be generated for Booked orders. (Status: ${row.status})`);
+                            setToastMessage(`Order ${row.trackingNumber} is ${row.status} and cannot be modified.`);
                             setTimeout(() => setToastMessage(null), 4000);
                           }
                         }}
@@ -826,15 +983,16 @@ function OrderListContent() {
                         <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className={`w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary ${isSlipEligible ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
-                              }`}
+                            className={`w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary ${
+                              isSlipEligible || cancellable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
+                            }`}
                             checked={selectedIds.includes(row.id)}
-                            disabled={!isSlipEligible}
+                            disabled={!isSlipEligible && !cancellable}
                             onChange={() => handleToggleRow(row)}
                             title={
-                              isSlipEligible
-                                ? 'Select for dispatch slip'
-                                : `Cannot select: dispatch slips are only allowed for Booked orders (Current status: ${row.status})`
+                              isSlipEligible || cancellable
+                                ? 'Select for dispatch slip or cancellation'
+                                : `Cannot select: order is ${row.status} (locked)`
                             }
                           />
                         </td>
@@ -896,6 +1054,25 @@ function OrderListContent() {
                         </td>
                         <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5 ml-auto">
+                            {/* 0. Edit Order Button (Strictly only for Booked orders) */}
+                            {isEditable ? (
+                              <Link
+                                href={`/shipments/book?editId=${row.id}&editTracking=${encodeURIComponent(row.trackingNumber)}${row.documentId ? `&documentId=${encodeURIComponent(row.documentId)}` : ''}`}
+                                className="px-2.5 py-1.5 bg-white border border-outline-variant hover:border-primary text-slate-700 hover:text-primary rounded-lg font-bold text-xs hover:shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                                title="Edit this Booked order"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-primary" /> Edit
+                              </Link>
+                            ) : (
+                              <button
+                                disabled
+                                className="px-2.5 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-not-allowed opacity-60"
+                                title={`Cannot edit: only allowed for Booked orders (Current status: ${row.status})`}
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-slate-400" /> Edit
+                              </button>
+                            )}
+
                             {/* 1. Dispatch Slip Button (Strictly only for Booked orders) */}
                             {isSlipEligible ? (
                               <button
@@ -1036,6 +1213,112 @@ function OrderListContent() {
                 ) : (
                   <>
                     <Ban className="w-3.5 h-3.5" /> Confirm Cancellation
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK CANCEL ORDERS CONFIRMATION MODAL */}
+      {showBulkCancelModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 no-print">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-outline-variant flex flex-col gap-4 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-outline-variant pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Bulk Cancel Orders</h3>
+                  <p className="text-xs text-slate-500">
+                    {selectedCancellableOrders.length} booked order{selectedCancellableOrders.length > 1 ? 's' : ''} selected for cancellation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isBulkCancelling}
+                onClick={() => {
+                  setShowBulkCancelModal(false);
+                  setBulkCancelReason('Customer requested cancellation');
+                }}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Selected Orders Summary List */}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-2">
+              <div className="flex items-center justify-between font-bold text-slate-700 pb-1 border-b border-slate-200">
+                <span>Orders to be cancelled ({selectedCancellableOrders.length}):</span>
+                <span>Total COD: PKR {selectedCancellableOrders.reduce((sum, o) => sum + (Number(o.codAmount) || 0), 0).toLocaleString()}</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-200/60 custom-scrollbar">
+                {selectedCancellableOrders.map((order) => (
+                  <div key={order.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-primary">{order.trackingNumber}</span>
+                      <span className="text-slate-600 font-medium">({order.customerName})</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">{order.destination}</span>
+                      <span className="font-bold text-slate-800">PKR {Number(order.codAmount).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Reason for cancellation (applies to all):</label>
+              <select
+                value={bulkCancelReason}
+                onChange={(e) => setBulkCancelReason(e.target.value)}
+                disabled={isBulkCancelling}
+                className="w-full text-xs font-medium border border-outline-variant bg-white rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+              >
+                <option value="Customer requested cancellation">Customer requested cancellation</option>
+                <option value="Batch cancellation by Shipper">Batch cancellation by Shipper</option>
+                <option value="Item out of stock">Item out of stock</option>
+                <option value="Duplicate bookings">Duplicate bookings</option>
+                <option value="Incorrect customer details">Incorrect customer details</option>
+                <option value="Shipper operational reason">Shipper operational reason</option>
+              </select>
+            </div>
+
+            <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200 leading-normal">
+              <strong>Notice:</strong> These {selectedCancellableOrders.length} order(s) are currently <strong>before transit</strong> ({selectedCancellableOrders[0]?.status || 'Booked'}) and will be marked as <strong>'Cancelled'</strong> in the database. Courier riders will not pick up or manifest these orders.
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                disabled={isBulkCancelling}
+                onClick={() => {
+                  setShowBulkCancelModal(false);
+                  setBulkCancelReason('Customer requested cancellation');
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+              >
+                Keep Orders
+              </button>
+              <button
+                type="button"
+                disabled={isBulkCancelling}
+                onClick={handleConfirmBulkCancel}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              >
+                {isBulkCancelling ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Cancelling {selectedCancellableOrders.length} Orders...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5" /> Confirm Cancel ({selectedCancellableOrders.length}) Orders
                   </>
                 )}
               </button>

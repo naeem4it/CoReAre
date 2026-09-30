@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/ui/SortableHeader';
@@ -167,6 +167,24 @@ export default function LoadSheetPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
   };
 
+  const isShipper = React.useMemo(() => {
+    if (isShipperEmployee) return true;
+    if (!user) return false;
+    const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
+    const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
+    return hasShipperRelation || hasShipperRoles;
+  }, [user, isShipperEmployee]);
+
+  const resolvedShipperId = React.useMemo(() => {
+    if (activeBusinessId) return activeBusinessId;
+    if (user?.shipper) {
+      if (Array.isArray(user.shipper) && user.shipper.length > 0) return user.shipper[0].id || user.shipper[0];
+      if (typeof user.shipper === 'object' && user.shipper.id) return user.shipper.id;
+      if (typeof user.shipper === 'number') return user.shipper;
+    }
+    return null;
+  }, [user, activeBusinessId]);
+
   // -------------------------------------------------------------------------
   // Fetch Booked Parcels (Status: 'Total Booking', Unassigned to Load Sheet)
   // -------------------------------------------------------------------------
@@ -177,8 +195,11 @@ export default function LoadSheetPage() {
         status: { $in: ['Total Booking', 'Not Arrived', 'booked', 'Booked'] },
       };
 
-      if (activeBusinessId) {
-        filters.shipper = { id: { $eq: activeBusinessId } };
+      if (resolvedShipperId) {
+        filters.$or = [
+          { shipper: { id: { $eq: resolvedShipperId } } },
+          { pickup_location: { shipper: { id: { $eq: resolvedShipperId } } } }
+        ];
       }
 
       if (startDate) {
@@ -194,18 +215,29 @@ export default function LoadSheetPage() {
         };
       }
 
-      const response = await apiClient.get('/parcels', {
+      const response = await fetchAllPaginated('/parcels', {
         params: {
           filters,
           populate: ['destination_city', 'source_city', 'shipper', 'load_sheet'],
           sort: ['createdAt:desc'],
-          pagination: { pageSize: 250 },
+          'pagination[pageSize]': 2000,
         },
       });
 
-      const list = response.data?.data || [];
-      // Safe client-side check to exclude parcels already assigned to a load sheet
-      const unassignedList = list.filter((p: any) => !p.load_sheet);
+      const list = Array.isArray(response) ? response : [];
+      // Safe check to exclude parcels already assigned to a load sheet (handling Strapi { data: null })
+      const isAssignedToLoadSheet = (p: any) => {
+        const ls = p.load_sheet || p.attributes?.load_sheet;
+        if (!ls) return false;
+        if (typeof ls === 'number' || typeof ls === 'string') return true;
+        if (typeof ls === 'object') {
+          if ('data' in ls) return Boolean(ls.data);
+          if ('id' in ls) return Boolean(ls.id);
+        }
+        return Boolean(ls);
+      };
+
+      const unassignedList = list.filter((p: any) => !isAssignedToLoadSheet(p));
       setBookedParcels(unassignedList);
     } catch (err) {
       console.error('Failed to fetch booked parcels:', err);
@@ -261,7 +293,7 @@ export default function LoadSheetPage() {
     fetchBookedParcels();
     fetchLoadSheets();
     fetchHubs();
-  }, [startDate, endDate, activeBusinessId]);
+  }, [startDate, endDate, resolvedShipperId]);
 
   React.useEffect(() => {
     if (activeTab === 'history') {
