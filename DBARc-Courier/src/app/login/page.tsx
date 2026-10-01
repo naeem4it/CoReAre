@@ -14,6 +14,8 @@ import { StrapiErrorResponse } from '@/types/strapi.types';
 import { TextBox } from '@/components/ui/form/text-box';
 import { useTenant } from '@/components/TenantProvider';
 
+import { authStorage } from '@/shared/utils/auth-storage';
+
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Please enter your username or business email'),
   password: z.string().min(1, 'Password is required'),
@@ -34,19 +36,15 @@ export default function LoginPage() {
     },
   });
 
-  // Clear stale session on arriving at login page so user can login with any account
+  // Clear stale session on arriving at login page for this tab only
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('expired') === '1') {
         setError('Your session has expired. Please log in again to continue.');
       }
-      // Purge any stale tokens on the login page so fresh credentials can be entered
-      localStorage.removeItem('token');
-      localStorage.removeItem('dbarc-token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('activeBusinessId');
-      localStorage.removeItem('activeOfficeId');
+      // Purge only current tab session so other open tabs (e.g. tenant admin) are never disrupted
+      sessionStorage.clear();
 
       // Restore remembered email if previously checked
       const savedEmail = localStorage.getItem('rememberedEmail');
@@ -75,9 +73,7 @@ export default function LoginPage() {
         user?.isAdminUser;
 
       if (isSuperAdmin) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('dbarc-token');
-        localStorage.removeItem('user');
+        authStorage.clearSession();
         setError('Access Denied: Super Admin accounts cannot log into the Courier Portal. Please use the Super Admin Portal.');
         return;
       }
@@ -87,9 +83,6 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem('rememberedEmail');
       }
-
-      localStorage.setItem('token', data.jwt);
-      localStorage.setItem('dbarc-token', data.jwt);
 
       const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337').replace(/\/api$/, '');
       fetch(`${apiBase}/api/users/me?populate[tenant][populate]=*&populate[role_definition]=*&populate[offices]=*&populate[shipper]=*`, {
@@ -108,11 +101,11 @@ export default function LoginPage() {
               }
             } catch (e) {}
           }
-          localStorage.setItem('user', JSON.stringify(fullUser));
+          authStorage.setSession(data.jwt, fullUser);
           window.location.href = '/';
         })
         .catch(() => {
-          localStorage.setItem('user', JSON.stringify(data.user));
+          authStorage.setSession(data.jwt, data.user);
           window.location.href = '/';
         });
     },

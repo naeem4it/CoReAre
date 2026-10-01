@@ -26,6 +26,8 @@ const AuthContext = React.createContext<AuthContextType>({
   refreshUser: () => {},
 });
 
+import { authStorage, isUserShipper } from '@/shared/utils/auth-storage';
+
 export const AuthProvider = ({ children, initialUser }: { children: React.ReactNode, initialUser?: any }) => {
   const [user, setUser] = React.useState<any>(initialUser || null);
   const [activeBusinessId, setActiveBusinessIdState] = React.useState<number | null>(null);
@@ -33,56 +35,35 @@ export const AuthProvider = ({ children, initialUser }: { children: React.ReactN
 
   React.useEffect(() => {
     if (!user) {
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        try {
-          const parsed = JSON.parse(userStr);
-          setUser(parsed);
-          
-          // Load active business id
-          const storedBiz = localStorage.getItem('activeBusinessId');
-          if (storedBiz) {
-            setActiveBusinessIdState(Number(storedBiz));
-          } else if (parsed.shipper && Array.isArray(parsed.shipper) && parsed.shipper.length > 0) {
-            setActiveBusinessIdState(parsed.shipper[0].id);
-            localStorage.setItem('activeBusinessId', parsed.shipper[0].id.toString());
-          }
+      const currentUser = authStorage.getUser();
+      if (currentUser) {
+        setUser(currentUser);
+        
+        // Load active business id
+        const storedBiz = authStorage.getActiveBusinessId();
+        if (storedBiz) {
+          setActiveBusinessIdState(storedBiz);
+        } else if (currentUser.shipper && Array.isArray(currentUser.shipper) && currentUser.shipper.length > 0) {
+          const firstBizId = currentUser.shipper[0].id;
+          setActiveBusinessIdState(firstBizId);
+          authStorage.setActiveBusinessId(firstBizId);
+        }
 
-          // Load active office id
-          const storedOffice = localStorage.getItem('activeOfficeId');
-          if (storedOffice) {
-            setActiveOfficeIdState(Number(storedOffice));
-          } else if (parsed.offices && Array.isArray(parsed.offices) && parsed.offices.length > 0) {
-            setActiveOfficeIdState(parsed.offices[0].id);
-            localStorage.setItem('activeOfficeId', parsed.offices[0].id.toString());
-          }
-
-        } catch (e) {}
+        // Load active office id
+        const storedOffice = authStorage.getActiveOfficeId();
+        if (storedOffice) {
+          setActiveOfficeIdState(storedOffice);
+        } else if (currentUser.offices && Array.isArray(currentUser.offices) && currentUser.offices.length > 0) {
+          const firstOfficeId = currentUser.offices[0].id;
+          setActiveOfficeIdState(firstOfficeId);
+          authStorage.setActiveOfficeId(firstOfficeId);
+        }
       }
     }
   }, [user]);
 
   const isShipper = React.useMemo(() => {
-    if (!user) return false;
-    if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) return true;
-    const roleType = (
-      user.role?.type || 
-      user.role_type || 
-      user.role?.name || 
-      (typeof user.role === 'string' ? user.role : '')
-    ).toString().toLowerCase();
-    if (roleType.includes('shipper')) return true;
-    if (user.user_type === 'shipper' || user.type === 'shipper') return true;
-    if (user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : !!user.shipper)) {
-      const hasCourierRole = Array.isArray(user.role_definition) && user.role_definition.some((r: any) => 
-        ['admin', 'courier', 'super admin', 'rider', 'front desk'].some(c => (r.role_name || '').toLowerCase().includes(c))
-      );
-      if (!hasCourierRole) return true;
-    }
-    const email = (user.email || '').toLowerCase();
-    const username = (user.username || '').toLowerCase();
-    if (email.includes('shipper') || username.includes('shipper')) return true;
-    return false;
+    return isUserShipper(user);
   }, [user]);
 
   const isShipperEmployee = React.useMemo(() => {
@@ -98,28 +79,18 @@ export const AuthProvider = ({ children, initialUser }: { children: React.ReactN
 
   const setActiveBusinessId = React.useCallback((id: number | null) => {
     setActiveBusinessIdState(id);
-    if (id) {
-      localStorage.setItem('activeBusinessId', id.toString());
-    } else {
-      localStorage.removeItem('activeBusinessId');
-    }
+    authStorage.setActiveBusinessId(id);
   }, []);
 
   const setActiveOfficeId = React.useCallback((id: number | null) => {
     setActiveOfficeIdState(id);
-    if (id) {
-      localStorage.setItem('activeOfficeId', id.toString());
-    } else {
-      localStorage.removeItem('activeOfficeId');
-    }
+    authStorage.setActiveOfficeId(id);
   }, []);
 
   const refreshUser = React.useCallback(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr));
-      } catch (e) {}
+    const refreshed = authStorage.getUser();
+    if (refreshed) {
+      setUser(refreshed);
     }
   }, []);
 

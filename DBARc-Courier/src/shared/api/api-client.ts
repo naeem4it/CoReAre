@@ -24,19 +24,19 @@ export function isTokenExpired(jwtToken: string | null): boolean {
   return false;
 }
 
+import { authStorage } from '@/shared/utils/auth-storage';
+
 // Attach token & tenant interceptor if token exists in localStorage or environment
 apiClient.interceptors.request.use(
   (config) => {
     let token: string | null = null;
 
     if (typeof window !== 'undefined') {
-      token = localStorage.getItem('dbarc-token') || localStorage.getItem('token') || localStorage.getItem('auth_token');
+      token = authStorage.getToken();
 
-      // If token is expired, purge stale auth from localStorage so request doesn't fail with 401
+      // If token is expired, purge stale auth from session/storage so request doesn't fail with 401
       if (token && isTokenExpired(token)) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('dbarc-token');
-        localStorage.removeItem('user');
+        authStorage.clearSession();
         token = null;
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login?expired=1';
@@ -45,9 +45,8 @@ apiClient.interceptors.request.use(
 
       // Resolve tenant ID from user storage or env
       try {
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-          const userObj = JSON.parse(userStr);
+        const userObj = authStorage.getUser();
+        if (userObj) {
           const tenantId = userObj.tenant?.id || userObj.tenantId || userObj.tenant;
           if (tenantId && config.headers) {
             config.headers['x-tenant-id'] = tenantId;
@@ -81,9 +80,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (typeof window !== 'undefined' && error.response?.status === 401) {
       console.warn(`API Client 401 Unauthorized (${error.config?.url}) - redirecting to login`);
-      localStorage.removeItem('token');
-      localStorage.removeItem('dbarc-token');
-      localStorage.removeItem('user');
+      authStorage.clearSession();
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login?expired=1';
       }

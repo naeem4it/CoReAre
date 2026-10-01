@@ -7,6 +7,7 @@ import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
 import { ChevronDown, Building2, MapPin, LogOut, Key, CreditCard } from 'lucide-react';
+import { authStorage } from '@/shared/utils/auth-storage';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -29,14 +30,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     if (authCheckedRef.current) return;
     authCheckedRef.current = true;
 
-    const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
+    const token = authStorage.getToken();
     if (!token) {
       router.push('/login');
       return;
     }
 
-    const existingUserStr = localStorage.getItem('user');
-    if (existingUserStr) {
+    const existingUser = authStorage.getUser();
+    if (existingUser) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsAuthenticated(true);
     }
@@ -58,34 +59,30 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           userData?.isAdminUser;
 
         if (isSuperAdmin) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('dbarc-token');
-          localStorage.removeItem('user');
+          authStorage.clearSession();
           router.push('/login');
           return;
         }
 
-        localStorage.setItem('user', JSON.stringify(userData));
+        authStorage.setSession(token, userData, activeBusinessId, activeOfficeId);
         refreshUser();
         setIsAuthenticated(true);
       })
       .catch((err) => {
         console.warn('Failed to fetch user context:', err.message);
         if (err.response?.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('dbarc-token');
-          localStorage.removeItem('user');
+          authStorage.clearSession();
           router.push('/login');
           return;
         }
-        if (existingUserStr) {
+        if (existingUser) {
           refreshUser();
           setIsAuthenticated(true);
         } else {
           router.push('/login');
         }
       });
-  }, [router, refreshUser]);
+  }, [router, refreshUser, activeBusinessId, activeOfficeId]);
 
   const isShipperUser = React.useMemo(() => {
     if (!user) return false;
@@ -313,8 +310,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   <div className="p-2 border-t border-outline-variant">
                     <button
                       onClick={() => {
-                        localStorage.clear();
-                        sessionStorage.clear();
+                        authStorage.clearSession();
                         window.location.href = '/login';
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error-container/20 hover:text-error rounded-lg flex items-center gap-2 transition-colors font-medium cursor-pointer"
