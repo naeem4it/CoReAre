@@ -108,6 +108,14 @@ export default function OperationsArrivalsPage() {
   // Expected Shipments Queue (fetched from DB)
   const [expectedShipments, setExpectedShipments] = React.useState<any[]>([]);
   const [isLoadingExpected, setIsLoadingExpected] = React.useState(false);
+  const [expectedPage, setExpectedPage] = React.useState<number>(1);
+  const [expectedPageSize, setExpectedPageSize] = React.useState<number>(50);
+
+  const totalExpectedPages = Math.ceil(expectedShipments.length / expectedPageSize) || 1;
+  const paginatedExpectedShipments = React.useMemo(() => {
+    const start = (expectedPage - 1) * expectedPageSize;
+    return expectedShipments.slice(start, start + expectedPageSize);
+  }, [expectedShipments, expectedPage, expectedPageSize]);
 
   // Scanned / Confirmed Received shipments in current batch
   const [receivedShipments, setReceivedShipments] = React.useState<ArrivalItem[]>([]);
@@ -462,7 +470,7 @@ export default function OperationsArrivalsPage() {
       const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
       const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
-      const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
+      const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=10000&sort[0]=createdAt:desc`;
 
       const res = await apiClient.get(url);
       const allParcels: any[] = res.data?.data || [];
@@ -506,6 +514,7 @@ export default function OperationsArrivalsPage() {
       });
 
       setExpectedShipments(filtered);
+      setExpectedPage(1);
     } catch (err) {
       console.warn('Failed to load expected arrival queue:', err);
     } finally {
@@ -1395,7 +1404,7 @@ export default function OperationsArrivalsPage() {
                         </td>
                       </tr>
                     ) : (
-                      expectedShipments.map((p) => {
+                      paginatedExpectedShipments.map((p) => {
                         const isNotArrived = normalizeShipmentStatus(p.status) === SHIPMENT_STATUSES.NOT_ARRIVED;
                         const originHub = getCurrentHubLocation(p);
                         const destCity = getDestinationLocation(p);
@@ -1474,6 +1483,70 @@ export default function OperationsArrivalsPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination controls for expected queue */}
+              {expectedShipments.length > expectedPageSize && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span>Showing <strong>{(expectedPage - 1) * expectedPageSize + 1}</strong> to <strong>{Math.min(expectedPage * expectedPageSize, expectedShipments.length)}</strong> of <strong>{expectedShipments.length.toLocaleString()}</strong> pending shipments</span>
+                    <span className="text-slate-300">|</span>
+                    <label className="flex items-center gap-1.5">
+                      <span>Per page:</span>
+                      <select
+                        value={expectedPageSize}
+                        onChange={(e) => {
+                          setExpectedPageSize(Number(e.target.value));
+                          setExpectedPage(1);
+                        }}
+                        className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs text-slate-800 outline-none cursor-pointer"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={200}>200</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExpectedPage(1)}
+                      disabled={expectedPage === 1}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium cursor-pointer"
+                    >
+                      First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpectedPage(prev => Math.max(1, prev - 1))}
+                      disabled={expectedPage === 1}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium cursor-pointer"
+                    >
+                      Prev
+                    </button>
+                    <span className="px-3 py-1 font-bold text-slate-800 bg-slate-100 rounded-lg">
+                      Page {expectedPage} of {totalExpectedPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExpectedPage(prev => Math.min(totalExpectedPages, prev + 1))}
+                      disabled={expectedPage === totalExpectedPages}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium cursor-pointer"
+                    >
+                      Next
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpectedPage(totalExpectedPages)}
+                      disabled={expectedPage === totalExpectedPages}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium cursor-pointer"
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

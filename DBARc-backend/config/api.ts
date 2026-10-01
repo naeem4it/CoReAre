@@ -3,7 +3,7 @@ import type { Core } from '@strapi/strapi';
 const config: Core.Config.Api = {
   rest: {
     defaultLimit: 25,
-    maxLimit: 10000,
+    maxLimit: 50000,
     withCount: true,
   },
   documents: {

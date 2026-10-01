@@ -456,5 +456,110 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
         delivered
       }
     };
+  },
+
+  async createBulk(ctx: any) {
+    const body = ctx.request.body || {};
+    const parcels = Array.isArray(body.parcels) ? body.parcels : (Array.isArray(body.data) ? body.data : (Array.isArray(body) ? body : []));
+
+    if (!parcels || parcels.length === 0) {
+      return ctx.badRequest('No parcels provided in request body');
+    }
+
+    // 1. Prefetch all cities in 1 query for instant O(1) in-memory resolution
+    const allCities = await strapi.db.query('api::city.city').findMany({
+      select: ['id', 'CityName']
+    });
+    const cityMap = new Map<string, number>();
+    for (const c of allCities) {
+      if (c.CityName) {
+        cityMap.set(c.CityName.trim().toLowerCase(), c.id);
+      }
+    }
+
+    // 2. Prefetch tracking sequence starting point
+    const prefix = 'SHZ';
+    const lastParcel = await strapi.db.query('api::parcel.parcel').findOne({
+      where: { tracking_number: { $startsWith: prefix } },
+      orderBy: { id: 'desc' }
+    });
+    let nextSeq = 100001134;
+    if (lastParcel && lastParcel.tracking_number) {
+      const num = parseInt(lastParcel.tracking_number.replace(prefix, ''), 10);
+      if (!isNaN(num) && num >= 100000000) {
+        nextSeq = num + 1;
+      }
+    }
+
+    // 3. Insert in controlled concurrent sub-batches of 25 to respect DB pool
+    const createdParcels: any[] = [];
+    const errors: any[] = [];
+    const SUB_BATCH_SIZE = 25;
+
+    for (let i = 0; i < parcels.length; i += SUB_BATCH_SIZE) {
+      const slice = parcels.slice(i, i + SUB_BATCH_SIZE);
+      const batchPromises = slice.map(async (p: any) => {
+        try {
+          const trackingId = p.tracking_number || `${prefix}${nextSeq++}`;
+
+          let destCityId = p.destination_city;
+          if (typeof destCityId === 'string' && isNaN(Number(destCityId))) {
+            destCityId = cityMap.get(destCityId.trim().toLowerCase()) || null;
+          } else if (destCityId) {
+            destCityId = Number(destCityId) || null;
+          }
+
+          let sourceCityId = p.source_city;
+          if (typeof sourceCityId === 'string' && isNaN(Number(sourceCityId))) {
+            sourceCityId = cityMap.get(sourceCityId.trim().toLowerCase()) || null;
+          } else if (sourceCityId) {
+            sourceCityId = Number(sourceCityId) || null;
+          }
+
+          const record = await strapi.db.query('api::parcel.parcel').create({
+            data: {
+              tracking_number: trackingId,
+              status: p.status || 'Booked',
+              payment_type: (p.cod_amount && Number(p.cod_amount) > 0) ? 'COD' : (p.payment_type || 'PAID'),
+              cod_amount: Number(p.cod_amount) || 0,
+              weight: Number(p.weight) || 0.5,
+              pieces: Number(p.pieces) || 1,
+              delivery_charges: Number(p.delivery_charges) || 0,
+              recipient_name: String(p.recipient_name || 'Customer').trim(),
+              recipient_phone: String(p.recipient_phone || '').trim(),
+              recipient_address: String(p.recipient_address || '').trim(),
+              source_city: sourceCityId,
+              destination_city: destCityId,
+              consignee_email: p.consignee_email || null,
+              consignee_alt_phone: p.consignee_alt_phone || null,
+              allow_to_open: p.allow_to_open === 'Yes' ? 'Yes' : 'No',
+              comments: p.comments || null,
+              shipper: p.shipper ? Number(p.shipper) : null,
+              origin_office: p.origin_office ? Number(p.origin_office) : null,
+              is_3pl: false,
+              reference_number: p.reference_number || null,
+            }
+          });
+          return { success: true, id: record.id, tracking_number: trackingId };
+        } catch (err: any) {
+          return { success: false, error: err.message, recipient: p.recipient_name };
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      for (const r of batchResults) {
+        if (r.success) createdParcels.push(r);
+        else errors.push(r);
+      }
+    }
+
+    return ctx.send({
+      success: true,
+      created_count: createdParcels.length,
+      failed_count: errors.length,
+      created: createdParcels,
+      errors: errors.slice(0, 10),
+    });
   }
 }));
+

@@ -20,9 +20,18 @@ const config: Core.Config.Middlewares = [
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
     },
   },
-  'strapi::poweredBy',
   'strapi::query',
-  'strapi::body',
+  {
+    name: 'strapi::body',
+    config: {
+      jsonLimit: '256mb',
+      formLimit: '256mb',
+      textLimit: '256mb',
+      formidable: {
+        maxFileSize: 256 * 1024 * 1024,
+      },
+    },
+  },
   'strapi::session',
   'strapi::favicon',
   'strapi::public',

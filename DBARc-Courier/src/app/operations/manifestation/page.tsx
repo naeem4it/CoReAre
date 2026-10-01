@@ -336,7 +336,7 @@ export default function OperationsManifestationPage() {
         'Arrived'
       ];
       const statusParams = queryStatuses.map((s, i) => `filters[status][$in][${i}]=${encodeURIComponent(s)}`).join('&');
-      const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=200&sort[0]=createdAt:desc`;
+      const url = `/parcels?populate=*&${statusParams}&pagination[pageSize]=10000&sort[0]=createdAt:desc`;
       
       const res = await apiClient.get(url);
       let allParcels: any[] = res.data?.data || [];

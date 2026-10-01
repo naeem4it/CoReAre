@@ -8,5 +8,14 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'POST',
+      path: '/parcels/bulk',
+      handler: 'parcel.createBulk',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };
+
