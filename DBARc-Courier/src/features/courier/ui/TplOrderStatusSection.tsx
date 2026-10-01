@@ -22,10 +22,11 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import { translate3PLStatus } from '@/shared/data/pakistan-3pl-status-mappings';
 import { TPL_PROVIDERS } from '@/shared/data/pakistan-3pl-city-mappings';
+import { toLocalDateString } from '@/shared/utils/date';
 
 interface TplOrderStatusSectionProps {
   fromDate?: string;
@@ -51,13 +52,13 @@ export interface TplOrderRecord {
   rawTplStatus: string;
   category: 'in_transit' | 'out_for_delivery' | 'delivered' | 'exception' | 'returned';
   lastSyncAt: string;
-  manifestNumber?: string;
+  manifestNumber?: string | undefined;
   history?: Array<{
     status: string;
     location: string;
     timestamp: string;
     remarks: string;
-  }>;
+  }> | undefined;
 }
 
 export function TplOrderStatusSection({ fromDate, toDate }: TplOrderStatusSectionProps) {
@@ -105,12 +106,16 @@ export function TplOrderStatusSection({ fromDate, toDate }: TplOrderStatusSectio
       const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
       const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
-      const url = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=150';
-      const res = await apiClient.get<any>(url);
-      const rawParcels = res.data?.data || [];
+      const rawParcels = await fetchAllPaginated<any>('/parcels', {
+        params: {
+          populate: '*',
+          sort: ['createdAt:desc'],
+          pagination: { pageSize: 1000 }
+        }
+      });
 
       // Filter for 3PL parcels
-      let tplParcels = rawParcels.filter((p: any) => {
+      let tplParcels = (Array.isArray(rawParcels) ? rawParcels : []).filter((p: any) => {
         const is3plFlag = Boolean(p.is_3pl) || p.is_3pl === 'true' || p.is_3pl === 1;
         const isTplService = p.service_provider === '3PL' || p.service_provider === 'TPL';
         const courierName = p.courier?.name || p.courier || '';
@@ -139,18 +144,11 @@ export function TplOrderStatusSection({ fromDate, toDate }: TplOrderStatusSectio
       // Filter by Date Range
       if (fromDate || toDate) {
         tplParcels = tplParcels.filter((item: any) => {
-          if (!item.createdAt) return true;
-          const itemDate = new Date(item.createdAt);
-          if (fromDate) {
-            const from = new Date(fromDate);
-            from.setHours(0, 0, 0, 0);
-            if (itemDate < from) return false;
-          }
-          if (toDate) {
-            const to = new Date(toDate);
-            to.setHours(23, 59, 59, 999);
-            if (itemDate > to) return false;
-          }
+          const created = item.createdAt;
+          if (!created) return true;
+          const dateStr = toLocalDateString(created);
+          if (fromDate && dateStr < fromDate) return false;
+          if (toDate && dateStr > toDate) return false;
           return true;
         });
       }

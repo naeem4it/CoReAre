@@ -140,6 +140,12 @@
     "reference_number": {
       "type": "string"
     },
+    "secondary_barcode": {
+      "type": "string"
+    },
+    "service_provider": {
+      "type": "string"
+    },
     "arrival_date": {
       "type": "datetime"
     },

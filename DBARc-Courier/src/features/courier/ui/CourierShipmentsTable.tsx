@@ -1,16 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import { Parcel } from '@/types/generated/parcel.types';
 import { StrapiCollectionResponse } from '@/types/strapi.types';
 import TablePagination from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { toLocalDateString } from '@/shared/utils/date';
 
 type ShipmentRow = {
   id: number | string;
   trackingNumber: string;
+  secondaryBarcode?: string | null;
+  serviceProvider?: string | null;
+  is3PL?: boolean;
   customerName: string;
   avatar: string;
   origin: string;
@@ -74,9 +78,19 @@ export const CourierShipmentsTable = ({
         const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
         const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
-        const parcelsUrl = '/parcels?populate=*&sort[0]=createdAt:desc&pagination[pageSize]=200';
-        const response = await apiClient.get<StrapiCollectionResponse<Parcel>>(parcelsUrl);
-        let parcels = response.data?.data || [];
+        const params: any = {
+          populate: '*',
+          sort: ['createdAt:desc'],
+          pagination: { pageSize: 1000 }
+        };
+
+        if (isShipper && shipperId) {
+          params['filters[$or][0][shipper][id][$eq]'] = shipperId;
+          params['filters[$or][1][pickup_location][shipper][id][$eq]'] = shipperId;
+        }
+
+        const rawList = await fetchAllPaginated<Parcel>('/parcels', { params });
+        let parcels = Array.isArray(rawList) ? rawList : [];
         
         if (isShipper && shipperId && parcels.length > 0) {
           parcels = parcels.filter((item: any) => {
@@ -96,18 +110,11 @@ export const CourierShipmentsTable = ({
         
         if (fromDate || toDate) {
           parcels = parcels.filter((item: any) => {
-            if (!item.createdAt) return true;
-            const itemDate = new Date(item.createdAt);
-            if (fromDate) {
-              const from = new Date(fromDate);
-              from.setHours(0, 0, 0, 0);
-              if (itemDate < from) return false;
-            }
-            if (toDate) {
-              const to = new Date(toDate);
-              to.setHours(23, 59, 59, 999);
-              if (itemDate > to) return false;
-            }
+            const created = item.createdAt;
+            if (!created) return true;
+            const dateStr = toLocalDateString(created);
+            if (fromDate && dateStr < fromDate) return false;
+            if (toDate && dateStr > toDate) return false;
             return true;
           });
         }
@@ -136,10 +143,15 @@ export const CourierShipmentsTable = ({
             
             const paymentType: 'COD' | 'PAID' = (item as any).payment_type === 'PAID' || Number(item.cod_amount) === 0 ? 'PAID' : 'COD';
             const codAmount = Number(item.cod_amount) || 0;
+            const secBarcode = (item as any).secondary_barcode || (item as any).reference_number || null;
+            const provider = (item as any).service_provider || ((item as any).is_3pl ? 'PostEx' : null);
 
             return {
               id: item.id,
               trackingNumber: `#${item.tracking_number}`,
+              secondaryBarcode: secBarcode,
+              serviceProvider: provider,
+              is3PL: Boolean((item as any).is_3pl || secBarcode),
               customerName,
               avatar: initials,
               origin,
@@ -193,6 +205,9 @@ export const CourierShipmentsTable = ({
         if (selectedStatus === 'return-to-shipper') {
           return norm === SHIPMENT_STATUSES.RETURN_TO_SHIPPER || norm === SHIPMENT_STATUSES.LOST_DAMAGE;
         }
+        if (selectedStatus === 'cancelled') {
+          return norm === SHIPMENT_STATUSES.CANCELLED || (row.status as string).toLowerCase().includes('cancel');
+        }
         return true;
       });
     }
@@ -202,6 +217,8 @@ export const CourierShipmentsTable = ({
       result = result.filter(
         (row) =>
           row.trackingNumber.toLowerCase().includes(lower) ||
+          (row.secondaryBarcode && row.secondaryBarcode.toLowerCase().includes(lower)) ||
+          (row.serviceProvider && row.serviceProvider.toLowerCase().includes(lower)) ||
           row.customerName.toLowerCase().includes(lower) ||
           row.origin.toLowerCase().includes(lower) ||
           row.destination.toLowerCase().includes(lower) ||
@@ -436,7 +453,21 @@ export const CourierShipmentsTable = ({
                   key={row.id}
                   onClick={() => router.push(`/tracking?search=${row.trackingNumber.replace('#', '')}`)}
                 >
-                  <td className="px-md py-4 font-tabular-nums text-primary font-semibold">{row.trackingNumber}</td>
+                  <td className="px-md py-4">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-tabular-nums text-primary font-bold">{row.trackingNumber}</span>
+                      {row.secondaryBarcode && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
+                            3PL: {row.serviceProvider || 'PostEx'}
+                          </span>
+                          <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
+                            {row.secondaryBarcode}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-md py-4">
                     <div className="flex items-center gap-2">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarBg(row.avatar)}`}>
@@ -509,6 +540,7 @@ export const CourierShipmentsTable = ({
           currentPage={safePage}
           totalItems={filteredData.length}
           pageSize={pageSize}
+          pageSizeOptions={[10, 25, 50, 100, 250, 500]}
           onPageChange={setCurrentPage}
           onPageSizeChange={(newSize) => {
             setPageSize(newSize);

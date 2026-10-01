@@ -266,6 +266,8 @@ function OrderListContent() {
             payment_type?: string;
             status?: string;
             is_3pl?: boolean;
+            secondary_barcode?: string;
+            service_provider?: string;
             courier?: { name?: string };
             reference_number?: string;
             order_id?: string;
@@ -308,17 +310,11 @@ function OrderListContent() {
 
             const is2PL = in2PLArea && !(raw.is_3pl && raw.courier && raw.courier?.name !== 'IN-HOUSE');
 
-            let tplCourierId = 'IN-HOUSE';
-            let tplTrackingNo = raw.tracking_number;
-
-            if (!is2PL) {
-              tplCourierId = raw.courier?.name
-                || (courierTplPartners.find((p) => p.is_preferred)?.name)
-                || (courierTplPartners[0]?.name)
-                || 'Leopards Courier';
-              const cleanPrefix = tplCourierId.replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase() || 'LE';
-              tplTrackingNo = raw.reference_number || `${cleanPrefix}${raw.tracking_number.replace(/[^0-9]/g, '').slice(-10) || '7545194076'}`;
-            }
+            const is3PL = Boolean(raw.is_3pl) || !is2PL;
+            const secBarcode = raw.secondary_barcode || raw.reference_number || '';
+            const serviceProvider = raw.service_provider || raw.courier?.name || (is3PL ? 'PostEx' : 'IN-HOUSE');
+            let tplCourierId = serviceProvider;
+            let tplTrackingNo = secBarcode;
 
             return {
               id: raw.id,
@@ -344,6 +340,9 @@ function OrderListContent() {
               remarks,
               parcelDetail,
               is2PL,
+              is3PL,
+              serviceProvider,
+              secondaryBarcode: secBarcode,
               tplCourierId,
               tplTrackingNo,
               dateCreated: raw.createdAt || new Date().toISOString(),
@@ -371,6 +370,8 @@ function OrderListContent() {
       const lower = searchQuery.toLowerCase();
       const matchSearch = (
         row.trackingNumber.toLowerCase().includes(lower) ||
+        (row.tplTrackingNo && row.tplTrackingNo.toLowerCase().includes(lower)) ||
+        (row.serviceProvider && row.serviceProvider.toLowerCase().includes(lower)) ||
         row.customerName.toLowerCase().includes(lower) ||
         row.address.toLowerCase().includes(lower) ||
         row.status.toLowerCase().includes(lower) ||
@@ -1034,8 +1035,22 @@ function OrderListContent() {
                             }
                           />
                         </td>
-                        <td className="px-4 py-4 font-mono font-bold text-primary text-sm">
-                          {row.trackingNumber}
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono font-bold text-primary text-sm">
+                              {row.trackingNumber}
+                            </span>
+                            {row.tplTrackingNo && row.tplTrackingNo !== row.trackingNumber && (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
+                                  3PL: {row.serviceProvider || row.tplCourierId || 'PostEx'}
+                                </span>
+                                <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
+                                  {row.tplTrackingNo}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">

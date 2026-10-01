@@ -54,7 +54,7 @@ import { SearchableDropdown } from '@/components/ui/form/searchable-dropdown';
 import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
 import { findPakistanLocation, FLAT_PAKISTAN_LOCATIONS } from '@/shared/data/pakistan-locations';
 import { evaluateLogisticsRouting, TPLPartnerModel } from '@/shared/data/pakistan-3pl-city-mappings';
-import { generateTrackingId, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
+import { generateTrackingId, generateTrackingIdAsync, syncTrackingNumberWithDb, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
 
 const PAKISTAN_CITY_COORDINATES = [
   { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
@@ -451,6 +451,7 @@ function BookShipmentForm() {
   const [bookingStatus, setBookingStatus] = React.useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = React.useState('');
   const [createdTrackingId, setCreatedTrackingId] = React.useState('');
+  const [createdTplTrackingId, setCreatedTplTrackingId] = React.useState('');
 
   // Auto-complete Reference States
   const [refSearchQuery, setRefSearchQuery] = React.useState('');
@@ -483,6 +484,11 @@ function BookShipmentForm() {
       setBookingMode('manual');
     }
   }, [searchParams, isShipper]);
+
+  // Sync latest tracking sequence with database on page mount
+  React.useEffect(() => {
+    syncTrackingNumberWithDb().catch(() => null);
+  }, []);
 
   const [showDetailsModal, setShowDetailsModal] = React.useState(false);
 
@@ -1334,7 +1340,7 @@ function BookShipmentForm() {
   };
 
   // Submit Manual Single Order
-  const onSubmit = async (data: BookingFormValues) => {
+  const handleBookingSubmit = async (data: BookingFormValues, retryCount = 0) => {
     setBookingStatus('submitting');
     setErrorMessage('');
 
@@ -1381,7 +1387,7 @@ function BookShipmentForm() {
         return;
       }
 
-      const trackingId = generateTrackingId(isShipper ? 'shipper' : 'courier');
+      const trackingId = await generateTrackingIdAsync(isShipper ? 'shipper' : 'courier');
       const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenantId;
       const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
       const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
@@ -1444,6 +1450,27 @@ function BookShipmentForm() {
         });
       }
 
+      const tplBooking = parcelRes.data?.data?.tpl_booking;
+      const tplCn = parcelRes.data?.data?.secondary_barcode || tplBooking?.response?.dist?.trackingNumber;
+      if (tplCn) {
+        setCreatedTplTrackingId(tplCn);
+      } else {
+        setCreatedTplTrackingId('');
+      }
+
+      if (logisticsRouting?.is3PL || tplBooking) {
+        console.group(`🚚 [3PL Service Booking] - ${trackingId}`);
+        console.log('📦 DBARc Tracking:', trackingId);
+        console.log('🏢 Provider:', tplBooking?.provider || 'PostEx');
+        console.log('📤 Request Payload:', tplBooking?.payload);
+        console.log('📡 HTTP Status:', tplBooking?.status);
+        console.log('📥 Response Body:', tplBooking?.response);
+        if (tplCn) {
+          console.log('✅ PostEx 3PL CN:', tplCn);
+        }
+        console.groupEnd();
+      }
+
       setCreatedTrackingId(trackingId);
       setBookingStatus('success');
       setSelectedReferencedParcel(null);
@@ -1481,6 +1508,16 @@ function BookShipmentForm() {
 
     } catch (err: any) {
       console.warn('Failed to book order:', err?.response?.data || err.message);
+      const isUniqueError = 
+        err.response?.data?.error?.message?.toLowerCase().includes('unique') ||
+        err.response?.data?.error?.details?.errors?.some((e: any) => e.message?.toLowerCase().includes('unique'));
+
+      if (isUniqueError && retryCount < 3) {
+        // Automatically sync fresh tracking sequence from DB and retry booking seamlessly
+        await syncTrackingNumberWithDb();
+        return handleBookingSubmit(data, retryCount + 1);
+      }
+
       if (err.response?.status === 401) {
         setErrorMessage('Your session has expired. Redirecting to login page...');
         setTimeout(() => {
@@ -1491,6 +1528,10 @@ function BookShipmentForm() {
       }
       setBookingStatus('error');
     }
+  };
+
+  const onSubmit = (data: BookingFormValues) => {
+    handleBookingSubmit(data, 0);
   };
 
   // Drag and Drop Handlers
@@ -1847,6 +1888,7 @@ function BookShipmentForm() {
     let successCount = 0;
 
     try {
+      await syncTrackingNumberWithDb();
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
         const originCity = selectedShipperBusiness?.city || 'Lahore';
@@ -1885,6 +1927,18 @@ function BookShipmentForm() {
         };
 
         const parcelRes = await apiClient.post('/parcels', { data: parcelPayload });
+
+        if (parcelRes.data?.data?.tpl_booking || parcelPayload.is_3pl) {
+          const tpl = parcelRes.data?.data?.tpl_booking;
+          console.group(`🚚 [Bulk 3PL Booking] - ${trackingId}`);
+          console.log('📦 DBARc Tracking:', trackingId);
+          console.log('🏢 Provider:', tpl?.provider || 'PostEx');
+          console.log('📤 Request Payload:', tpl?.payload);
+          console.log('📡 HTTP Status:', tpl?.status);
+          console.log('📥 Response Body:', tpl?.response);
+          console.log('✅ 3PL CN:', parcelRes.data?.data?.secondary_barcode || 'Pending');
+          console.groupEnd();
+        }
 
         const newParcelId = parcelRes.data.data.id;
 
@@ -2119,6 +2173,12 @@ function BookShipmentForm() {
             <div>
               <p className="font-bold">{editingParcel ? 'Order Updated Successfully!' : 'Order Booked Successfully!'}</p>
               <p className="text-sm">Tracking ID: <strong className="font-mono text-slate-900">{createdTrackingId}</strong></p>
+              {createdTplTrackingId && (
+                <p className="text-xs mt-1 text-emerald-700 font-medium">
+                  <span className="font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded text-[11px] mr-2">3PL PostEx Booked</span>
+                  PostEx CN: <strong className="font-mono text-slate-900">{createdTplTrackingId}</strong>
+                </p>
+              )}
             </div>
           </div>
         )}

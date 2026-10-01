@@ -4,9 +4,9 @@ async function main() {
   const client = new Client({
     host: '127.0.0.1',
     port: 5432,
-    database: 'dbarc_db',
+    database: 'dbarc_db1',
     user: 'postgres',
-    password: 'root',
+    password: 'poiu@3939',
   });
 
   try {
@@ -49,7 +49,7 @@ async function main() {
   } catch (err) {
     console.error('Error:', err);
   } finally {
-    await client.end().catch(() => {});
+    await client.end().catch(() => { });
   }
 }
 
