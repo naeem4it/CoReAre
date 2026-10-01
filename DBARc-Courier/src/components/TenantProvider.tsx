@@ -41,140 +41,117 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   React.useEffect(() => {
+    let isMounted = true;
     const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337').replace(/\/api$/, '');
+    const configuredTenantId = process.env.NEXT_PUBLIC_TENANT_ID || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '1';
 
-    // 1. Resolve domain branding if accessing through subdomain (e.g. shipzo.mashrue.com)
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        axios
-          .get(`${apiBase}/api/tenant/resolve?domain=${hostname}`)
-          .then((res) => {
-            if (res.data) {
-              const data = res.data;
-              if (data.business_name || data.name) {
-                setBusinessName(data.business_name || data.name);
-              }
-              if (data.theme_primary_color) {
-                setThemePrimaryColor(data.theme_primary_color);
-              }
-              if (data.theme_secondary_color) {
-                setThemeSecondaryColor(data.theme_secondary_color);
-              }
-              applyColors(data.theme_primary_color, data.theme_secondary_color);
+    const handleTenantData = (data: any) => {
+      if (!data || !isMounted) return;
+      const name = data.business_name || data.name;
+      if (name) setBusinessName(name);
 
-              if (data.logo?.url) {
-                const url = data.logo.url.startsWith('http')
-                  ? data.logo.url
-                  : `${apiBase}${data.logo.url}`;
-                setLogoUrl(url);
-              }
-            }
-          })
-          .catch(() => {
-            // Ignore resolution error and proceed with local storage / user
-          });
+      if (data.theme_primary_color) setThemePrimaryColor(data.theme_primary_color);
+      if (data.theme_secondary_color) setThemeSecondaryColor(data.theme_secondary_color);
+      applyColors(data.theme_primary_color, data.theme_secondary_color);
+
+      const logoObj = data.logo?.data?.attributes || data.logo?.data || data.logo;
+      const rawLogoUrl = logoObj?.url || data.logoUrl;
+      if (rawLogoUrl) {
+        const fullUrl = rawLogoUrl.startsWith('http')
+          ? rawLogoUrl
+          : `${apiBase}${rawLogoUrl}`;
+        setLogoUrl(fullUrl);
       }
-    }
-
-    // 2. Read strictly stored tenant info for local storage fallback
-    if (typeof window !== 'undefined') {
       try {
-        const storedTenantStr = localStorage.getItem('dbarc-tenant') || localStorage.getItem('tenant');
-        if (storedTenantStr) {
-          const storedTenant = JSON.parse(storedTenantStr);
-          const name = storedTenant.business_name || storedTenant.name || storedTenant.businessName;
-          if (name) setBusinessName(name);
-
-          const primary = storedTenant.theme_primary_color || storedTenant.themePrimaryColor;
-          const secondary = storedTenant.theme_secondary_color || storedTenant.themeSecondaryColor;
-          if (primary) setThemePrimaryColor(primary);
-          if (secondary) setThemeSecondaryColor(secondary);
-          if (primary || secondary) applyColors(primary, secondary);
-
-          const logo = storedTenant.logo?.url || storedTenant.logoUrl;
-          if (logo) {
-            setLogoUrl(logo.startsWith('http') ? logo : `${apiBase}${logo}`);
-          }
-        }
-        
-        const storedUserStr = localStorage.getItem('user');
-        if (storedUserStr) {
-          const storedUser = JSON.parse(storedUserStr);
-          const tenantId = storedUser.tenant?.id || storedUser.tenantId || (typeof storedUser.tenant === 'number' ? storedUser.tenant : null);
-          if (tenantId) {
-            axios.get(`${apiBase}/api/tenant/resolve?tenantId=${tenantId}`)
-              .then((res) => {
-                if (res.data) {
-                  const data = res.data;
-                  const name = data.business_name || data.name;
-                  if (name) setBusinessName(name);
-                  if (data.theme_primary_color) setThemePrimaryColor(data.theme_primary_color);
-                  if (data.theme_secondary_color) setThemeSecondaryColor(data.theme_secondary_color);
-                  applyColors(data.theme_primary_color, data.theme_secondary_color);
-                  if (data.logo?.url) {
-                    const url = data.logo.url.startsWith('http')
-                      ? data.logo.url
-                      : `${apiBase}${data.logo.url}`;
-                    setLogoUrl(url);
-                  }
-                  localStorage.setItem('dbarc-tenant', JSON.stringify(data));
-                }
-              })
-              .catch(() => {});
-          }
-        }
+        localStorage.setItem('dbarc-tenant', JSON.stringify(data));
       } catch (e) {
-        console.warn('Failed to parse tenant from localStorage:', e);
+        // ignore storage errors
       }
-    }
+      setIsLoading(false);
+    };
 
-    // 3. User session update (e.g. Courier Admin naeemcourier@test.com)
-    if (user) {
-      const tenant = user.tenant;
-      const tenantId = tenant?.id || user.tenantId || (typeof tenant === 'number' ? tenant : null);
-
-      if (tenantId) {
-        axios.get(`${apiBase}/api/tenant/resolve?tenantId=${tenantId}`)
-          .then((res) => {
+    async function loadTenant() {
+      // 1. If user is authenticated with a tenant, use user's tenant
+      if (user) {
+        const tenant = user.tenant;
+        const userTenantId = tenant?.id || user.tenantId || (typeof tenant === 'number' ? tenant : null);
+        if (userTenantId) {
+          try {
+            const res = await axios.get(`${apiBase}/api/tenant/resolve?tenantId=${userTenantId}`);
             if (res.data) {
-              const data = res.data;
-              const name = data.business_name || data.name;
-              if (name) setBusinessName(name);
-              if (data.theme_primary_color) setThemePrimaryColor(data.theme_primary_color);
-              if (data.theme_secondary_color) setThemeSecondaryColor(data.theme_secondary_color);
-              applyColors(data.theme_primary_color, data.theme_secondary_color);
-              if (data.logo?.url) {
-                const url = data.logo.url.startsWith('http')
-                  ? data.logo.url
-                  : `${apiBase}${data.logo.url}`;
-                setLogoUrl(url);
-              }
-              localStorage.setItem('dbarc-tenant', JSON.stringify(data));
+              handleTenantData(res.data);
+              return;
             }
-          })
-          .catch(() => {});
-      } else {
-        const tenantName = tenant?.business_name || tenant?.name;
-        if (tenantName) setBusinessName(tenantName);
-
-        if (tenant?.theme_primary_color || tenant?.theme_secondary_color) {
-          setThemePrimaryColor(tenant.theme_primary_color || '#0D9488');
-          setThemeSecondaryColor(tenant.theme_secondary_color || '#0284C7');
-          applyColors(tenant.theme_primary_color, tenant.theme_secondary_color);
-        }
-
-        if (tenant?.logo?.url) {
-          const url = tenant.logo.url.startsWith('http') 
-            ? tenant.logo.url 
-            : `${apiBase}${tenant.logo.url}`;
-          setLogoUrl(url);
+          } catch (err) {
+            console.warn('Failed to resolve tenant by user tenantId:', err);
+          }
         }
       }
-      setIsLoading(false);
-    } else if (user !== undefined) {
-      setIsLoading(false);
+
+      // 2. Custom domain or subdomain resolution (e.g. shipzo.mashrue.com)
+      if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+          try {
+            const res = await axios.get(`${apiBase}/api/tenant/resolve?domain=${hostname}`);
+            if (res.data) {
+              handleTenantData(res.data);
+              return;
+            }
+          } catch (err) {
+            // fall through to next checks
+          }
+        }
+      }
+
+      // 3. Single-tenant / configured tenant ID from .env (e.g. NEXT_PUBLIC_TENANT_ID=1)
+      if (configuredTenantId) {
+        try {
+          const res = await axios.get(`${apiBase}/api/tenant/resolve?tenantId=${configuredTenantId}`);
+          if (res.data) {
+            handleTenantData(res.data);
+            return;
+          }
+        } catch (err) {
+          console.warn('Failed to resolve configured tenant:', err);
+        }
+      }
+
+      // 4. Stored tenant fallback from localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          const storedTenantStr = localStorage.getItem('dbarc-tenant') || localStorage.getItem('tenant');
+          if (storedTenantStr) {
+            const storedTenant = JSON.parse(storedTenantStr);
+            handleTenantData(storedTenant);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse tenant from localStorage:', e);
+        }
+      }
+
+      // 5. Automatic single-tenant fallback to backend default
+      try {
+        const res = await axios.get(`${apiBase}/api/tenant/resolve`);
+        if (res.data) {
+          handleTenantData(res.data);
+          return;
+        }
+      } catch (err) {
+        // default fallback
+      }
+
+      if (isMounted) {
+        setIsLoading(false);
+      }
     }
+
+    loadTenant();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, applyColors]);
 
   return (

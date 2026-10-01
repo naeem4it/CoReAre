@@ -437,15 +437,14 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
   async resolveByDomain(ctx) {
     try {
       const { domain, tenantId } = ctx.query;
-      if (!domain && !tenantId) {
-        return ctx.badRequest('Domain or tenantId query parameter is required');
-      }
+      const configuredDefaultId = process.env.DEFAULT_TENANT_ID;
+      const targetId = tenantId || (domain ? null : configuredDefaultId);
 
       let tenant: any = null;
 
-      if (tenantId) {
+      if (targetId) {
         tenant = await strapi.db.query('api::tenant.tenant').findOne({
-          where: { id: Number(tenantId) },
+          where: { id: Number(targetId) },
           populate: ['logo'],
         });
       }
@@ -468,6 +467,15 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
             return tDomain.includes(subdomain) || tName === subdomain;
           });
         }
+      }
+
+      // If still not found and no specific domain requested, fallback to first active tenant
+      if (!tenant && !domain && !tenantId) {
+        tenant = await strapi.db.query('api::tenant.tenant').findOne({
+          where: { status: 'active' },
+          populate: ['logo'],
+          orderBy: { id: 'asc' },
+        });
       }
 
       if (!tenant) {
