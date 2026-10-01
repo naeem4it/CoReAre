@@ -4,7 +4,6 @@ import * as React from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, UserRole } from '@/shared/model/auth.store';
-import { useTenantBranding } from '@/shared/providers/TenantThemeProvider';
 import { Button } from '@/shared/ui/Button';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react';
@@ -13,7 +12,6 @@ import { DBarcLogo } from '@/shared/ui/DBarcLogo';
 export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
-  const { businessName, logoUrl } = useTenantBranding();
 
   const [isLoading, setIsLoading] = React.useState(false);
   const [email, setEmail] = React.useState('');
@@ -126,27 +124,16 @@ export default function LoginPage() {
         <div className="h-1 w-full bg-gradient-to-r from-blue-600 via-indigo-500 to-sky-400" />
         
         <div className="pt-8 pb-3 px-8 text-center flex flex-col items-center">
-          {/* Logo Branding */}
-          {logoUrl ? (
-            <div className="h-16 w-full max-w-[220px] mb-4 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoUrl}
-                alt={businessName || 'Tenant Logo'}
-                className="max-h-16 max-w-full object-contain filter drop-shadow-md"
-              />
-            </div>
-          ) : (
-            <div className="mb-4">
-              <DBarcLogo size={50} variant="dark" subtitle="Courier Manager" />
-            </div>
-          )}
+          {/* Static Courier Theme Option 1 Logo */}
+          <div className="mb-4">
+            <DBarcLogo size={52} variant="dark" subtitle="Courier Manager" />
+          </div>
 
           <h2 className="text-2xl font-bold tracking-tight text-white mt-1">
             Sign In
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
-            Enter your credentials to access the {businessName || 'Courier Manager'} portal
+            Enter your credentials to access the DBARc platform
           </p>
         </div>
 
@@ -236,7 +223,7 @@ export default function LoginPage() {
       {/* Clean Minimal Footer */}
       <footer className="mt-8 text-center relative z-10">
         <p className="text-xs text-slate-500">
-          © {new Date().getFullYear()} {businessName || 'DBARc Courier Manager'}. All rights reserved.
+          © {new Date().getFullYear()} DBARc Logistics. All rights reserved.
         </p>
       </footer>
     </div>

@@ -450,9 +450,15 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       }
 
       if (!tenant && domain) {
-        const cleanDomain = domain.toString().toLowerCase().trim();
+        const cleanDomain = domain.toString().toLowerCase().trim().replace(/^https?:\/\//, '');
         tenant = await strapi.db.query('api::tenant.tenant').findOne({
-          where: { domain: cleanDomain },
+          where: {
+            $or: [
+              { domain: cleanDomain },
+              { domain: `https://${cleanDomain}` },
+              { domain: `http://${cleanDomain}` },
+            ]
+          },
           populate: ['logo'],
         });
 

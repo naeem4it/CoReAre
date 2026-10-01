@@ -77,9 +77,12 @@ async function main() {
   const initialMashrueRestarts = mashrueProc.pm2_env.restart_time;
   console.log(`[SAFETY CHECK] mashrue-api is ${mashrueProc.pm2_env.status} with ${initialMashrueRestarts} restarts. Must NOT change.\n`);
 
-  // 1b. Verify dbarc_db backup exists
-  const backupCheck = await runCommand(conn, 'ls -lh /var/backups/dbarc/dbarc_db_predeploy_*.sql');
-  console.log('Verified database backup:\n', backupCheck.stdout);
+  // 1b. Create fresh dbarc_db backup for complete safety
+  console.log('Creating fresh pre-deployment backup of dbarc_db...');
+  const backupTimestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+  await runCommand(conn, `echo 'Password123!' | sudo -S -u postgres pg_dump dbarc_db > /var/backups/dbarc/dbarc_db_predeploy_${backupTimestamp}.sql`);
+  const backupCheck = await runCommand(conn, `ls -lh /var/backups/dbarc/dbarc_db_predeploy_${backupTimestamp}.sql`);
+  console.log('Verified fresh database backup:\n', backupCheck.stdout);
 
   // 1c. Record current dbarc_db table counts
   const rowCountSql = `echo 'Password123!' | sudo -S -u postgres psql -d dbarc_db -t -A -c "SELECT relname || ': ' || n_live_tup FROM pg_stat_user_tables WHERE relname IN ('tenants', 'shippers', 'parcels', 'up_users', 'offices', 'cities', 'regions') ORDER BY relname;"`;
@@ -100,6 +103,45 @@ async function main() {
   console.log('\n[BACKEND] Extracting package into /var/www/dbarc/backend...');
   await runCommand(conn, 'tar -xzf /tmp/deploy_backend.tar.gz -C /var/www/dbarc/backend && rm -f /tmp/deploy_backend.tar.gz');
   await runCommand(conn, 'chown -R mashrueadmin:mashrueadmin /var/www/dbarc/backend/src /var/www/dbarc/backend/dist');
+  await runCommand(conn, 'grep -q "DEFAULT_TENANT_ID" /var/www/dbarc/backend/.env 2>/dev/null || echo "DEFAULT_TENANT_ID=1" >> /var/www/dbarc/backend/.env');
+
+  // Upload Shipzo Logo Assets
+  console.log('\n[BACKEND] Uploading Shipzo logo assets...');
+  const logoLocal = path.join(__dirname, '..', 'public', 'uploads', 'shipzo_logo_0d4ae0a397.png');
+  const thumbLocal = path.join(__dirname, '..', 'public', 'uploads', 'thumbnail_shipzo_logo_0d4ae0a397.png');
+  if (fs.existsSync(logoLocal)) {
+    await uploadFile(conn, logoLocal, '/var/www/dbarc/backend/public/uploads/shipzo_logo_0d4ae0a397.png');
+  }
+  if (fs.existsSync(thumbLocal)) {
+    await uploadFile(conn, thumbLocal, '/var/www/dbarc/backend/public/uploads/thumbnail_shipzo_logo_0d4ae0a397.png');
+  }
+  await runCommand(conn, 'chown -R mashrueadmin:mashrueadmin /var/www/dbarc/backend/public/uploads');
+
+  // Link logo to Tenant 1 in dbarc_db
+  const logoSql = `
+INSERT INTO files (document_id, name, alternative_text, caption, width, height, formats, hash, ext, mime, size, url, provider, folder_path, created_at, updated_at, published_at)
+SELECT 'szye1xe6qm1sczes6i45t8hr', 'shipzo-logo.png', NULL, NULL, 402, 123, '{"thumbnail": {"ext": ".png", "url": "/uploads/thumbnail_shipzo_logo_0d4ae0a397.png", "hash": "thumbnail_shipzo_logo_0d4ae0a397", "mime": "image/png", "name": "thumbnail_shipzo-logo.png", "path": null, "size": 22.73, "width": 245, "height": 75, "sizeInBytes": 22731}}'::jsonb, 'shipzo_logo_0d4ae0a397', '.png', 'image/png', 13.82, '/uploads/shipzo_logo_0d4ae0a397.png', 'local', '/1', NOW(), NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM files WHERE hash = 'shipzo_logo_0d4ae0a397');
+
+INSERT INTO files_related_mph (file_id, related_id, related_type, field, "order")
+SELECT f.id, 1, 'api::tenant.tenant', 'logo', 1
+FROM files f
+WHERE f.hash = 'shipzo_logo_0d4ae0a397'
+  AND NOT EXISTS (
+    SELECT 1 FROM files_related_mph m 
+    WHERE m.related_id = 1 AND m.related_type = 'api::tenant.tenant' AND m.field = 'logo'
+  );
+`;
+  await new Promise((res, rej) => {
+    conn.sftp((err, sftp) => {
+      if (err) return rej(err);
+      const w = sftp.createWriteStream('/tmp/link_logo.sql');
+      w.on('close', res);
+      w.on('error', rej);
+      w.end(logoSql);
+    });
+  });
+  await runCommand(conn, "echo 'Password123!' | sudo -S -u postgres psql -d dbarc_db -f /tmp/link_logo.sql && rm -f /tmp/link_logo.sql");
 
   // Sequence sync
   console.log('\n[BACKEND] Syncing PostgreSQL sequences...');
@@ -165,6 +207,7 @@ END $$;
   console.log('\n[COURIER] Extracting package into /var/www/dbarc/courier...');
   await runCommand(conn, 'tar -xzf /tmp/deploy_courier.tar.gz -C /var/www/dbarc/courier && rm -f /tmp/deploy_courier.tar.gz');
   await runCommand(conn, 'chown -R mashrueadmin:mashrueadmin /var/www/dbarc/courier/src /var/www/dbarc/courier/public');
+  await runCommand(conn, 'grep -q "NEXT_PUBLIC_TENANT_ID" /var/www/dbarc/courier/.env.local 2>/dev/null || echo "NEXT_PUBLIC_TENANT_ID=1" >> /var/www/dbarc/courier/.env.local');
 
   console.log('\n[COURIER] Building Next.js production bundle on server...');
   const courierBuild = await runCommand(conn, 'cd /var/www/dbarc/courier && NODE_OPTIONS="--max-old-space-size=1200" npm run build');
@@ -189,6 +232,7 @@ END $$;
   console.log('\n[TENANT] Extracting package into /var/www/dbarc/tenant...');
   await runCommand(conn, 'tar -xzf /tmp/deploy_tenant.tar.gz -C /var/www/dbarc/tenant && rm -f /tmp/deploy_tenant.tar.gz');
   await runCommand(conn, 'chown -R mashrueadmin:mashrueadmin /var/www/dbarc/tenant/src');
+  await runCommand(conn, 'grep -q "NEXT_PUBLIC_TENANT_ID" /var/www/dbarc/tenant/.env.local 2>/dev/null || echo "NEXT_PUBLIC_TENANT_ID=1" >> /var/www/dbarc/tenant/.env.local');
 
   console.log('\n[TENANT] Building Next.js production bundle on server...');
   const tenantBuild = await runCommand(conn, 'cd /var/www/dbarc/tenant && NODE_OPTIONS="--max-old-space-size=1200" npm run build');

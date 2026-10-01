@@ -139,37 +139,6 @@ export const TenantThemeProvider = ({ children }: { children: React.ReactNode })
         }
       }
 
-      // 3. Resolve by configured NEXT_PUBLIC_TENANT_ID in .env (Single tenant mode / pre-login)
-      const configuredTenantId = process.env.NEXT_PUBLIC_TENANT_ID || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '1';
-      if (configuredTenantId) {
-        try {
-          const res = await apiClient.get(`/tenant/resolve?tenantId=${configuredTenantId}`);
-          if (res.data && isMounted) {
-            const data = res.data;
-            const logo = data.logo?.url 
-              ? (data.logo.url.startsWith('http') ? data.logo.url : `${apiBase}${data.logo.url}`)
-              : null;
-            const primary = data.theme_primary_color || '#3B5BDB';
-            const secondary = data.theme_secondary_color || '#0EA5E9';
-
-            applyThemeVariables(primary, secondary);
-            setBranding({
-              id: data.id,
-              name: data.name,
-              businessName: data.business_name || data.name,
-              domain: data.domain,
-              themePrimaryColor: primary,
-              themeSecondaryColor: secondary,
-              contrastText: getContrastColor(primary),
-              logoUrl: logo,
-              isLoading: false,
-            });
-            return;
-          }
-        } catch (confErr) {
-          console.warn('Failed to resolve configured tenant branding:', confErr);
-        }
-      }
 
       // 4. Fallback to default Option 1 Titanium Slate & Neo-Indigo
       if (isMounted) {
