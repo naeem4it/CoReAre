@@ -1387,6 +1387,8 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
     recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
     reference_number: Schema.Attribute.String;
+    secondary_barcode: Schema.Attribute.String;
+    service_provider: Schema.Attribute.String;
     service_type: Schema.Attribute.Enumeration<
       ['Overnight', 'Second Day', 'Rush', 'Detained']
     > &

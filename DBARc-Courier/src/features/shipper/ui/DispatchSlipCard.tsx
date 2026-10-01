@@ -26,6 +26,9 @@ export type OrderRow = {
   remarks: string;
   parcelDetail: string;
   is2PL: boolean;
+  is3PL?: boolean;
+  serviceProvider?: string;
+  secondaryBarcode?: string;
   tplCourierId: string;
   tplTrackingNo: string;
   dateCreated: string;
@@ -222,8 +225,14 @@ export const DispatchSlipCard = React.memo(function DispatchSlipCard({
     [order.dateFormatted, order.dateCreated]
   );
 
-  // Top-right partner barcode value (e.g. LE7545194311 or tracking number)
-  const topRightBarcode = order.tplTrackingNo || order.trackingNumber || `LE${order.id}`;
+  // Top-right 3PL partner barcode value (e.g. PostEx CN or external 3PL tracking number)
+  const tplTrackingId = (order.secondaryBarcode || order.tplTrackingNo || '').trim();
+  const is3PLOrder = Boolean(
+    order.is3PL ||
+    (!order.is2PL && tplTrackingId) ||
+    (order.serviceProvider && order.serviceProvider !== 'IN-HOUSE' && order.serviceProvider !== '2PL')
+  );
+  const providerLabel = order.serviceProvider || order.tplCourierId || 'PostEx';
 
   return (
     <div className="dispatch-slip-card bg-white text-black font-sans border-2 border-black p-0 select-none overflow-hidden text-[9px] leading-tight shadow-xs">
@@ -276,9 +285,21 @@ export const DispatchSlipCard = React.memo(function DispatchSlipCard({
           </span>
         </div>
 
-        {/* 7. Barcode 1 (Top-right Partner/Tracking Barcode with text underneath) */}
-        <div className="flex flex-col items-center justify-center p-1 bg-white">
-          <SlipBarcode text={topRightBarcode} height={22} maxWidth={145} textSize={8.5} />
+        {/* 7. Barcode 1 (Top-right 3PL Partner Barcode with provider label and CN underneath) */}
+        <div className="flex flex-col items-center justify-center p-1 bg-white min-h-[46px]">
+          {is3PLOrder && tplTrackingId ? (
+            <div className="flex flex-col items-center justify-center w-full">
+              <SlipBarcode text={tplTrackingId} height={20} maxWidth={145} showText={false} />
+              <span className="font-mono font-bold text-black tracking-tight leading-none text-[8px] mt-0.5">
+                {providerLabel} CN: {tplTrackingId}
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-slate-500 font-bold text-[8.5px] leading-tight py-1">
+              <span className="uppercase tracking-wider text-slate-700">In-House Delivery</span>
+              <span className="text-[7.5px] text-slate-400 font-normal">Direct Courier Fleet</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -39,6 +39,9 @@ type ShipmentRow = {
   status: string;
   eta: string;
   createdAt: string;
+  secondaryBarcode?: string;
+  serviceProvider?: string;
+  is3PL?: boolean;
   rawParcel?: Parcel;
 };
 
@@ -127,6 +130,9 @@ export default function ShipmentsPage() {
             status: item.status || 'Booked',
             eta: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A',
             createdAt: item.createdAt || new Date().toISOString(),
+            secondaryBarcode: item.secondary_barcode || item.reference_number || undefined,
+            serviceProvider: item.service_provider || (item.is_3pl ? 'PostEx' : undefined),
+            is3PL: Boolean(item.is_3pl || item.secondary_barcode || item.service_provider),
             rawParcel: item,
           };
         });
@@ -160,6 +166,8 @@ export default function ShipmentsPage() {
     return data.filter(
       (row) =>
         row.trackingNumber.toLowerCase().includes(lower) ||
+        (row.secondaryBarcode && row.secondaryBarcode.toLowerCase().includes(lower)) ||
+        (row.serviceProvider && row.serviceProvider.toLowerCase().includes(lower)) ||
         row.customerName.toLowerCase().includes(lower) ||
         row.address.toLowerCase().includes(lower) ||
         row.phone.includes(searchQuery) ||
@@ -391,7 +399,17 @@ export default function ShipmentsPage() {
                             >
                               {row.trackingNumber}
                             </span>
-                            <div className="text-[11px] text-slate-400">{row.eta}</div>
+                            {row.secondaryBarcode && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  3PL: {row.serviceProvider || 'PostEx'}
+                                </span>
+                                <span className="font-mono text-[11px] font-semibold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">
+                                  {row.secondaryBarcode}
+                                </span>
+                              </div>
+                            )}
+                            <div className="text-[11px] text-slate-400 mt-0.5">{row.eta}</div>
                           </div>
                         </div>
                       </td>
@@ -516,6 +534,32 @@ export default function ShipmentsPage() {
                   <div className="text-lg font-black text-slate-900">PKR {viewingShipment.codAmount.toLocaleString()}</div>
                 </div>
               </div>
+
+              {/* 3PL Partner Reference */}
+              {viewingShipment.secondaryBarcode && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-2xl border border-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-500 text-white uppercase tracking-wider">
+                      3PL: {viewingShipment.serviceProvider || 'PostEx'}
+                    </span>
+                    <div>
+                      <div className="text-[11px] font-bold text-amber-900/70 uppercase">Consignment Tracking ID</div>
+                      <span className="font-mono font-black text-sm text-slate-900">{viewingShipment.secondaryBarcode}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (viewingShipment.secondaryBarcode) {
+                        navigator.clipboard.writeText(viewingShipment.secondaryBarcode);
+                        triggerToast('3PL Tracking ID copied to clipboard!', 'success');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 rounded-xl text-xs font-bold text-amber-900 transition-colors shadow-sm cursor-pointer"
+                  >
+                    Copy 3PL ID
+                  </button>
+                </div>
+              )}
 
               {/* Consignee Information */}
               <div className="grid grid-cols-2 gap-4">

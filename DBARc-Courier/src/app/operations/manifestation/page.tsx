@@ -934,17 +934,26 @@ export default function OperationsManifestationPage() {
           }
         }
 
-        // 3. If 3PL, forward directly to the 3PL service API endpoint
+        // 3. If 3PL, forward directly to the 3PL service API endpoint (e.g. PostEx, TRAX)
         if (group.is3PL) {
           try {
             const providerCode = (group.tplPartnerName || 'trax').toLowerCase().includes('post') ? 'postex' :
                                  (group.tplPartnerName || 'trax').toLowerCase().includes('leo') ? 'leopards' : 'trax';
-            await apiClient.post('/3pl/sync', {
-              tracking_numbers: group.shipments.map(s => s.shipmentNumber),
-              provider: providerCode
+            const dispatchRes = await fetch('/api/3pl/dispatch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                manifest_number: group.manifestNumber,
+                tracking_numbers: group.shipments.map(s => s.shipmentNumber),
+                provider: providerCode
+              })
             });
+            const dispatchData = await dispatchRes.json().catch(() => ({}));
+            if (dispatchData?.successful > 0) {
+              console.log(`Successfully dispatched ${dispatchData.successful} parcel(s) to ${providerCode}:`, dispatchData);
+            }
           } catch (syncErr) {
-            console.warn('3PL service sync notice:', syncErr);
+            console.warn('3PL service dispatch notice:', syncErr);
           }
         }
 

@@ -3,13 +3,12 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { CourierStats } from '@/features/courier/ui/CourierStats';
-import { LiveOperationsFeed } from '@/features/courier/ui/LiveOperationsFeed';
-import { CourierShipmentsTable } from '@/features/courier/ui/CourierShipmentsTable';
-import { TplOrderStatusSection } from '@/features/courier/ui/TplOrderStatusSection';
+import { CourierAnalyticsCharts } from '@/features/courier/ui/CourierAnalyticsCharts';
 import { ShipperDashboard } from '@/features/shipper/ui/ShipperDashboard';
 import { useTenant } from '@/components/TenantProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { Store } from 'lucide-react';
+import { getDefaultDateRange } from '@/shared/utils/date';
 
 export default function DashboardPage() {
   const { businessName } = useTenant();
@@ -34,9 +33,10 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // From and To Date state for filtering (defaulted to 1 day / today)
-  const [fromDate, setFromDate] = React.useState<string>(todayStr);
-  const [toDate, setToDate] = React.useState<string>(todayStr);
+  // Dynamic date range default: past 30 days up to today (in local system time)
+  const defaultRange = React.useMemo(() => getDefaultDateRange(30), []);
+  const [fromDate, setFromDate] = React.useState<string>(defaultRange.fromDate);
+  const [toDate, setToDate] = React.useState<string>(defaultRange.toDate);
 
   // Dynamic Shipper Business Name for Dashboard Title
   const shipperName = React.useMemo(() => {
@@ -130,6 +130,68 @@ export default function DashboardPage() {
             <span>Shipper View</span>
           </button>
 
+          {/* Quick Date Presets: All Time, Today, 7 Days, 30 Days */}
+          <div className="flex items-center gap-1 bg-white border border-outline-variant rounded-xl p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate('');
+                setToDate('');
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                !fromDate && !toDate
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="View all 517+ bookings with no date restriction"
+            >
+              All Time
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate(todayStr);
+                setToDate(todayStr);
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                fromDate === todayStr && toDate === todayStr
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const r7 = getDefaultDateRange(7);
+                setFromDate(r7.fromDate);
+                setToDate(r7.toDate);
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                fromDate && toDate && fromDate !== todayStr && fromDate === getDefaultDateRange(7).fromDate
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              7 Days
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate(defaultRange.fromDate);
+                setToDate(defaultRange.toDate);
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                fromDate === defaultRange.fromDate && toDate === defaultRange.toDate
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              30 Days
+            </button>
+          </div>
+
           {/* From & To Date Range Inputs */}
           <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-xl p-1.5 shadow-sm">
             <div className="flex items-center gap-1.5 px-2">
@@ -175,24 +237,13 @@ export default function DashboardPage() {
         onSelectStatus={setSelectedStatus}
       />
 
-      {/* 3PL Order Status & Realtime Sync Section */}
-      <TplOrderStatusSection
+      {/* Courier Admin Analytics Charts & Visualizations */}
+      <CourierAnalyticsCharts
         fromDate={fromDate}
         toDate={toDate}
-      />
-
-      {/* Shipments Table with Date & Status Filtering */}
-      <CourierShipmentsTable 
-        fromDate={fromDate} 
-        toDate={toDate} 
         selectedStatus={selectedStatus}
         onSelectStatus={setSelectedStatus}
       />
-
-      {/* Operations Feed Grid */}
-      <div className="mb-xl">
-        <LiveOperationsFeed />
-      </div>
     </PortalLayout>
   );
 }

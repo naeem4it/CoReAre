@@ -1,4 +1,31 @@
 import { factories } from '@strapi/strapi';
+
+function normalizePostExCity(city: string): string {
+  const c = (city || '').trim();
+  const lower = c.toLowerCase();
+  if (lower.includes('karachi')) return 'Karachi';
+  if (lower.includes('lahore')) return 'Lahore';
+  if (lower.includes('islamabad')) return 'Islamabad';
+  if (lower.includes('rawalpindi')) return 'Rawalpindi';
+  if (lower.includes('faisalabad')) return 'Faisalabad';
+  if (lower.includes('multan')) return 'Multan';
+  if (lower.includes('peshawar')) return 'Peshawar';
+  if (lower.includes('quetta')) return 'Quetta';
+  if (lower.includes('sialkot')) return 'Sialkot';
+  if (lower.includes('gujranwala')) return 'Gujranwala';
+  if (lower.includes('hyderabad')) return 'Hyderabad';
+  if (lower.includes('sukkur')) return 'Sukkur';
+  if (lower.includes('bahawalpur')) return 'Bahawalpur';
+  if (lower.includes('sargodha')) return 'Sargodha';
+  if (lower.includes('abbottabad')) return 'Abbottabad';
+  if (lower.includes('gujrat')) return 'Gujrat';
+  if (lower.includes('sahiwal')) return 'Sahiwal';
+  if (lower.includes('sheikhupura')) return 'Sheikhupura';
+  if (lower.includes('jhelum')) return 'Jhelum';
+  if (lower.includes('mardan')) return 'Mardan';
+  return c || 'Karachi';
+}
+
 export default factories.createCoreController('api::parcel.parcel', ({ strapi }) => ({
   async create(ctx: any) {
     const { data } = ctx.request.body;
@@ -13,8 +40,19 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       data.status = 'Booked';
     }
 
-    // Auto-generate tracking number with SHZ prefix and numeric sequence if not provided
-    if (!data.tracking_number) {
+    // Auto-generate tracking number with SHZ prefix and numeric sequence if not provided,
+    // or if the provided tracking number already exists in the database.
+    let needsTracking = !data.tracking_number;
+    if (data.tracking_number) {
+      const existing = await strapi.db.query('api::parcel.parcel').findOne({
+        where: { tracking_number: data.tracking_number }
+      });
+      if (existing) {
+        needsTracking = true;
+      }
+    }
+
+    if (needsTracking) {
       const prefix = 'SHZ';
       const lastParcel = await strapi.db.query('api::parcel.parcel').findOne({
         where: { tracking_number: { $startsWith: prefix } },
@@ -26,6 +64,10 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
         if (!isNaN(num) && num >= 100000000) {
           nextSeq = num + 1;
         }
+      }
+      // Safety check to guarantee uniqueness
+      while (await strapi.db.query('api::parcel.parcel').findOne({ where: { tracking_number: `${prefix}${nextSeq}` } })) {
+        nextSeq++;
       }
       data.tracking_number = `${prefix}${nextSeq}`;
     }
@@ -52,13 +94,25 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
     }
 
     // Safely resolve destination_city if string city name was provided
+    let rawDestCityName = typeof data.destination_city === 'string' ? data.destination_city.trim() : '';
     if (data.destination_city && typeof data.destination_city === 'string' && isNaN(Number(data.destination_city))) {
       const foundCity = await strapi.db.query('api::city.city').findOne({
         where: { CityName: { $eqi: data.destination_city.trim() } }
       });
       data.destination_city = foundCity ? foundCity.id : null;
+      if (foundCity && foundCity.CityName) {
+        rawDestCityName = foundCity.CityName;
+      }
     } else if (data.destination_city) {
       data.destination_city = Number(data.destination_city) || null;
+      if (data.destination_city && !rawDestCityName) {
+        const foundCity = await strapi.db.query('api::city.city').findOne({
+          where: { id: data.destination_city }
+        });
+        if (foundCity && foundCity.CityName) {
+          rawDestCityName = foundCity.CityName;
+        }
+      }
     }
 
     // Auto populate shipper from pickup_location if available and shipper not explicitly passed
@@ -140,8 +194,123 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       }
     }
 
+    // --- 3PL SERVICE INTEGRATION (PostEx) ---
+    let tplBookingMeta: any = null;
+
+    if (data.is_3pl) {
+      try {
+        const tenantId = data.tenant || ctx.request.headers?.['x-tenant-id'] || ctx.state?.user?.tenant?.id || null;
+
+        // Query active PostEx 3PL partners
+        const partners = await strapi.db.query('api::tpl-partner.tpl-partner').findMany({
+          where: {
+            provider_code: 'postex',
+            status: 'active',
+          },
+          populate: ['tenant']
+        });
+
+        // 1. Try to find partner matching tenantId
+        let partner = partners.find((p: any) => {
+          if (!tenantId) return false;
+          const pTid = p.tenant?.id || p.tenant;
+          return String(pTid) === String(tenantId);
+        });
+
+        // 2. If not found by tenant, prefer the one with a valid production base64 token
+        if (!partner) {
+          partner = partners.find((p: any) => p.environment === 'production' || (p.api_credentials?.api_token && !p.api_credentials.api_token.includes('sandbox')));
+        }
+
+        // 3. Fallback to first active partner
+        if (!partner && partners.length > 0) {
+          partner = partners[0];
+        }
+
+        const credentials = partner?.api_credentials || partner?.credentials || {};
+        const apiToken = credentials.api_token || credentials.token || '';
+
+        if (apiToken) {
+          const cleanCity = normalizePostExCity(rawDestCityName || data.recipient_address || 'Karachi');
+
+          let phone = (data.recipient_phone || '03001234567').replace(/\D/g, '');
+          if (phone.startsWith('92')) phone = '0' + phone.slice(2);
+          if (!phone.startsWith('0')) phone = '0' + phone;
+
+          const postExPayload = {
+            cityName: cleanCity,
+            customerName: data.recipient_name || 'Customer',
+            customerPhone: phone,
+            deliveryAddress: data.recipient_address || `${cleanCity}, Pakistan`,
+            invoiceDivision: 1,
+            invoicePayment: data.payment_type === 'PAID' ? 0 : (Number(data.cod_amount) || 0),
+            items: Number(data.pieces) || 1,
+            orderDetail: data.comments || data.product_description || 'General Goods',
+            orderRefNumber: data.tracking_number,
+            orderType: 'Normal',
+            transactionNotes: 'DBARc 3PL Booking'
+          };
+
+          console.log('\n============================================================');
+          console.log('🚀 [3PL SERVICE BOOKING REQUEST]');
+          console.log(`Tracking Number: ${data.tracking_number}`);
+          console.log(`Provider: PostEx`);
+          console.log(`Payload:`, JSON.stringify(postExPayload, null, 2));
+          console.log('============================================================\n');
+
+          const postexRes = await fetch('https://api.postex.pk/services/integration/api/order/v1/create-order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'token': apiToken
+            },
+            body: JSON.stringify(postExPayload)
+          });
+
+          const httpStatus = postexRes.status;
+          const responseJson: any = await postexRes.json().catch(() => ({}));
+
+          console.log('\n============================================================');
+          console.log('📥 [3PL SERVICE BOOKING RESPONSE]');
+          console.log(`Provider: PostEx`);
+          console.log(`HTTP Status: ${httpStatus}`);
+          console.log(`Response Body:`, JSON.stringify(responseJson, null, 2));
+          console.log('============================================================\n');
+
+          tplBookingMeta = {
+            provider: 'PostEx',
+            status: httpStatus,
+            payload: postExPayload,
+            response: responseJson
+          };
+
+          if (postexRes.ok && (responseJson.statusCode === '200' || responseJson.statusCode === 200)) {
+            const tplCn = responseJson.dist?.trackingNumber || responseJson.trackingNumber;
+            data.secondary_barcode = tplCn;
+            data.reference_number = tplCn;
+            data.service_provider = 'PostEx';
+            data.comments = data.comments 
+              ? `${data.comments} | 3PL PostEx (CN: ${tplCn})`
+              : `3PL PostEx (CN: ${tplCn})`;
+            console.log(`✅ [3PL BOOKED SUCCESSFULLY]: ${data.tracking_number} -> PostEx CN: ${tplCn}`);
+          } else {
+            const errMsg = responseJson.statusMessage || responseJson.message || `HTTP ${httpStatus}`;
+            console.error(`❌ [3PL BOOKING FAILED] for ${data.tracking_number}:`, errMsg);
+          }
+        } else {
+          console.warn('⚠️ [3PL BOOKING WARNING]: No active PostEx API token found in tpl_partners.');
+        }
+      } catch (err: any) {
+        console.error('❌ [3PL BOOKING EXCEPTION]:', err.message || err);
+      }
+    }
+
     // Call default create controller
-    return await super.create(ctx);
+    const result: any = await super.create(ctx);
+    if (tplBookingMeta && result?.data) {
+      result.data.tpl_booking = tplBookingMeta;
+    }
+    return result;
   },
 
   async find(ctx: any) {

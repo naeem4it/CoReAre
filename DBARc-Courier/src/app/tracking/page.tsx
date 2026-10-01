@@ -300,13 +300,20 @@ function TrackingPageContent() {
             is_inter_city: isInterCity,
             failure_reason: item.failure_reason || item.comments || '',
             delivery_attempts: item.delivery_attempts || 0,
+            secondary_barcode: item.secondary_barcode || item.reference_number || null,
+            service_provider: item.service_provider || (item.is_3pl ? 'PostEx' : null),
+            is_3pl: Boolean(item.is_3pl),
           };
         });
         setParcels(mapped);
 
         // If URL had a search param, preselect matching order if found
         if (initialSearch) {
-          const match = mapped.find((p: any) => p.tracking_number.toLowerCase().includes(initialSearch.toLowerCase().trim()));
+          const q = initialSearch.toLowerCase().trim();
+          const match = mapped.find((p: any) =>
+            p.tracking_number.toLowerCase().includes(q) ||
+            (p.secondary_barcode && p.secondary_barcode.toLowerCase().includes(q))
+          );
           if (match) {
             handleSelectOrder(match);
           }
@@ -333,7 +340,11 @@ function TrackingPageContent() {
     if (e) e.preventDefault();
     const q = directSearch.trim().toLowerCase();
     if (!q) return;
-    const match = parcels.find(p => p.tracking_number.toLowerCase() === q || p.tracking_number.toLowerCase().includes(q));
+    const match = parcels.find(p =>
+      p.tracking_number.toLowerCase() === q ||
+      p.tracking_number.toLowerCase().includes(q) ||
+      (p.secondary_barcode && (p.secondary_barcode.toLowerCase() === q || p.secondary_barcode.toLowerCase().includes(q)))
+    );
     if (match) {
       handleSelectOrder(match);
       triggerToast(`Showing live tracking timeline for ${match.tracking_number}`);
@@ -627,6 +638,8 @@ function TrackingPageContent() {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q || (
         item.tracking_number.toLowerCase().includes(q) ||
+        (item.secondary_barcode && item.secondary_barcode.toLowerCase().includes(q)) ||
+        (item.service_provider && item.service_provider.toLowerCase().includes(q)) ||
         item.recipient_name.toLowerCase().includes(q) ||
         item.recipient_address.toLowerCase().includes(q) ||
         item.recipient_phone.includes(q) ||
@@ -1029,9 +1042,21 @@ function TrackingPageContent() {
                       className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                     >
                       <td className="px-4 py-4 font-mono font-bold text-primary">
-                        <div className="flex items-center gap-1.5">
-                          <Barcode className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{parcel.tracking_number}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <Barcode className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{parcel.tracking_number}</span>
+                          </div>
+                          {parcel.secondary_barcode && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-extrabold px-1.5 py-0.2 rounded shadow-2xs">
+                                3PL: {parcel.service_provider || 'PostEx'}
+                              </span>
+                              <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
+                                {parcel.secondary_barcode}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       {!isShipper && (
@@ -1289,6 +1314,45 @@ function TrackingPageContent() {
               {/* Right Column: Consignment Specs & Real Staff Status Controls */}
               <div className="lg:col-span-5 flex flex-col gap-5">
                 
+                {/* 3PL Partner Reference Card */}
+                {selectedOrder.secondary_barcode && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          3PL Partner
+                        </span>
+                        <span className="font-bold text-slate-800 text-xs">
+                          {selectedOrder.service_provider || 'PostEx'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(selectedOrder.secondary_barcode);
+                          triggerToast(`3PL Tracking ID copied: ${selectedOrder.secondary_barcode}`);
+                        }}
+                        className="p-1 px-2.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Copy className="w-3 h-3 text-amber-700" /> Copy 3PL ID
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-amber-200">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          3PL Consignment Number
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-sm">
+                          {selectedOrder.secondary_barcode}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                        Active Handover
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Package Specifications */}
                 <div className="bg-white border border-outline-variant rounded-2xl p-5 shadow-sm flex flex-col gap-4 text-xs">
                   <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-100 pb-2">

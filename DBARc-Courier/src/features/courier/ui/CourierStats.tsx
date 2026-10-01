@@ -2,12 +2,11 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/shared/api/api-client';
+import { apiClient, fetchAllPaginated } from '@/shared/api/api-client';
 import { RiderService } from '@/services/api';
 import { Parcel } from '@/types/generated/parcel.types';
-import { StrapiCollectionResponse } from '@/types/strapi.types';
 import { useAuth } from '@/components/AuthProvider';
-
+import { toLocalDateString } from '@/shared/utils/date';
 import { SHIPMENT_STATUSES, normalizeShipmentStatus } from '@/shared/constants/shipment-statuses';
 
 type StatsData = {
@@ -19,6 +18,7 @@ type StatsData = {
   readyToReturn: number;
   returnToShipper: number;
   shipperAdvice: number;
+  cancelled: number;
 };
 
 interface CourierStatsProps {
@@ -40,6 +40,7 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
     readyToReturn: 0,
     returnToShipper: 0,
     shipperAdvice: 0,
+    cancelled: 0,
   });
   const [totalShippers, setTotalShippers] = React.useState<number>(0);
   const [totalRiders, setTotalRiders] = React.useState<number>(0);
@@ -77,29 +78,30 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
   }, [user, activeBusinessId]);
 
   React.useEffect(() => {
+    let isMounted = true;
     const fetchStats = async () => {
       try {
         setIsLoading(true);
         const storedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
         const tenantId = user?.tenant?.id || user?.tenantId || (typeof user?.tenant === 'number' ? user.tenant : null) || storedUser?.tenant?.id || storedUser?.tenant;
 
-        // 1. Fetch Parcels for stats
-        const parcelsRes = await apiClient.get<StrapiCollectionResponse<Parcel>>('/parcels', {
-          params: {
-            populate: '*',
-            pagination: { pageSize: 200 },
-            sort: ['createdAt:desc']
-          }
-        }).catch(() => null);
-        let parcels = parcelsRes?.data?.data || [];
-        
-        if (isShipper && shipperId && parcels.length > 0) {
-          parcels = parcels.filter((item: any) => {
-            if (!item.shipper && !item.pickup_location?.shipper) return true;
-            const itemShipperId = item.shipper?.id || item.pickup_location?.shipper?.id;
-            return itemShipperId === shipperId;
-          });
-        } else if (tenantId && parcels.length > 0) {
+        // 1. Fetch All Parcels using fetchAllPaginated to ensure all 517+ bookings are included
+        const params: any = {
+          populate: '*',
+          sort: ['createdAt:desc'],
+          pagination: { pageSize: 1000 }
+        };
+
+        if (isShipper && shipperId) {
+          params['filters[$or][0][shipper][id][$eq]'] = shipperId;
+          params['filters[$or][1][pickup_location][shipper][id][$eq]'] = shipperId;
+        }
+
+        const rawList = await fetchAllPaginated<Parcel>('/parcels', { params });
+        let parcels = Array.isArray(rawList) ? rawList : [];
+
+        // Apply tenant isolation on courier side
+        if (!isShipper && tenantId && parcels.length > 0) {
           parcels = parcels.filter((item: any) => {
             const shipTenant = item.shipper?.tenant?.id || item.shipper?.tenant;
             const offTenant = item.origin_office?.tenant?.id || item.origin_office?.tenant;
@@ -109,21 +111,14 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
           });
         }
 
-        // Apply Date Range Filter if set
+        // Apply Date Range Filter if provided
         if (fromDate || toDate) {
           parcels = parcels.filter((item: any) => {
-            if (!item.createdAt) return true;
-            const itemDate = new Date(item.createdAt);
-            if (fromDate) {
-              const from = new Date(fromDate);
-              from.setHours(0, 0, 0, 0);
-              if (itemDate < from) return false;
-            }
-            if (toDate) {
-              const to = new Date(toDate);
-              to.setHours(23, 59, 59, 999);
-              if (itemDate > to) return false;
-            }
+            const created = item.createdAt;
+            if (!created) return true;
+            const dateStr = toLocalDateString(created);
+            if (fromDate && dateStr < fromDate) return false;
+            if (toDate && dateStr > toDate) return false;
             return true;
           });
         }
@@ -135,9 +130,17 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
         let readyToReturn = 0;
         let returnToShipper = 0;
         let shipperAdvice = 0;
+        let cancelled = 0;
 
         parcels.forEach((p: any) => {
           const norm = normalizeShipmentStatus(p.status);
+          const rawStatus = (p.status || '').toString().toLowerCase();
+
+          if (norm === SHIPMENT_STATUSES.CANCELLED || rawStatus.includes('cancel')) {
+            cancelled++;
+            return;
+          }
+
           switch (norm) {
             case SHIPMENT_STATUSES.BOOKED:
             case SHIPMENT_STATUSES.PICKED_UP_BY_RIDER:
@@ -166,23 +169,28 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
               returnToShipper++;
               break;
             default:
-              if (['Booked', 'Total Booking', 'Order Created', 'Pending'].includes(p.status)) {
+              if (['Booked', 'Total Booking', 'Order Created', 'Pending', 'booked'].includes(p.status)) {
+                notArrived++;
+              } else {
                 notArrived++;
               }
               break;
           }
         });
 
-        setStats({
-          totalShipments: parcels.length,
-          notArrived,
-          arrived,
-          outForDelivery,
-          delivered,
-          readyToReturn,
-          returnToShipper,
-          shipperAdvice,
-        });
+        if (isMounted) {
+          setStats({
+            totalShipments: parcels.length,
+            notArrived,
+            arrived,
+            outForDelivery,
+            delivered,
+            readyToReturn,
+            returnToShipper,
+            shipperAdvice,
+            cancelled,
+          });
+        }
 
         // 2. Fetch Total Shippers count isolated to tenant
         try {
@@ -194,9 +202,9 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
             params: { filters: shipperFilters, pagination: { limit: 100 } }
           }).catch(() => null);
           const rawShippers = shippersRes?.data?.data || [];
-          setTotalShippers(rawShippers.length);
+          if (isMounted) setTotalShippers(rawShippers.length);
         } catch {
-          setTotalShippers(0);
+          if (isMounted) setTotalShippers(0);
         }
 
         // 3. Fetch Enrolled Riders isolated to tenant
@@ -204,9 +212,9 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
           const riderParams = `?filters[status][$ne]=inactive${tenantId ? `&filters[tenant][$eq]=${tenantId}` : ''}&pagination[pageSize]=100`;
           const ridersRes = await RiderService.getAll(riderParams).catch(() => null);
           const rawRiders = ridersRes?.data || [];
-          setTotalRiders(rawRiders.length);
+          if (isMounted) setTotalRiders(rawRiders.length);
         } catch {
-          setTotalRiders(0);
+          if (isMounted) setTotalRiders(0);
         }
 
         // 4. Fetch Courier Offices / Hubs strictly isolated to tenant
@@ -219,18 +227,21 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
             params: { filters: officeFilters, pagination: { limit: 100 } }
           }).catch(() => null);
           const rawOffices = officesRes?.data?.data || [];
-          setTotalOffices(rawOffices.length);
+          if (isMounted) setTotalOffices(rawOffices.length);
         } catch {
-          setTotalOffices(0);
+          if (isMounted) setTotalOffices(0);
         }
       } catch (error) {
         console.warn('Could not fetch dynamic stats:', error);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
     fetchStats();
+    return () => {
+      isMounted = false;
+    };
   }, [isShipper, shipperId, fromDate, toDate, user]);
 
   const deliveryRate = React.useMemo(() => {
@@ -238,26 +249,26 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
     return (stats.delivered / stats.totalShipments) * 100;
   }, [stats.totalShipments, stats.delivered]);
 
-  const handleTileClick = (filterKey: string) => {
+  const handleTileClick = (filterKey: string, targetHref?: string) => {
     if (onSelectStatus) {
       onSelectStatus(selectedStatus === filterKey ? 'all' : filterKey);
     }
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5 mb-6">
       {/* 1. Shippers / My Team */}
       {!isShipper ? (
         <div 
           onClick={() => router.push('/administration/employees?type=shipper')}
-          className="bg-white p-3.5 rounded-xl border border-outline-variant shadow-sm hover:shadow-md hover:border-primary transition-all group cursor-pointer"
+          className="bg-white p-3.5 rounded-2xl border border-outline-variant shadow-sm hover:shadow-md hover:border-primary transition-all group cursor-pointer"
           title="Click to view Enrolled Shippers Directory"
         >
           <div className="flex items-start justify-between mb-2">
             <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <span className="material-symbols-outlined text-[20px]">groups</span>
             </div>
-            <span className="text-primary font-medium text-[10px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
+            <span className="text-primary font-bold text-[10px] flex items-center gap-0.5 bg-primary/10 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
               Directory <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
             </span>
           </div>
@@ -265,19 +276,19 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
           <p className="text-xl font-black mt-0.5 tabular-nums text-slate-900">
             {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : totalShippers.toLocaleString()}
           </p>
-          <p className="text-[10px] text-slate-400 mt-1 truncate">Registered Merchant Businesses</p>
+          <p className="text-[10px] text-slate-400 mt-1 truncate">Registered Merchant Stores</p>
         </div>
       ) : (
         <div 
           onClick={() => router.push('/administration/employees?type=team')}
-          className="bg-white p-3.5 rounded-xl border border-outline-variant shadow-sm hover:shadow-md hover:border-primary transition-all group cursor-pointer"
+          className="bg-white p-3.5 rounded-2xl border border-outline-variant shadow-sm hover:shadow-md hover:border-primary transition-all group cursor-pointer"
           title="Click to view Store Team"
         >
           <div className="flex items-start justify-between mb-2">
             <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <span className="material-symbols-outlined text-[20px]">group</span>
             </div>
-            <span className="text-primary font-medium text-[10px] flex items-center gap-0.5 bg-primary/5 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
+            <span className="text-primary font-bold text-[10px] flex items-center gap-0.5 bg-primary/10 px-2 py-0.5 rounded-full group-hover:bg-primary group-hover:text-white transition-colors">
               Team <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
             </span>
           </div>
@@ -290,14 +301,14 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 2. Enrolled Riders */}
       <div 
         onClick={() => router.push('/administration/employees?type=rider')}
-        className="bg-white p-3.5 rounded-xl border border-outline-variant shadow-sm hover:shadow-md hover:border-cyan-500 transition-all group cursor-pointer"
-        title="Click to view Enrolled Fleet & Riders"
+        className="bg-white p-3.5 rounded-2xl border border-outline-variant shadow-sm hover:shadow-md hover:border-cyan-500 transition-all group cursor-pointer"
+        title="Click to view Enrolled Fleet & Riders Directory"
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-cyan-50 text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">two_wheeler</span>
           </div>
-          <span className="text-cyan-600 font-medium text-[10px] flex items-center gap-0.5 bg-cyan-50 px-2 py-0.5 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition-colors">
+          <span className="text-cyan-600 font-bold text-[10px] flex items-center gap-0.5 bg-cyan-50 px-2 py-0.5 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition-colors">
             Fleet <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
           </span>
         </div>
@@ -305,20 +316,20 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
         <p className="text-xl font-black mt-0.5 tabular-nums text-slate-900">
           {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : totalRiders.toLocaleString()}
         </p>
-        <p className="text-[10px] text-slate-400 mt-1 truncate">Active Delivery Riders</p>
+        <p className="text-[10px] text-slate-400 mt-1 truncate">Active Delivery Fleet</p>
       </div>
 
       {/* 3. Office-Wise Orders / Hubs */}
       <div 
         onClick={() => router.push('/administration/offices')}
-        className="bg-white p-3.5 rounded-xl border border-outline-variant shadow-sm hover:shadow-md hover:border-violet-500 transition-all group cursor-pointer"
+        className="bg-white p-3.5 rounded-2xl border border-outline-variant shadow-sm hover:shadow-md hover:border-violet-500 transition-all group cursor-pointer"
         title="Click to view Regional Offices & Distribution Hubs"
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-violet-50 text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">apartment</span>
           </div>
-          <span className="text-violet-600 font-medium text-[10px] flex items-center gap-0.5 bg-violet-50 px-2 py-0.5 rounded-full group-hover:bg-violet-600 group-hover:text-white transition-colors">
+          <span className="text-violet-600 font-bold text-[10px] flex items-center gap-0.5 bg-violet-50 px-2 py-0.5 rounded-full group-hover:bg-violet-600 group-hover:text-white transition-colors">
             Offices <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
           </span>
         </div>
@@ -326,26 +337,34 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
         <p className="text-xl font-black mt-0.5 tabular-nums text-slate-900">
           {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : totalOffices.toLocaleString()}
         </p>
-        <p className="text-[10px] text-slate-400 mt-1 truncate">Distribution Hubs & Offices</p>
+        <p className="text-[10px] text-slate-400 mt-1 truncate">Distribution Hubs & Stations</p>
       </div>
 
-      {/* 4. Total Shipments */}
+      {/* 4. Total Shipments (All Booked Orders) */}
       <div 
         onClick={() => handleTileClick('all')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'all' 
             ? 'border-primary ring-2 ring-primary/30 bg-primary/5' 
             : 'border-outline-variant hover:border-primary'
         }`}
-        title="Total Shipments = All orders booked in the system regardless of arrival"
+        title="Total Shipments = All orders booked in the system. Click to filter below or open Orders List."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">inventory_2</span>
           </div>
-          <span className="text-slate-600 font-bold text-[10px] bg-slate-100 px-2 py-0.5 rounded-full">
-            All Booked
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/orders');
+            }}
+            className="text-primary hover:underline font-bold text-[10px] bg-primary/10 hover:bg-primary hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Orders List & Slips"
+          >
+            Orders <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Total Shipments</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-slate-900">
@@ -357,45 +376,61 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 5. Not Arrived */}
       <div 
         onClick={() => handleTileClick('not-arrived')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'not-arrived' 
             ? 'border-amber-500 ring-2 ring-amber-400/30 bg-amber-50/50' 
             : 'border-outline-variant hover:border-amber-500'
         }`}
-        title="Not Arrived = Booked shipments that have NOT yet arrived/been scanned at the hub"
+        title="Not Arrived = Booked shipments awaiting warehouse arrival scan. Click to filter or open list."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">pending_actions</span>
           </div>
-          <span className="text-amber-700 font-bold text-[10px] bg-amber-100 px-2 py-0.5 rounded-full">
-            Pending Scan
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/orders?status=Not+Arrived');
+            }}
+            className="text-amber-700 hover:underline font-bold text-[10px] bg-amber-100 hover:bg-amber-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Not Arrived Bookings"
+          >
+            Pending <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Not Arrived</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-amber-600">
           {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : stats.notArrived.toLocaleString()}
         </p>
-        <p className="text-[10px] text-amber-700/80 mt-1 truncate">Awaiting Hub Arrival Scan</p>
+        <p className="text-[10px] text-amber-700/80 mt-1 truncate">Awaiting Warehouse Arrival</p>
       </div>
 
       {/* 6. Arrived */}
       <div 
         onClick={() => handleTileClick('arrived')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'arrived' 
             ? 'border-blue-500 ring-2 ring-blue-400/30 bg-blue-50/50' 
             : 'border-outline-variant hover:border-blue-500'
         }`}
-        title="Arrived = Physically scanned into the warehouse intake"
+        title="Arrived = Physically scanned into warehouse intake. Click to filter or open Operations Arrivals."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">warehouse</span>
           </div>
-          <span className="text-blue-700 font-bold text-[10px] bg-blue-100 px-2 py-0.5 rounded-full">
-            In Warehouse
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/operations/arrivals');
+            }}
+            className="text-blue-700 hover:underline font-bold text-[10px] bg-blue-100 hover:bg-blue-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Arrivals Scanning"
+          >
+            Arrivals <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Arrived</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-blue-600">
@@ -407,20 +442,28 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 7. Out For Delivery */}
       <div 
         onClick={() => handleTileClick('out-for-delivery')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'out-for-delivery' 
             ? 'border-yellow-500 ring-2 ring-yellow-400/30 bg-yellow-50/50' 
             : 'border-outline-variant hover:border-yellow-500'
         }`}
-        title="Out For Delivery = Dispatched on rider delivery run sheet"
+        title="Out For Delivery = Dispatched on rider delivery run sheet. Click to filter or open Delivery Sheets."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-yellow-50 text-yellow-700 group-hover:bg-yellow-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">local_shipping</span>
           </div>
-          <span className="text-yellow-800 font-bold text-[10px] bg-yellow-100 px-2 py-0.5 rounded-full">
-            On Route
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/operations/delivery-sheet');
+            }}
+            className="text-yellow-800 hover:underline font-bold text-[10px] bg-yellow-100 hover:bg-yellow-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Delivery Runsheets"
+          >
+            Runsheet <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Out For Delivery</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-yellow-700">
@@ -432,20 +475,28 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 8. Delivered */}
       <div 
         onClick={() => handleTileClick('delivered')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'delivered' 
             ? 'border-emerald-500 ring-2 ring-emerald-400/30 bg-emerald-50/50' 
             : 'border-outline-variant hover:border-emerald-500'
         }`}
-        title="Delivered = Successfully handed over to consignee"
+        title="Delivered = Successfully delivered to consignee. Click to filter or open Delivered list."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">task_alt</span>
           </div>
-          <span className="text-emerald-700 font-bold text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full">
-            {deliveryRate.toFixed(0)}% Rate
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/orders?status=Delivered');
+            }}
+            className="text-emerald-700 hover:underline font-bold text-[10px] bg-emerald-100 hover:bg-emerald-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Delivered Orders"
+          >
+            {deliveryRate.toFixed(0)}% Rate <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Delivered</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-emerald-600">
@@ -457,25 +508,27 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 9. Shipper Advice */}
       <div 
         onClick={() => handleTileClick('shipper-advice')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'shipper-advice' 
             ? 'border-purple-500 ring-2 ring-purple-400/30 bg-purple-50/50' 
             : 'border-outline-variant hover:border-purple-500'
         }`}
-        title="Shipper Advice = Failed delivery attempts requiring instructions from the merchant"
+        title="Shipper Advice = Failed delivery attempts requiring instructions. Click to filter or open Advice Portal."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">contact_support</span>
           </div>
           <button 
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               router.push('/shipper-advise');
             }}
-            className="text-purple-700 hover:underline font-bold text-[10px] bg-purple-100 px-2 py-0.5 rounded-full flex items-center gap-0.5"
+            className="text-purple-700 hover:underline font-bold text-[10px] bg-purple-100 hover:bg-purple-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Shipper Advice Portal"
           >
-            Open <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+            Advice <span className="material-symbols-outlined text-[12px]">open_in_new</span>
           </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Shipper Advice</h3>
@@ -488,20 +541,28 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 10. Ready To Return */}
       <div 
         onClick={() => handleTileClick('ready-to-return')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'ready-to-return' 
             ? 'border-rose-500 ring-2 ring-rose-400/30 bg-rose-50/50' 
             : 'border-outline-variant hover:border-rose-500'
         }`}
-        title="Ready To Return = Parcels marked for return back to merchant"
+        title="Ready To Return = Parcels marked for return back to merchant. Click to filter or open De-Manifestation."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">assignment_return</span>
           </div>
-          <span className="text-rose-700 font-bold text-[10px] bg-rose-100 px-2 py-0.5 rounded-full">
-            RTO Queue
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/operations/demanifestation');
+            }}
+            className="text-rose-700 hover:underline font-bold text-[10px] bg-rose-100 hover:bg-rose-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open De-Manifestation / Returns"
+          >
+            RTO Queue <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Ready To Return</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-rose-600">
@@ -513,26 +574,67 @@ export const CourierStats = ({ fromDate, toDate, selectedStatus = 'all', onSelec
       {/* 11. Return to Shipper */}
       <div 
         onClick={() => handleTileClick('return-to-shipper')}
-        className={`bg-white p-3.5 rounded-xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
           selectedStatus === 'return-to-shipper' 
             ? 'border-red-600 ring-2 ring-red-500/30 bg-red-50/50' 
             : 'border-outline-variant hover:border-red-600'
         }`}
-        title="Return to Shipper = Parcels closed and returned back to the merchant store"
+        title="Return to Shipper = Parcels closed and returned to merchant. Click to filter or open Returned list."
       >
         <div className="flex items-start justify-between mb-2">
           <div className="p-1.5 rounded-lg bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white transition-colors">
             <span className="material-symbols-outlined text-[20px]">keyboard_return</span>
           </div>
-          <span className="text-red-700 font-bold text-[10px] bg-red-100 px-2 py-0.5 rounded-full">
-            Returned
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/orders?status=Return+to+Shipper');
+            }}
+            className="text-red-700 hover:underline font-bold text-[10px] bg-red-100 hover:bg-red-600 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Returned to Shipper Orders"
+          >
+            Returned <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
         </div>
         <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Return to Shipper</h3>
         <p className="text-xl font-black mt-0.5 tabular-nums text-red-600">
           {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : stats.returnToShipper.toLocaleString()}
         </p>
         <p className="text-[10px] text-red-700/80 mt-1 truncate">Returned Back to Merchant</p>
+      </div>
+
+      {/* 12. Cancelled Bookings */}
+      <div 
+        onClick={() => handleTileClick('cancelled')}
+        className={`bg-white p-3.5 rounded-2xl border transition-all group cursor-pointer shadow-sm hover:shadow-md ${
+          selectedStatus === 'cancelled' 
+            ? 'border-slate-700 ring-2 ring-slate-600/30 bg-slate-100' 
+            : 'border-outline-variant hover:border-slate-600'
+        }`}
+        title="Cancelled = Orders cancelled before transit. Click to filter or open Cancelled list."
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700 group-hover:bg-slate-700 group-hover:text-white transition-colors">
+            <span className="material-symbols-outlined text-[20px]">block</span>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push('/orders?status=Cancelled');
+            }}
+            className="text-slate-700 hover:underline font-bold text-[10px] bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Open Cancelled Orders"
+          >
+            Cancelled <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+          </button>
+        </div>
+        <h3 className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">Cancelled</h3>
+        <p className="text-xl font-black mt-0.5 tabular-nums text-slate-700">
+          {isLoading ? <span className="inline-block w-12 h-6 bg-slate-100 animate-pulse rounded" /> : stats.cancelled.toLocaleString()}
+        </p>
+        <p className="text-[10px] text-slate-400 mt-1 truncate">Cancelled Before Transit</p>
       </div>
     </div>
   );

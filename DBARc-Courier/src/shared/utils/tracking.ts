@@ -13,7 +13,7 @@ export interface TrackingSettings {
 export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
   shipperPrefix: 'SHZ',
   courierPrefix: 'SHZ',
-  nextNumber: 100001134,
+  nextNumber: 100001700,
   format: 'prefix_numeric',
 };
 
@@ -71,8 +71,42 @@ export function saveTrackingSettings(settings: Partial<TrackingSettings>): Track
 }
 
 /**
+ * Queries the database for the highest tracking number, ensuring the client's nextNumber
+ * is strictly greater than any existing parcel in Strapi.
+ */
+export async function syncTrackingNumberWithDb(): Promise<number> {
+  const current = getTrackingSettings();
+  try {
+    const res = await apiClient.get('/parcels?sort=id:desc&pagination[limit]=1');
+    const lastParcel = res.data?.data?.[0];
+    if (lastParcel) {
+      const tracking = lastParcel.tracking_number || lastParcel.attributes?.tracking_number;
+      if (tracking) {
+        const num = parseInt(tracking.replace(/^[A-Za-z]+/, ''), 10);
+        if (!isNaN(num) && num >= 100000000) {
+          const freshNext = Math.max(current.nextNumber, num + 1);
+          saveTrackingSettings({ ...current, nextNumber: freshNext });
+          return freshNext;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('Could not sync tracking number from DB:', err?.message);
+  }
+  return current.nextNumber;
+}
+
+/**
+ * Asynchronously generates a guaranteed fresh unique tracking ID after checking database state.
+ */
+export async function generateTrackingIdAsync(role: 'shipper' | 'courier' | 'default' = 'default'): Promise<string> {
+  await syncTrackingNumberWithDb();
+  return generateTrackingId(role);
+}
+
+/**
  * Generates a single unique tracking number in the format: PREFIX + NUMERIC
- * Example: "SHZ100001134"
+ * Example: "SHZ100001651"
  * Automatically increments the sequence counter for subsequent bookings.
  */
 export function generateTrackingId(role: 'shipper' | 'courier' | 'default' = 'default'): string {
@@ -88,6 +122,11 @@ export function generateTrackingId(role: 'shipper' | 'courier' | 'default' = 'de
 
   // Save the incremented next number
   saveTrackingSettings({ ...settings, nextNumber: nextNum });
+
+  // Trigger background sync with DB to ensure future numbers stay ahead
+  if (typeof window !== 'undefined') {
+    syncTrackingNumberWithDb().catch(() => null);
+  }
 
   return `${prefix}${currentNum}`;
 }
