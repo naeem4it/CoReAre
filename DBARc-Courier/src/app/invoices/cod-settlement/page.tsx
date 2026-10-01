@@ -6,12 +6,14 @@ import { apiClient } from '@/shared/api/api-client';
 import TablePagination from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/ui/SortableHeader';
-import { 
-  Printer, 
-  Search, 
-  CheckCircle2, 
-  Wallet
+import {
+  Printer,
+  Search,
+  CheckCircle2,
+  Wallet,
+  Building2
 } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 interface SettlementParcel {
   id: number;
@@ -31,6 +33,7 @@ interface ShipperOption {
 }
 
 export default function CodSettlementPage() {
+  const { user, isShipper, activeBusinessId, setActiveBusinessId } = useAuth();
   const [shippers, setShippers] = React.useState<ShipperOption[]>([]);
   const [selectedShipperId, setSelectedShipperId] = React.useState<string>('');
   const [fromDate, setFromDate] = React.useState('');
@@ -47,11 +50,36 @@ export default function CodSettlementPage() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
-  // Fetch shippers list
+  // Resolve user businesses if logged in as a Shipper
+  const userBusinesses: ShipperOption[] = React.useMemo(() => {
+    if (!user?.shipper) return [];
+    const list = Array.isArray(user.shipper) ? user.shipper : [user.shipper];
+    return list.map((b: any) => ({
+      id: b.id,
+      name: b.name || b.company_name || 'My Business',
+      contact_person: b.contact_person,
+    }));
+  }, [user]);
+
+  // Load shippers list based on authentication role
   React.useEffect(() => {
+    if (isShipper) {
+      if (userBusinesses.length > 0) {
+        setShippers(userBusinesses);
+        // Preselect activeBusinessId if it's among user businesses, otherwise pick first
+        const matched = activeBusinessId && userBusinesses.some(b => String(b.id) === String(activeBusinessId));
+        const defaultId = matched ? String(activeBusinessId) : String(userBusinesses[0].id);
+        setSelectedShipperId(defaultId);
+      }
+      return;
+    }
+
+    // For Courier Admin/Staff: fetch all tenant shippers
     const fetchShippers = async () => {
       try {
-        const res = await apiClient.get('/shippers?pagination[limit]=100');
+        const tenantId = user?.tenant?.id || user?.tenant;
+        const tenantParam = tenantId ? `&filters[tenant][id][$eq]=${tenantId}` : '';
+        const res = await apiClient.get(`/shippers?pagination[limit]=100${tenantParam}`);
         const list = (res.data?.data || []) as ShipperOption[];
         setShippers(list);
         if (list.length > 0) {
@@ -62,14 +90,20 @@ export default function CodSettlementPage() {
       }
     };
     fetchShippers();
-  }, []);
+  }, [isShipper, userBusinesses, activeBusinessId, user]);
 
   // Fetch eligible delivered COD parcels
   const fetchSettlementParcels = React.useCallback(async () => {
     if (!selectedShipperId) return;
     setIsLoading(true);
     try {
-      const query = `/parcels?filters[status][$eq]=Delivered&filters[shipper][id][$eq]=${selectedShipperId}&populate=*&pagination[limit]=100`;
+      let query = `/parcels?filters[status][$eq]=Delivered&filters[shipper][id][$eq]=${selectedShipperId}&populate=*&pagination[limit]=100`;
+      if (fromDate) {
+        query += `&filters[delivered_date][$gte]=${fromDate}`;
+      }
+      if (toDate) {
+        query += `&filters[delivered_date][$lte]=${toDate}`;
+      }
       const res = await apiClient.get(query);
       const items = (res.data?.data || []) as Record<string, unknown>[];
 
@@ -161,7 +195,7 @@ export default function CodSettlementPage() {
     }
   };
 
-  const selectedShipperName = shippers.find(s => String(s.id) === selectedShipperId)?.name || 'Selected Shipper';
+  const selectedShipperName = shippers.find(s => String(s.id) === selectedShipperId)?.name || (isShipper ? (userBusinesses[0]?.name || 'My Business') : 'Selected Shipper');
 
   const {
     sortConfig,
@@ -181,9 +215,8 @@ export default function CodSettlementPage() {
   return (
     <PortalLayout>
       {toast.show && (
-        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
-          toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
-        }`}>
+        <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+          }`}>
           <div className="bg-emerald-500 rounded-full p-1 text-white"><CheckCircle2 className="w-4 h-4" /></div>
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>
@@ -194,7 +227,7 @@ export default function CodSettlementPage() {
         <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Financials &amp; Reconciliation</div>
-            <h1 className="text-xl font-bold tracking-tight">Financials / COD Settlement Engine</h1>
+            <h1 className="text-xl font-bold tracking-tight">Financials / COD Settlement</h1>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -205,32 +238,51 @@ export default function CodSettlementPage() {
             >
               <Printer className="w-4 h-4" /> Print Statement
             </button>
-            <button
-              onClick={handleDisburse}
-              disabled={isProcessing || parcels.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Wallet className="w-4 h-4" /> {isProcessing ? 'Processing...' : 'Disburse Net Settlement'}
-            </button>
+            {!isShipper && (
+              <button
+                onClick={handleDisburse}
+                disabled={isProcessing || parcels.length === 0}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Wallet className="w-4 h-4" /> {isProcessing ? 'Processing...' : 'Disburse Net Settlement'}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Filter Controls */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-end gap-4">
           <div className="flex-1 w-full flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Select Shipper Account</label>
-            <select
-              value={selectedShipperId}
-              onChange={(e) => {
-                setSelectedShipperId(e.target.value);
-                setPage(1);
-              }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:border-primary"
-            >
-              {shippers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.contact_person || 'Merchant'})</option>
-              ))}
-            </select>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-primary" />
+              {isShipper ? 'Your Merchant Account' : 'Select Shipper Account'}
+            </label>
+
+            {isShipper && userBusinesses.length <= 1 ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 flex items-center justify-between">
+                <span>{userBusinesses[0]?.name || 'My Business Account'}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">Active Merchant</span>
+              </div>
+            ) : (
+              <select
+                value={selectedShipperId}
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  setSelectedShipperId(newId);
+                  if (isShipper && setActiveBusinessId) {
+                    setActiveBusinessId(Number(newId));
+                  }
+                  setPage(1);
+                }}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-900 outline-none focus:border-primary cursor-pointer"
+              >
+                {shippers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.contact_person ? `(${s.contact_person})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto">
