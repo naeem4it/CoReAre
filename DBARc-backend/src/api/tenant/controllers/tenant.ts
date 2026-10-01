@@ -289,6 +289,7 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
         address,
         business_name,
         theme_primary_color,
+        theme_secondary_color,
         logo,
         self_service_cities,
         tpl_partners,
@@ -310,6 +311,7 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
       if (address !== undefined) updatePayload.address = address;
       if (business_name !== undefined) updatePayload.business_name = business_name;
       if (theme_primary_color !== undefined) updatePayload.theme_primary_color = theme_primary_color;
+      if (theme_secondary_color !== undefined) updatePayload.theme_secondary_color = theme_secondary_color;
       if (logo !== undefined) updatePayload.logo = logo;
       if (self_service_cities !== undefined) updatePayload.self_service_cities = self_service_cities;
       if (tpl_partners !== undefined) updatePayload.tpl_partners = tpl_partners;
@@ -429,6 +431,61 @@ export default factories.createCoreController('api::tenant.tenant', ({ strapi })
     } catch (err: any) {
       console.error('Failed to update tenant:', err);
       return ctx.badRequest(err.message || 'Failed to update tenant');
+    }
+  },
+
+  async resolveByDomain(ctx) {
+    try {
+      const { domain, tenantId } = ctx.query;
+      if (!domain && !tenantId) {
+        return ctx.badRequest('Domain or tenantId query parameter is required');
+      }
+
+      let tenant: any = null;
+
+      if (tenantId) {
+        tenant = await strapi.db.query('api::tenant.tenant').findOne({
+          where: { id: Number(tenantId) },
+          populate: ['logo'],
+        });
+      }
+
+      if (!tenant && domain) {
+        const cleanDomain = domain.toString().toLowerCase().trim();
+        tenant = await strapi.db.query('api::tenant.tenant').findOne({
+          where: { domain: cleanDomain },
+          populate: ['logo'],
+        });
+
+        if (!tenant) {
+          const subdomain = cleanDomain.split('.')[0];
+          const allTenants = await strapi.db.query('api::tenant.tenant').findMany({
+            populate: ['logo'],
+          });
+          tenant = allTenants.find((t: any) => {
+            const tDomain = (t.domain || '').toLowerCase();
+            const tName = (t.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return tDomain.includes(subdomain) || tName === subdomain;
+          });
+        }
+      }
+
+      if (!tenant) {
+        return ctx.notFound('Tenant not found for given domain or ID');
+      }
+
+      return ctx.send({
+        id: tenant.id,
+        name: tenant.name,
+        business_name: tenant.business_name || tenant.name,
+        domain: tenant.domain,
+        theme_primary_color: tenant.theme_primary_color || '#003ec7',
+        theme_secondary_color: tenant.theme_secondary_color || '#565e74',
+        logo: tenant.logo || null,
+      });
+    } catch (err) {
+      console.error('Failed to resolve tenant by domain:', err);
+      return ctx.internalServerError('Failed to resolve tenant');
     }
   }
 }));

@@ -21,6 +21,8 @@ import {
   Network,
 } from 'lucide-react';
 import { UserRole } from '@/shared/model/auth.store';
+import { useTenantBranding } from '@/shared/providers/TenantThemeProvider';
+import { DBarcLogo } from '@/shared/ui/DBarcLogo';
 
 interface NavItem {
   label: string;
@@ -76,7 +78,7 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
     { label: 'System Overview', href: '/admin', icon: LayoutDashboard },
     { label: 'Administration', href: '/admin/users', icon: ShieldCheck, children: SUPER_ADMINISTRATION_SUBMENU },
     { label: 'Tenants', href: '/admin/tenants', icon: Building2 },
-    { label: 'Courier Portal', href: '/courier', icon: Truck },
+    { label: 'Courier Manager', href: '/courier', icon: Truck },
     { label: 'Merchant Portal', href: '/merchant', icon: Package, children: MERCHANT_SUBMENU },
     { label: 'Riders App', href: '/rider', icon: Users },
     { label: 'System Logs', href: '/admin/logs', icon: ShieldCheck },
@@ -109,6 +111,7 @@ const MENU_CONFIG: Record<UserRole | 'DEFAULT', NavItem[]> = {
 
 export const Sidebar = ({ role }: { role: UserRole }) => {
   const pathname = usePathname();
+  const { businessName, logoUrl } = useTenantBranding();
   const menuItems = MENU_CONFIG[role] || MENU_CONFIG.DEFAULT;
   const [openMenu, setOpenMenu] = React.useState<string | null>(null);
 
@@ -193,16 +196,29 @@ export const Sidebar = ({ role }: { role: UserRole }) => {
 
   return (
     <aside className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 z-40 border-r border-white/5">
-      <div className="p-6 flex items-center gap-3">
-        <div className="h-10 w-10 bg-primary-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/20 shrink-0">
-          <Package className="h-6 w-6" />
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span className="text-lg font-bold text-white tracking-tight leading-none">DBARC</span>
-          <span className="text-[9px] text-slate-400 font-medium tracking-tight mt-1 leading-tight line-clamp-2">
-            [Digital Business Automation for Routing & Courier]
-          </span>
-        </div>
+      <div className="p-5 flex items-center gap-3 border-b border-white/5">
+        {logoUrl ? (
+          <>
+            <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center p-1.5 shadow-md shadow-black/20 shrink-0 overflow-hidden border border-white/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={businessName} className="max-h-full max-w-full object-contain" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-base font-bold text-white tracking-tight leading-none truncate">
+                {businessName || 'DBARc'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium tracking-tight mt-1 leading-tight line-clamp-1">
+                Courier Manager Portal
+              </span>
+            </div>
+          </>
+        ) : (
+          <DBarcLogo 
+            size={36} 
+            variant="dark" 
+            subtitle={role === 'SUPER_ADMIN' ? 'Courier Manager' : 'Courier Manager Portal'} 
+          />
+        )}
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1">

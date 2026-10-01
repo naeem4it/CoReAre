@@ -14,10 +14,10 @@ export const Navbar = () => {
       <div className="flex items-center gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 pr-3 sm:pr-4 border-r border-slate-200">
           <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
-            DBARC
+            DBARc
           </span>
-          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap">
-            [Digital Business Automation for Routing & Courier]
+          <span className="text-[10px] sm:text-xs font-semibold text-primary-600 whitespace-nowrap">
+            Courier Manager
           </span>
         </div>
 

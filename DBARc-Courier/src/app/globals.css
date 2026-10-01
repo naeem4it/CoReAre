@@ -49,9 +49,9 @@
   --color-surface-variant: #e0e3e5;
   --color-on-primary-fixed: #001452;
   --color-surface-container-lowest: #ffffff;
-  /* Tenant Dynamic Variables (Fallback defaults) */
-  --tenant-primary: #003ec7;
-  --tenant-secondary: #565e74;
+  /* Tenant Dynamic Variables (Default: Option 3 Aero Teal & Deep Ocean) */
+  --tenant-primary: #0D9488;
+  --tenant-secondary: #0284C7;
 
   --color-primary: var(--tenant-primary);
   --color-surface-tint: var(--tenant-primary);

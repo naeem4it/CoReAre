@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/shared/lib/utils';
 
+import { TenantThemeProvider } from '@/shared/providers/TenantThemeProvider';
+
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
@@ -21,9 +23,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className={cn(inter.className, 'h-full bg-slate-50')}>
-        <main className="relative flex min-h-screen flex-col">
-          {children}
-        </main>
+        <TenantThemeProvider>
+          <main className="relative flex min-h-screen flex-col">
+            {children}
+          </main>
+        </TenantThemeProvider>
       </body>
     </html>
   );

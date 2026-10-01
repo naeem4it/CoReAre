@@ -24,8 +24,16 @@ import {
   Mail,
   User,
   Eye,
-  EyeOff
+  EyeOff,
+  Sparkles,
+  Palette,
+  Upload,
+  Image as ImageIcon,
+  RotateCcw,
+  Loader2,
+  Check,
 } from 'lucide-react';
+import { extractPaletteFromImage, ExtractedPalette, getContrastColor, mixColors } from '@/shared/lib/colorExtractor';
 
 interface Tenant {
   id: string;
@@ -44,6 +52,7 @@ interface Tenant {
   createdAt: string;
   businessName?: string;
   themePrimaryColor?: string;
+  themeSecondaryColor?: string;
   logo?: any;
   address?: string;
   adminUsername?: string;
@@ -110,8 +119,15 @@ export default function AdminTenantsPage() {
 
   // UI Branding Form States
   const [formBusinessName, setFormBusinessName] = React.useState('');
-  const [formThemeColor, setFormThemeColor] = React.useState('#003ec7');
+  const [formThemeColor, setFormThemeColor] = React.useState('#0D9488');
+  const [formSecondaryColor, setFormSecondaryColor] = React.useState('#0284C7');
+  const [applyLogoTheme, setApplyLogoTheme] = React.useState(true);
+  const [extractedPrimary, setExtractedPrimary] = React.useState<string | null>(null);
+  const [extractedSecondary, setExtractedSecondary] = React.useState<string | null>(null);
   const [formLogoFile, setFormLogoFile] = React.useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState<string | null>(null);
+  const [isExtractingColor, setIsExtractingColor] = React.useState(false);
+  const [extractedPalette, setExtractedPalette] = React.useState<ExtractedPalette | null>(null);
 
   // Admin Credentials State
   const [formAdminUsername, setFormAdminUsername] = React.useState('');
@@ -156,7 +172,8 @@ export default function AdminTenantsPage() {
         createdAt: item.attributes.createdAt ? new Date(item.attributes.createdAt).toISOString().split('T')[0] : '2026-01-01',
         businessName: item.attributes.business_name || '',
         themePrimaryColor: item.attributes.theme_primary_color || '#003ec7',
-        logo: item.attributes.logo?.data || null,
+        themeSecondaryColor: item.attributes.theme_secondary_color || '#565e74',
+        logo: item.attributes.logo?.data || item.attributes.logo || item.logo?.data || item.logo || null,
         address: item.attributes.address || '',
         adminUsername: item.attributes.adminUser?.username || item.attributes.adminUsername || '',
         adminEmail: item.attributes.adminUser?.email || item.attributes.adminEmail || '',
@@ -191,9 +208,70 @@ export default function AdminTenantsPage() {
   const handleOpenStylingConfig = (tenant: Tenant) => {
     setSelectedTenant(tenant);
     setFormBusinessName(tenant.businessName || tenant.name);
-    setFormThemeColor(tenant.themePrimaryColor || '#003ec7');
+    const primary = tenant.themePrimaryColor || '#0D9488';
+    const secondary = tenant.themeSecondaryColor || '#0284C7';
+    const hasCustomTheme = primary !== '#0D9488' && primary !== '#003ec7';
+    setApplyLogoTheme(hasCustomTheme);
+    setFormThemeColor(primary);
+    setFormSecondaryColor(secondary);
+    setExtractedPrimary(hasCustomTheme ? primary : null);
+    setExtractedSecondary(hasCustomTheme ? secondary : null);
     setFormLogoFile(null);
+    setExtractedPalette(null);
+
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337').replace(/\/api$/, '');
+    let initialLogoUrl: string | null = null;
+    if (tenant.logo?.attributes?.url) {
+      initialLogoUrl = tenant.logo.attributes.url.startsWith('http') 
+        ? tenant.logo.attributes.url 
+        : `${apiBase}${tenant.logo.attributes.url}`;
+    } else if (tenant.logo?.url) {
+      initialLogoUrl = tenant.logo.url.startsWith('http') 
+        ? tenant.logo.url 
+        : `${apiBase}${tenant.logo.url}`;
+    }
+    setLogoPreviewUrl(initialLogoUrl);
     setIsStylingModalOpen(true);
+  };
+
+  const handleLogoFileSelect = async (file: File) => {
+    setFormLogoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setLogoPreviewUrl(objectUrl);
+    setIsExtractingColor(true);
+
+    try {
+      const palette = await extractPaletteFromImage(file, formThemeColor, formSecondaryColor);
+      setExtractedPrimary(palette.primary);
+      setExtractedSecondary(palette.secondary);
+      setExtractedPalette(palette);
+      if (applyLogoTheme) {
+        setFormThemeColor(palette.primary);
+        setFormSecondaryColor(palette.secondary);
+      }
+    } catch (err) {
+      console.error('Failed to extract colors from uploaded logo:', err);
+    } finally {
+      setIsExtractingColor(false);
+    }
+  };
+
+  const handleToggleApplyLogoTheme = (checked: boolean) => {
+    setApplyLogoTheme(checked);
+    if (checked) {
+      setFormThemeColor(extractedPrimary || '#0D9488');
+      setFormSecondaryColor(extractedSecondary || '#0284C7');
+    } else {
+      setFormThemeColor('#0D9488');
+      setFormSecondaryColor('#0284C7');
+    }
+  };
+
+  const handleResetColors = () => {
+    setApplyLogoTheme(false);
+    setFormThemeColor('#0D9488');
+    setFormSecondaryColor('#0284C7');
+    setExtractedPalette(null);
   };
 
   const handleOpenCreate = () => {
@@ -281,19 +359,22 @@ export default function AdminTenantsPage() {
     if (!selectedTenant) return;
     setIsSubmitting(true);
     try {
-      let logoId = null;
+      let logoId = selectedTenant.logo?.id || selectedTenant.logo?.data?.id || null;
       if (formLogoFile) {
         const formData = new FormData();
-        formData.append('files', formLogoFile);
+        formData.append('files', formLogoFile, formLogoFile.name);
         const uploadRes = await apiClient.post('/upload', formData);
-        logoId = uploadRes.data[0].id;
+        if (uploadRes.data && Array.isArray(uploadRes.data) && uploadRes.data.length > 0) {
+          logoId = uploadRes.data[0].id;
+        }
       }
       
       const payload: any = {
         business_name: formBusinessName,
         theme_primary_color: formThemeColor,
+        theme_secondary_color: formSecondaryColor,
       };
-      if (logoId) {
+      if (logoId !== null && logoId !== undefined) {
         payload.logo = logoId;
       }
 
@@ -785,61 +866,305 @@ export default function AdminTenantsPage() {
         </form>
       </Modal>
 
-      {/* MODAL 3: STYLING TENANT */}
+      {/* MODAL 3: STYLING TENANT WITH AUTOMATIC COLOR EXTRACTION & PREVIEW */}
       <Modal 
         isOpen={isStylingModalOpen} 
         onClose={() => setIsStylingModalOpen(false)} 
-        title="Configure Tenant UI Branding"
-        size="md"
+        title={`Branding & Theme Customization: ${selectedTenant?.name || ''}`}
+        size="lg"
       >
         <form onSubmit={handleSaveStyling} className="space-y-6">
           <Input
-            label="Business Name (Display Name)"
-            placeholder="e.g. Velocity Courier"
+            label="Business Display Name"
+            placeholder="e.g. Shipzo Logistics"
             value={formBusinessName}
             onChange={(e) => setFormBusinessName(e.target.value)}
             required
           />
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Theme Primary Color</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={formThemeColor}
-                onChange={(e) => setFormThemeColor(e.target.value)}
-                className="h-10 w-16 p-1 rounded border border-slate-200 cursor-pointer"
-              />
-              <Input
-                placeholder="#003ec7"
-                value={formThemeColor}
-                onChange={(e) => setFormThemeColor(e.target.value)}
-                className="flex-1"
-                required
-              />
+
+          {/* Logo Upload & Automatic Color Extraction */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Tenant Brand Logo</label>
+              {isExtractingColor && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 animate-pulse">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Analyzing logo & extracting colors...
+                </span>
+              )}
+              {extractedPalette && !isExtractingColor && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <Sparkles className="h-3 w-3" />
+                  Palette auto-extracted
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 p-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
+              {/* Logo Preview box */}
+              <div className="relative h-20 w-24 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-xs">
+                {logoPreviewUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={logoPreviewUrl}
+                    alt="Tenant logo preview"
+                    className="max-h-full max-w-full object-contain p-2"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-400">
+                    <ImageIcon className="h-6 w-6 mb-1" />
+                    <span className="text-[10px] font-medium">No Logo</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload controls */}
+              <div className="flex-1 w-full space-y-1">
+                <input
+                  type="file"
+                  id="tenant-logo-file-input"
+                  accept="image/png, image/jpeg, image/svg+xml, image/webp"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleLogoFileSelect(e.target.files[0]);
+                    }
+                  }}
+                  className="w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer"
+                />
+                <p className="text-xs text-slate-500">
+                  Upload high-res PNG, SVG, or JPG. Dominant and accent colors will be extracted automatically.
+                </p>
+              </div>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Tenant Logo</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) {
-                  setFormLogoFile(e.target.files[0]);
-                }
-              }}
-              className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-            />
-            {selectedTenant?.logo && !formLogoFile && (
-              <p className="text-xs text-slate-500 mt-2">Current logo is uploaded. Selecting a new file will replace it.</p>
-            )}
+
+          {/* Theme Option Toggle */}
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <label htmlFor="apply-logo-theme-toggle" className="text-sm font-semibold text-slate-900 cursor-pointer flex items-center gap-2">
+                <span>Apply Extracted Logo Colors to Theme</span>
+                {applyLogoTheme ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Active
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                    Using Default Theme
+                  </span>
+                )}
+              </label>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                {applyLogoTheme 
+                  ? 'The courier portal navigation and buttons will dynamically match your uploaded logo colors.' 
+                  : 'The courier portal will use the eye-friendly Default Theme (Aero Teal & Deep Ocean) while still displaying your uploaded logo.'}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+              <input
+                id="apply-logo-theme-toggle"
+                type="checkbox"
+                checked={applyLogoTheme}
+                onChange={(e) => handleToggleApplyLogoTheme(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
           </div>
+
+          {/* Color Palettes Controls */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                <Palette className="h-4 w-4 text-primary-600" />
+                Theme Color Palette
+              </label>
+              <button
+                type="button"
+                onClick={handleResetColors}
+                className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset Defaults
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Primary Color */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Primary Brand Color</span>
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded font-mono font-medium"
+                    style={{
+                      backgroundColor: formThemeColor,
+                      color: getContrastColor(formThemeColor),
+                    }}
+                  >
+                    Contrast: {getContrastColor(formThemeColor) === '#ffffff' ? 'White Text' : 'Dark Text'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    value={formThemeColor}
+                    onChange={(e) => setFormThemeColor(e.target.value)}
+                    className="h-10 w-14 p-1 rounded-lg border border-slate-200 cursor-pointer shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={formThemeColor}
+                    onChange={(e) => setFormThemeColor(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm font-mono uppercase rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                    placeholder="#003ec7"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Secondary Color */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Secondary / Accent Color</span>
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded font-mono font-medium"
+                    style={{
+                      backgroundColor: formSecondaryColor,
+                      color: getContrastColor(formSecondaryColor),
+                    }}
+                  >
+                    Accent
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    value={formSecondaryColor}
+                    onChange={(e) => setFormSecondaryColor(e.target.value)}
+                    className="h-10 w-14 p-1 rounded-lg border border-slate-200 cursor-pointer shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={formSecondaryColor}
+                    onChange={(e) => setFormSecondaryColor(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm font-mono uppercase rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                    placeholder="#565e74"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Live Preview Component */}
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Live Website Theme Preview</span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Target: {selectedTenant?.domain || 'tenant.dbarc.com'}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-100 p-4 space-y-3 shadow-inner">
+              {/* Mock Tenant Top Bar */}
+              <div className="rounded-lg bg-white p-3 border border-slate-200 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-100">
+                    {logoPreviewUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={logoPreviewUrl} alt="Logo" className="max-h-full max-w-full object-contain p-1" />
+                    ) : (
+                      <div
+                        className="h-6 w-6 rounded flex items-center justify-center text-xs font-bold text-white"
+                        style={{ backgroundColor: formThemeColor }}
+                      >
+                        {(formBusinessName || 'T').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 leading-none">
+                      {formBusinessName || selectedTenant?.name || 'Tenant Brand'}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Courier & Merchant Portal</p>
+                  </div>
+                </div>
+
+                {/* Mock Nav active tab */}
+                <div className="hidden sm:flex items-center gap-1">
+                  <span
+                    className="px-2.5 py-1 rounded-md text-xs font-medium text-white shadow-xs"
+                    style={{ backgroundColor: formThemeColor }}
+                  >
+                    Dashboard
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50">
+                    Shipments
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50">
+                    Tracking
+                  </span>
+                </div>
+              </div>
+
+              {/* Mock Dashboard Card with buttons & badges */}
+              <div className="rounded-lg bg-white p-4 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: mixColors(formThemeColor, '#ffffff', 0.88),
+                      color: formThemeColor,
+                    }}
+                  >
+                    Active Plan: {selectedTenant?.plan || 'Growth'}
+                  </span>
+                  <span
+                    className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: mixColors(formSecondaryColor, '#ffffff', 0.88),
+                      color: formSecondaryColor,
+                    }}
+                  >
+                    Accent Element
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {/* Primary CTA button */}
+                  <button
+                    type="button"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-opacity hover:opacity-95"
+                    style={{
+                      backgroundColor: formThemeColor,
+                      color: getContrastColor(formThemeColor),
+                    }}
+                  >
+                    Book Shipment
+                  </button>
+
+                  {/* Secondary button */}
+                  <button
+                    type="button"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                    style={{
+                      borderColor: formThemeColor,
+                      color: formThemeColor,
+                      backgroundColor: mixColors(formThemeColor, '#ffffff', 0.95),
+                    }}
+                  >
+                    Export Manifest
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <Button type="button" variant="outline" onClick={() => setIsStylingModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save Branding'}
+            <Button type="submit" disabled={isSubmitting || isExtractingColor}>
+              {isSubmitting ? 'Saving Branding...' : 'Save & Apply Theme'}
             </Button>
           </div>
         </form>
