@@ -3,7 +3,7 @@
 import * as React from 'react';
 import PortalLayout from '@/components/PortalLayout';
 import { InvoiceService } from '@/services/api';
-import { Download, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Download, RefreshCw, Receipt, CheckCircle, Clock, AlertTriangle, Calendar, X, Search } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import TablePagination from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -41,6 +41,10 @@ export default function CustomerInvoicePage() {
   const [invoices, setInvoices] = React.useState<InvoiceItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedStatus, setSelectedStatus] = React.useState<'All' | 'Paid' | 'Pending' | 'Overdue'>('All');
+  const [startDate, setStartDate] = React.useState<string>('');
+  const [endDate, setEndDate] = React.useState<string>('');
+  const [datePreset, setDatePreset] = React.useState<'all' | 'today' | '7days' | 'this_month' | '30days' | 'custom'>('all');
+  const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
@@ -52,12 +56,64 @@ export default function CustomerInvoicePage() {
     return businesses.map((b: any) => b.id).filter(Boolean).sort().join(',');
   }, [user]);
 
+  const formatDateStr = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyPreset = (preset: 'all' | 'today' | '7days' | 'this_month' | '30days') => {
+    setDatePreset(preset);
+    setPage(1);
+    const now = new Date();
+
+    if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+      return;
+    }
+    if (preset === 'today') {
+      const todayStr = formatDateStr(now);
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      return;
+    }
+    if (preset === '7days') {
+      const start = new Date();
+      start.setDate(start.getDate() - 7);
+      setStartDate(formatDateStr(start));
+      setEndDate(formatDateStr(now));
+      return;
+    }
+    if (preset === 'this_month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setStartDate(formatDateStr(start));
+      setEndDate(formatDateStr(end));
+      return;
+    }
+    if (preset === '30days') {
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      setStartDate(formatDateStr(start));
+      setEndDate(formatDateStr(now));
+      return;
+    }
+  };
+
   const fetchInvoices = React.useCallback(async () => {
     setIsLoading(true);
     try {
       let query = `?populate=*&sort[0]=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}`;
       if (selectedStatus !== 'All') {
         query += `&filters[status][$eq]=${selectedStatus}`;
+      }
+      if (startDate) {
+        query += `&filters[invoice_date][$gte]=${startDate}`;
+      }
+      if (endDate) {
+        query += `&filters[invoice_date][$lte]=${endDate}`;
       }
       if (isShipper) {
         const ids = userBusinessIdsKey ? userBusinessIdsKey.split(',').map(Number) : [];
@@ -80,7 +136,7 @@ export default function CustomerInvoicePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, selectedStatus, isShipper, activeBusinessId, userBusinessIdsKey]);
+  }, [page, pageSize, selectedStatus, startDate, endDate, isShipper, activeBusinessId, userBusinessIdsKey]);
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -100,34 +156,45 @@ export default function CustomerInvoicePage() {
     return 'Standard Corporate';
   };
 
+  // Client-side quick search filter
+  const filteredInvoices = React.useMemo(() => {
+    if (!searchQuery.trim()) return invoices;
+    const q = searchQuery.toLowerCase().trim();
+    return invoices.filter((inv) => {
+      const invNum = (getField(inv, 'invoice_number') || `INV-${inv.id}`).toLowerCase();
+      const customer = getShipperName(inv).toLowerCase();
+      return invNum.includes(q) || customer.includes(q);
+    });
+  }, [invoices, searchQuery]);
+
   // Aggregate metrics
   const totalInvoiced = React.useMemo(() => {
-    return invoices.reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
-  }, [invoices]);
+    return filteredInvoices.reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
+  }, [filteredInvoices]);
 
   const pendingAmount = React.useMemo(() => {
-    return invoices
+    return filteredInvoices
       .filter((inv) => getField(inv, 'status') === 'Pending')
       .reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
-  }, [invoices]);
+  }, [filteredInvoices]);
 
   const overdueAmount = React.useMemo(() => {
-    return invoices
+    return filteredInvoices
       .filter((inv) => getField(inv, 'status') === 'Overdue')
       .reduce((acc, inv) => acc + (Number(getField(inv, 'total_charges')) || 0), 0);
-  }, [invoices]);
+  }, [filteredInvoices]);
 
   const paidCount = React.useMemo(() => {
-    return invoices.filter((inv) => getField(inv, 'status') === 'Paid').length;
-  }, [invoices]);
+    return filteredInvoices.filter((inv) => getField(inv, 'status') === 'Paid').length;
+  }, [filteredInvoices]);
 
-  const paidRate = invoices.length > 0 ? ((paidCount / invoices.length) * 100).toFixed(1) : '0';
+  const paidRate = filteredInvoices.length > 0 ? ((paidCount / filteredInvoices.length) * 100).toFixed(1) : '0';
 
   const {
     sortConfig,
     handleSort,
     sortedItems: sortedInvoices,
-  } = useTableSort<InvoiceItem>(invoices, {
+  } = useTableSort<InvoiceItem>(filteredInvoices, {
     defaultColumn: 'id',
     defaultDirection: 'desc',
     customExtractors: {
@@ -142,7 +209,7 @@ export default function CustomerInvoicePage() {
 
   const handleExportCSV = () => {
     const header = 'Invoice #,Customer,Date,Period,Charges,Status\n';
-    const rows = invoices.map((inv) => {
+    const rows = filteredInvoices.map((inv) => {
       const invNum = getField(inv, 'invoice_number') || `INV-${inv.id}`;
       const customer = getShipperName(inv);
       const date = getField(inv, 'invoice_date') || '';
@@ -155,7 +222,14 @@ export default function CustomerInvoicePage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `customer_invoices_${new Date().toISOString().split('T')[0]}.csv`;
+    const rangeSuffix = startDate && endDate
+      ? `${startDate}_to_${endDate}`
+      : startDate
+      ? `from_${startDate}`
+      : endDate
+      ? `until_${endDate}`
+      : `all_time`;
+    a.download = `customer_invoices_${rangeSuffix}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -175,39 +249,149 @@ export default function CustomerInvoicePage() {
               <p className="font-body-md text-body-md text-outline">Manage billing cycles, customer statements, and payment status.</p>
             </div>
             <div className="flex items-center gap-sm flex-wrap">
-              <div className="flex items-center bg-surface-container-lowest border border-outline-variant rounded-lg p-1">
-                {(['All', 'Paid', 'Pending', 'Overdue'] as const).map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => {
-                      setSelectedStatus(status);
-                      setPage(1);
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                      selectedStatus === status
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-outline hover:text-on-surface'
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
               <button
                 onClick={handleExportCSV}
-                className="flex items-center gap-xs px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors"
+                className="flex items-center gap-xs px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                Export
+                Export CSV
               </button>
               <button
                 onClick={() => fetchInvoices()}
                 disabled={isLoading}
-                className="flex items-center gap-xs px-md py-2 bg-primary text-white rounded-lg font-label-md text-label-md hover:bg-primary/90 transition-colors disabled:opacity-60"
+                className="flex items-center gap-xs px-md py-2 bg-primary text-white rounded-lg font-label-md text-label-md hover:bg-primary/90 transition-colors disabled:opacity-60 cursor-pointer"
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
+            </div>
+          </div>
+
+          {/* Comprehensive Filter Toolbar: Status, Search & Date Range */}
+          <div className="bg-surface-container-lowest border border-outline-variant p-4 rounded-2xl shadow-xs space-y-3.5">
+            {/* Top Row: Search and Status Tabs */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search Bar - generous width, explicit padding & full interactive focus */}
+              <div className="relative w-full md:w-[380px] lg:w-[440px] shrink-0">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search by invoice # or customer..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-xs transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    title="Clear search"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <span className="text-xs font-bold text-outline uppercase tracking-wider">Status:</span>
+                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-xs">
+                  {(['All', 'Paid', 'Pending', 'Overdue'] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => {
+                        setSelectedStatus(status);
+                        setPage(1);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center ${
+                        selectedStatus === status
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-outline hover:text-on-surface hover:bg-slate-200/50'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Row: Date Range Controls */}
+            <div className="pt-3 border-t border-slate-200/80 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              {/* Preset Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-outline uppercase tracking-wider flex items-center gap-1 mr-1">
+                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                  Period:
+                </span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {[
+                    { id: 'all', label: 'All Time' },
+                    { id: 'today', label: 'Today' },
+                    { id: '7days', label: 'Last 7 Days' },
+                    { id: 'this_month', label: 'This Month' },
+                    { id: '30days', label: 'Last 30 Days' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => applyPreset(preset.id as any)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center ${
+                        datePreset === preset.id
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Date Pickers */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">From</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setDatePreset('custom');
+                      setPage(1);
+                    }}
+                    className="bg-transparent text-xs font-semibold text-slate-900 focus:outline-none cursor-pointer"
+                  />
+                  <span className="text-slate-400 text-xs">&rarr;</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">To</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setDatePreset('custom');
+                      setPage(1);
+                    }}
+                    className="bg-transparent text-xs font-semibold text-slate-900 focus:outline-none cursor-pointer"
+                  />
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('all')}
+                      title="Clear Date Filter"
+                      className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {(startDate || endDate) && (
+                  <span className="inline-flex items-center px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                    Active: {startDate || 'Earliest'} &rarr; {endDate || 'Latest'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -224,7 +408,7 @@ export default function CustomerInvoicePage() {
                 Rs.{totalInvoiced.toLocaleString()}
               </p>
               <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-xs">
-                <span>{invoices.length} invoices on page</span>
+                <span>{filteredInvoices.length} invoices displayed</span>
               </div>
             </div>
 
@@ -267,7 +451,7 @@ export default function CustomerInvoicePage() {
               </div>
               <p className="font-display-lg text-2xl font-bold text-emerald-600">{paidRate}%</p>
               <div className="flex items-center gap-xs mt-xs text-outline font-label-md text-xs">
-                <span>{paidCount} paid of {invoices.length}</span>
+                <span>{paidCount} paid of {filteredInvoices.length}</span>
               </div>
             </div>
           </div>
