@@ -26,6 +26,154 @@ function normalizePostExCity(city: string): string {
   return c || 'Karachi';
 }
 
+interface Book3PLResult {
+  trackingNumber: string;
+  provider: string;
+  response?: any;
+  payload?: any;
+  status?: number;
+  error?: string;
+}
+
+async function book3PLConsignment(
+  strapi: any,
+  parcelData: {
+    tracking_number: string;
+    recipient_name?: string;
+    recipient_phone?: string;
+    recipient_address?: string;
+    rawDestCityName?: string;
+    destination_city_name?: string;
+    payment_type?: string;
+    cod_amount?: number | string;
+    pieces?: number | string;
+    comments?: string;
+    product_description?: string;
+    tenant?: number | string | null;
+  },
+  tenantId?: number | string | null
+): Promise<Book3PLResult | null> {
+  try {
+    const tid = tenantId || parcelData.tenant || null;
+
+    // Query active 3PL partners configured by admin
+    const partners = await strapi.db.query('api::tpl-partner.tpl-partner').findMany({
+      where: {
+        status: 'active',
+      },
+      populate: ['tenant']
+    });
+
+    // 1. Try to find partner matching tenantId
+    let partner = partners.find((p: any) => {
+      if (!tid) return false;
+      const pTid = p.tenant?.id || p.tenant;
+      return String(pTid) === String(tid);
+    });
+
+    // 2. If not found by tenant, prefer the one with a valid production base64 token
+    if (!partner) {
+      partner = partners.find((p: any) => p.environment === 'production' || (p.api_credentials?.api_token && !p.api_credentials.api_token.includes('sandbox')));
+    }
+
+    // 3. Fallback to first active partner
+    if (!partner && partners.length > 0) {
+      partner = partners[0];
+    }
+
+    if (!partner) {
+      console.warn('⚠️ [3PL BOOKING WARNING]: No active 3PL partner found in tpl_partners.');
+      return null;
+    }
+
+    const credentials = partner?.api_credentials || partner?.credentials || {};
+    const apiToken = credentials.api_token || credentials.token || '';
+    const providerCode = (partner.provider_code || 'postex').toLowerCase();
+    const providerName = partner.name || (providerCode === 'postex' ? 'PostEx' : providerCode.toUpperCase());
+
+    if (!apiToken) {
+      console.warn(`⚠️ [3PL BOOKING WARNING]: No active API token found for partner: ${providerName}`);
+      return null;
+    }
+
+    // Provider: PostEx
+    if (providerCode === 'postex') {
+      const cleanCity = normalizePostExCity(parcelData.rawDestCityName || parcelData.destination_city_name || parcelData.recipient_address || 'Karachi');
+
+      let phone = String(parcelData.recipient_phone || '03001234567').replace(/\D/g, '');
+      if (phone.startsWith('92')) phone = '0' + phone.slice(2);
+      if (!phone.startsWith('0')) phone = '0' + phone;
+
+      const postExPayload = {
+        cityName: cleanCity,
+        customerName: parcelData.recipient_name || 'Customer',
+        customerPhone: phone,
+        deliveryAddress: parcelData.recipient_address || `${cleanCity}, Pakistan`,
+        invoiceDivision: 1,
+        invoicePayment: parcelData.payment_type === 'PAID' ? 0 : (Number(parcelData.cod_amount) || 0),
+        items: Number(parcelData.pieces) || 1,
+        orderDetail: parcelData.comments || parcelData.product_description || 'General Goods',
+        orderRefNumber: parcelData.tracking_number,
+        orderType: 'Normal',
+        transactionNotes: 'DBARc 3PL Booking'
+      };
+
+      console.log('\n============================================================');
+      console.log('🚀 [3PL SERVICE BOOKING REQUEST]');
+      console.log(`Tracking Number: ${parcelData.tracking_number}`);
+      console.log(`Provider: PostEx (${providerName})`);
+      console.log(`Payload:`, JSON.stringify(postExPayload, null, 2));
+      console.log('============================================================\n');
+
+      const postexRes = await fetch('https://api.postex.pk/services/integration/api/order/v1/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': apiToken
+        },
+        body: JSON.stringify(postExPayload)
+      });
+
+      const httpStatus = postexRes.status;
+      const responseJson: any = await postexRes.json().catch(() => ({}));
+
+      console.log('\n============================================================');
+      console.log('📥 [3PL SERVICE BOOKING RESPONSE]');
+      console.log(`Provider: PostEx (${providerName})`);
+      console.log(`HTTP Status: ${httpStatus}`);
+      console.log(`Response Body:`, JSON.stringify(responseJson, null, 2));
+      console.log('============================================================\n');
+
+      if (postexRes.ok && (responseJson.statusCode === '200' || responseJson.statusCode === 200)) {
+        const tplCn = responseJson.dist?.trackingNumber || responseJson.trackingNumber;
+        console.log(`✅ [3PL BOOKED SUCCESSFULLY]: ${parcelData.tracking_number} -> PostEx CN: ${tplCn}`);
+        return {
+          trackingNumber: tplCn,
+          provider: 'PostEx',
+          response: responseJson,
+          payload: postExPayload,
+          status: httpStatus
+        };
+      } else {
+        const errMsg = responseJson.statusMessage || responseJson.message || `HTTP ${httpStatus}`;
+        console.error(`❌ [3PL BOOKING FAILED] for ${parcelData.tracking_number}:`, errMsg);
+        return {
+          trackingNumber: '',
+          provider: 'PostEx',
+          error: errMsg,
+          response: responseJson,
+          status: httpStatus
+        };
+      }
+    }
+
+    return null;
+  } catch (err: any) {
+    console.error('❌ [3PL BOOKING EXCEPTION]:', err.message || err);
+    return null;
+  }
+}
+
 export default factories.createCoreController('api::parcel.parcel', ({ strapi }) => ({
   async create(ctx: any) {
     const { data } = ctx.request.body;
@@ -194,114 +342,29 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       }
     }
 
-    // --- 3PL SERVICE INTEGRATION (PostEx) ---
+    // --- 3PL SERVICE INTEGRATION (Admin-Configured 3PL Partner e.g. PostEx) ---
     let tplBookingMeta: any = null;
 
     if (data.is_3pl) {
-      try {
-        const tenantId = data.tenant || ctx.request.headers?.['x-tenant-id'] || ctx.state?.user?.tenant?.id || null;
+      const tenantId = data.tenant || ctx.request.headers?.['x-tenant-id'] || ctx.state?.user?.tenant?.id || null;
+      const tplResult = await book3PLConsignment(strapi, { ...data, rawDestCityName }, tenantId);
 
-        // Query active PostEx 3PL partners
-        const partners = await strapi.db.query('api::tpl-partner.tpl-partner').findMany({
-          where: {
-            provider_code: 'postex',
-            status: 'active',
-          },
-          populate: ['tenant']
-        });
+      if (tplResult) {
+        tplBookingMeta = {
+          provider: tplResult.provider,
+          status: tplResult.status,
+          payload: tplResult.payload,
+          response: tplResult.response
+        };
 
-        // 1. Try to find partner matching tenantId
-        let partner = partners.find((p: any) => {
-          if (!tenantId) return false;
-          const pTid = p.tenant?.id || p.tenant;
-          return String(pTid) === String(tenantId);
-        });
-
-        // 2. If not found by tenant, prefer the one with a valid production base64 token
-        if (!partner) {
-          partner = partners.find((p: any) => p.environment === 'production' || (p.api_credentials?.api_token && !p.api_credentials.api_token.includes('sandbox')));
+        if (tplResult.trackingNumber) {
+          data.secondary_barcode = tplResult.trackingNumber;
+          data.reference_number = tplResult.trackingNumber;
+          data.service_provider = tplResult.provider;
+          data.comments = data.comments 
+            ? `${data.comments} | 3PL ${tplResult.provider} (CN: ${tplResult.trackingNumber})`
+            : `3PL ${tplResult.provider} (CN: ${tplResult.trackingNumber})`;
         }
-
-        // 3. Fallback to first active partner
-        if (!partner && partners.length > 0) {
-          partner = partners[0];
-        }
-
-        const credentials = partner?.api_credentials || partner?.credentials || {};
-        const apiToken = credentials.api_token || credentials.token || '';
-
-        if (apiToken) {
-          const cleanCity = normalizePostExCity(rawDestCityName || data.recipient_address || 'Karachi');
-
-          let phone = (data.recipient_phone || '03001234567').replace(/\D/g, '');
-          if (phone.startsWith('92')) phone = '0' + phone.slice(2);
-          if (!phone.startsWith('0')) phone = '0' + phone;
-
-          const postExPayload = {
-            cityName: cleanCity,
-            customerName: data.recipient_name || 'Customer',
-            customerPhone: phone,
-            deliveryAddress: data.recipient_address || `${cleanCity}, Pakistan`,
-            invoiceDivision: 1,
-            invoicePayment: data.payment_type === 'PAID' ? 0 : (Number(data.cod_amount) || 0),
-            items: Number(data.pieces) || 1,
-            orderDetail: data.comments || data.product_description || 'General Goods',
-            orderRefNumber: data.tracking_number,
-            orderType: 'Normal',
-            transactionNotes: 'DBARc 3PL Booking'
-          };
-
-          console.log('\n============================================================');
-          console.log('🚀 [3PL SERVICE BOOKING REQUEST]');
-          console.log(`Tracking Number: ${data.tracking_number}`);
-          console.log(`Provider: PostEx`);
-          console.log(`Payload:`, JSON.stringify(postExPayload, null, 2));
-          console.log('============================================================\n');
-
-          const postexRes = await fetch('https://api.postex.pk/services/integration/api/order/v1/create-order', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'token': apiToken
-            },
-            body: JSON.stringify(postExPayload)
-          });
-
-          const httpStatus = postexRes.status;
-          const responseJson: any = await postexRes.json().catch(() => ({}));
-
-          console.log('\n============================================================');
-          console.log('📥 [3PL SERVICE BOOKING RESPONSE]');
-          console.log(`Provider: PostEx`);
-          console.log(`HTTP Status: ${httpStatus}`);
-          console.log(`Response Body:`, JSON.stringify(responseJson, null, 2));
-          console.log('============================================================\n');
-
-          tplBookingMeta = {
-            provider: 'PostEx',
-            status: httpStatus,
-            payload: postExPayload,
-            response: responseJson
-          };
-
-          if (postexRes.ok && (responseJson.statusCode === '200' || responseJson.statusCode === 200)) {
-            const tplCn = responseJson.dist?.trackingNumber || responseJson.trackingNumber;
-            data.secondary_barcode = tplCn;
-            data.reference_number = tplCn;
-            data.service_provider = 'PostEx';
-            data.comments = data.comments 
-              ? `${data.comments} | 3PL PostEx (CN: ${tplCn})`
-              : `3PL PostEx (CN: ${tplCn})`;
-            console.log(`✅ [3PL BOOKED SUCCESSFULLY]: ${data.tracking_number} -> PostEx CN: ${tplCn}`);
-          } else {
-            const errMsg = responseJson.statusMessage || responseJson.message || `HTTP ${httpStatus}`;
-            console.error(`❌ [3PL BOOKING FAILED] for ${data.tracking_number}:`, errMsg);
-          }
-        } else {
-          console.warn('⚠️ [3PL BOOKING WARNING]: No active PostEx API token found in tpl_partners.');
-        }
-      } catch (err: any) {
-        console.error('❌ [3PL BOOKING EXCEPTION]:', err.message || err);
       }
     }
 
@@ -379,7 +442,7 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
     }
 
     // If order is beyond booked status and customer/order details are being edited
-    if (!isBooked && data && (
+    if (!isBooked && data?.status !== 'Cancelled' && data && (
       data.recipient_name !== undefined ||
       data.recipient_phone !== undefined ||
       data.recipient_address !== undefined ||
@@ -388,6 +451,13 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       data.destination_city !== undefined
     )) {
       return ctx.badRequest(`Cannot edit order: Only orders in 'Booked' status can be modified. (Current status: '${existing.status}')`);
+    }
+
+    // Sync remarks and comments
+    if (data?.remarks && !data.comments) {
+      data.comments = data.remarks;
+    } else if (data?.comments && !data.remarks) {
+      data.remarks = data.comments;
     }
 
     // Safely resolve source_city if string city name was provided
@@ -466,6 +536,8 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
       return ctx.badRequest('No parcels provided in request body');
     }
 
+    const defaultTenantId = ctx.request.headers?.['x-tenant-id'] || ctx.state?.user?.tenant?.id || null;
+
     // 1. Prefetch all cities in 1 query for instant O(1) in-memory resolution
     const allCities = await strapi.db.query('api::city.city').findMany({
       select: ['id', 'CityName']
@@ -503,10 +575,13 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
           const trackingId = p.tracking_number || `${prefix}${nextSeq++}`;
 
           let destCityId = p.destination_city;
+          let rawDestCityName = '';
           if (typeof destCityId === 'string' && isNaN(Number(destCityId))) {
+            rawDestCityName = destCityId.trim();
             destCityId = cityMap.get(destCityId.trim().toLowerCase()) || null;
           } else if (destCityId) {
             destCityId = Number(destCityId) || null;
+            rawDestCityName = p.destination_city_name || '';
           }
 
           let sourceCityId = p.source_city;
@@ -514,6 +589,40 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
             sourceCityId = cityMap.get(sourceCityId.trim().toLowerCase()) || null;
           } else if (sourceCityId) {
             sourceCityId = Number(sourceCityId) || null;
+          }
+
+          const is3PL = Boolean(p.is_3pl);
+          let secondaryBarcode = p.secondary_barcode || null;
+          let serviceProvider = p.service_provider || (is3PL ? 'PostEx' : null);
+          let referenceNumber = p.reference_number || null;
+          let comments = p.comments || null;
+
+          // Dispatch 3PL consignment with configured provider (e.g. PostEx)
+          if (is3PL) {
+            const itemTenantId = p.tenant || defaultTenantId;
+            const tplRes = await book3PLConsignment(strapi, {
+              tracking_number: trackingId,
+              recipient_name: p.recipient_name,
+              recipient_phone: p.recipient_phone,
+              recipient_address: p.recipient_address,
+              rawDestCityName: rawDestCityName || p.recipient_address,
+              destination_city_name: rawDestCityName,
+              payment_type: (p.cod_amount && Number(p.cod_amount) > 0) ? 'COD' : (p.payment_type || 'PAID'),
+              cod_amount: p.cod_amount,
+              pieces: p.pieces,
+              comments: p.comments,
+              product_description: p.product_description || p.comments,
+              tenant: itemTenantId
+            }, itemTenantId);
+
+            if (tplRes && tplRes.trackingNumber) {
+              secondaryBarcode = tplRes.trackingNumber;
+              referenceNumber = referenceNumber || tplRes.trackingNumber;
+              serviceProvider = tplRes.provider || 'PostEx';
+              comments = comments 
+                ? `${comments} | 3PL ${serviceProvider} (CN: ${secondaryBarcode})`
+                : `3PL ${serviceProvider} (CN: ${secondaryBarcode})`;
+            }
           }
 
           const record = await strapi.db.query('api::parcel.parcel').create({
@@ -533,14 +642,24 @@ export default factories.createCoreController('api::parcel.parcel', ({ strapi })
               consignee_email: p.consignee_email || null,
               consignee_alt_phone: p.consignee_alt_phone || null,
               allow_to_open: p.allow_to_open === 'Yes' ? 'Yes' : 'No',
-              comments: p.comments || null,
+              comments: comments,
               shipper: p.shipper ? Number(p.shipper) : null,
               origin_office: p.origin_office ? Number(p.origin_office) : null,
-              is_3pl: false,
-              reference_number: p.reference_number || null,
+              tenant: p.tenant ? Number(p.tenant) : (defaultTenantId ? Number(defaultTenantId) : null),
+              is_3pl: is3PL,
+              secondary_barcode: secondaryBarcode,
+              service_provider: serviceProvider,
+              reference_number: referenceNumber,
             }
           });
-          return { success: true, id: record.id, tracking_number: trackingId };
+          return {
+            success: true,
+            id: record.id,
+            tracking_number: trackingId,
+            is_3pl: is3PL,
+            secondary_barcode: secondaryBarcode,
+            service_provider: serviceProvider
+          };
         } catch (err: any) {
           return { success: false, error: err.message, recipient: p.recipient_name };
         }

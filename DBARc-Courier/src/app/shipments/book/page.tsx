@@ -1918,11 +1918,24 @@ function BookShipmentForm() {
       await syncTrackingNumberWithDb();
 
       const originCity = selectedShipperBusiness?.city || 'Lahore';
+      const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || user?.tenant?.id || user?.tenantId;
+      const courierId = user?.courier?.id || user?.courierId;
 
       // 1. Prepare batch payloads in memory
       const parcelPayloads = parsedRows.map((row) => {
         const destCity = row.destinationCity || 'Lahore';
         const deliveryCharge = row.serviceCharge || calculateDeliveryCharge(originCity, destCity, row.weight, selectedShipperBusiness?.shipper_plan);
+
+        const rowRouting = evaluateLogisticsRouting({
+          sourceCity: originCity,
+          destinationCity: destCity,
+          selfServiceCities: courierSelfServiceCities,
+          configuredZones,
+          zone3plAssignments,
+          shipperPreferredTplId,
+          courierTplPartners,
+        });
+        const is3PL = Boolean(rowRouting?.is3PL);
 
         return {
           status: 'Booked',
@@ -1936,12 +1949,15 @@ function BookShipmentForm() {
           recipient_address: `${row.deliveryAddress || ''}${row.area ? `, ${row.area}` : ''}, ${destCity}`,
           source_city: originCity,
           destination_city: destCity,
+          destination_city_name: destCity,
           consignee_email: row.consigneeEmail || '',
           consignee_alt_phone: row.consigneeAltPhone || '',
           allow_to_open: row.allowToOpen || 'No',
           comments: row.productDescription || row.comments || '',
           shipper: shipperId || null,
-          is_3pl: false,
+          tenant: tenantId ? Number(tenantId) : null,
+          courier: courierId ? Number(courierId) : null,
+          is_3pl: is3PL,
           reference_number: row.referenceNo || null,
         };
       });
@@ -3030,6 +3046,19 @@ function BookShipmentForm() {
                           const isEditing = editingRowId === row.id;
                           const hasErrors = Object.keys(row.errors || {}).length > 0;
 
+                          const originCity = selectedShipperBusiness?.city || 'Lahore';
+                          const destCity = (isEditing ? editFormData.destinationCity : row.destinationCity) || '';
+                          const rowRouting = destCity ? evaluateLogisticsRouting({
+                            sourceCity: originCity,
+                            destinationCity: destCity,
+                            selfServiceCities: courierSelfServiceCities,
+                            configuredZones,
+                            zone3plAssignments,
+                            shipperPreferredTplId,
+                            courierTplPartners,
+                          }) : null;
+                          const is3PL = Boolean(rowRouting?.is3PL);
+
                           return (
                             <tr 
                               key={row.id} 
@@ -3073,23 +3102,41 @@ function BookShipmentForm() {
 
                               <td className="px-3 py-3 font-semibold">
                                 {isEditing ? (
-                                  <select 
-                                    value={editFormData.destinationCity || ''} 
-                                    onChange={(e) => handleEditFormChange('destinationCity', e.target.value)}
-                                    className="h-8 px-1.5 border border-outline-variant rounded-lg outline-none bg-white"
-                                  >
-                                    <option value="">Select</option>
-                                    <option value="Karachi">Karachi</option>
-                                    <option value="Lahore">Lahore</option>
-                                    <option value="Islamabad">Islamabad</option>
-                                    <option value="Faisalabad">Faisalabad</option>
-                                    <option value="Rawalpindi">Rawalpindi</option>
-                                    <option value="Multan">Multan</option>
-                                    <option value="Peshawar">Peshawar</option>
-                                    <option value="Quetta">Quetta</option>
-                                  </select>
+                                  <div className="flex flex-col gap-1">
+                                    <select 
+                                      value={editFormData.destinationCity || ''} 
+                                      onChange={(e) => handleEditFormChange('destinationCity', e.target.value)}
+                                      className="h-8 px-1.5 border border-outline-variant rounded-lg outline-none bg-white text-xs"
+                                    >
+                                      <option value="">Select</option>
+                                      <option value="Karachi">Karachi</option>
+                                      <option value="Lahore">Lahore</option>
+                                      <option value="Islamabad">Islamabad</option>
+                                      <option value="Faisalabad">Faisalabad</option>
+                                      <option value="Rawalpindi">Rawalpindi</option>
+                                      <option value="Multan">Multan</option>
+                                      <option value="Peshawar">Peshawar</option>
+                                      <option value="Quetta">Quetta</option>
+                                    </select>
+                                    {destCity && (
+                                      <span className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        is3PL ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      }`}>
+                                        {is3PL ? (rowRouting?.partner?.name ? `3PL (${rowRouting.partner.name})` : '3PL') : '2PL In-House'}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
-                                  row.destinationCity || <span className="text-red-500 italic">Missing</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span>{row.destinationCity || <span className="text-red-500 italic">Missing</span>}</span>
+                                    {row.destinationCity && (
+                                      <span className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        is3PL ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      }`}>
+                                        {is3PL ? (rowRouting?.partner?.name ? `3PL (${rowRouting.partner.name})` : '3PL') : '2PL In-House'}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </td>
 

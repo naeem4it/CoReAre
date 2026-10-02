@@ -543,16 +543,15 @@ function OrderListContent() {
     try {
       setIsCancelling(true);
       const parcelId = orderToCancel.documentId || orderToCancel.id;
-      try {
-        await apiClient.put(`/parcels/${parcelId}`, {
-          data: {
-            status: 'Cancelled',
-            remarks: cancelReason ? `Cancelled: ${cancelReason}` : 'Cancelled by Shipper',
-          },
-        });
-      } catch (apiErr) {
-        console.warn('API parcel cancel error (updating local state):', apiErr);
-      }
+      const cancelReasonText = cancelReason ? `Cancelled: ${cancelReason}` : 'Cancelled by Shipper';
+
+      await apiClient.put(`/parcels/${parcelId}`, {
+        data: {
+          status: 'Cancelled',
+          remarks: cancelReasonText,
+          comments: cancelReasonText,
+        },
+      });
 
       // Update local data state immediately
       setData((prev) =>
@@ -561,7 +560,8 @@ function OrderListContent() {
             ? {
               ...order,
               status: 'Cancelled',
-              remarks: cancelReason ? `Cancelled: ${cancelReason}` : 'Cancelled by Shipper',
+              remarks: cancelReasonText,
+              comments: cancelReasonText,
             }
             : order
         )
@@ -572,6 +572,11 @@ function OrderListContent() {
 
       setToastMessage(`Order ${orderToCancel.trackingNumber} has been successfully cancelled.`);
       setTimeout(() => setToastMessage(null), 4500);
+    } catch (err: any) {
+      console.error(`Failed to cancel order ${orderToCancel.trackingNumber}:`, err);
+      const errMsg = err?.response?.data?.error?.message || err?.message || 'Failed to cancel order';
+      setToastMessage(`Error cancelling order ${orderToCancel.trackingNumber}: ${errMsg}`);
+      setTimeout(() => setToastMessage(null), 5000);
     } finally {
       setIsCancelling(false);
       setOrderToCancel(null);
@@ -586,6 +591,7 @@ function OrderListContent() {
     let successCount = 0;
     let failedCount = 0;
     const updatedIds = new Set<string | number>();
+    const bulkReasonText = bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper';
 
     for (const order of selectedCancellableOrders) {
       try {
@@ -593,7 +599,8 @@ function OrderListContent() {
         await apiClient.put(`/parcels/${parcelId}`, {
           data: {
             status: 'Cancelled',
-            remarks: bulkCancelReason ? `Bulk Cancelled: ${bulkCancelReason}` : 'Bulk Cancelled by Shipper',
+            remarks: bulkReasonText,
+            comments: bulkReasonText,
           },
         });
         successCount++;
