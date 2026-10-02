@@ -55,6 +55,8 @@ import { PakistanLocationSelect } from '@/components/ui/PakistanLocationSelect';
 import { findPakistanLocation, FLAT_PAKISTAN_LOCATIONS } from '@/shared/data/pakistan-locations';
 import { evaluateLogisticsRouting, TPLPartnerModel } from '@/shared/data/pakistan-3pl-city-mappings';
 import { generateTrackingId, generateTrackingIdAsync, syncTrackingNumberWithDb, parseCsvLine, cleanCodAmount, cleanWeight } from '@/shared/utils/tracking';
+import { authStorage } from '@/shared/utils/auth-storage';
+
 
 const PAKISTAN_CITY_COORDINATES = [
   { name: 'Lahore', lat: 31.5497, lng: 74.3436 },
@@ -502,6 +504,8 @@ function BookShipmentForm() {
   const [parsedRows, setParsedRows] = React.useState<any[]>([]);
   const [editingRowId, setEditingRowId] = React.useState<string | null>(null);
   const [editFormData, setEditFormData] = React.useState<any>({});
+  const [bulkPage, setBulkPage] = React.useState<number>(1);
+  const [bulkPageSize, setBulkPageSize] = React.useState<number>(50);
 
   const [uploadHistory, setUploadHistory] = React.useState<UploadHistoryItem[]>([]);
 
@@ -1699,6 +1703,7 @@ function BookShipmentForm() {
           }
 
           setParsedRows(rows);
+          setBulkPage(1);
           setBulkProgress(100);
           setBulkStatus('loaded');
         } else {
@@ -1725,6 +1730,7 @@ function BookShipmentForm() {
     setSelectedFile(null);
     setParsedRows([]);
     setEditingRowId(null);
+    setBulkPage(1);
     setBulkStatus('idle');
   };
 
@@ -1821,9 +1827,31 @@ function BookShipmentForm() {
     setParsedRows(prev => prev.filter(row => row.id !== rowId));
   };
 
-  const gridHasErrors = React.useMemo(() => {
-    return parsedRows.some(row => Object.keys(row.errors || {}).length > 0);
+  const bulkSummary = React.useMemo(() => {
+    let totalCod = 0;
+    let totalFreight = 0;
+    let totalPayable = 0;
+    let hasErrors = false;
+    for (let i = 0; i < parsedRows.length; i++) {
+      const r = parsedRows[i];
+      totalCod += Number(r.codAmount) || 0;
+      totalFreight += Number(r.serviceCharge) || 0;
+      totalPayable += Number(r.payableToShipper) || 0;
+      if (!hasErrors && Object.keys(r.errors || {}).length > 0) {
+        hasErrors = true;
+      }
+    }
+    return { totalCod, totalFreight, totalPayable, hasErrors };
   }, [parsedRows]);
+
+  const gridHasErrors = bulkSummary.hasErrors;
+
+  const totalBulkPages = Math.ceil(parsedRows.length / bulkPageSize) || 1;
+  const paginatedParsedRows = React.useMemo(() => {
+    const start = (bulkPage - 1) * bulkPageSize;
+    return parsedRows.slice(start, start + bulkPageSize);
+  }, [parsedRows, bulkPage, bulkPageSize]);
+
 
   const downloadTemplate = () => {
     const headers = [
@@ -1872,8 +1900,7 @@ function BookShipmentForm() {
     setBulkProgress(0);
     setErrorMessage('');
 
-    const activeBusinessIdStr = typeof window !== 'undefined' ? localStorage.getItem('activeBusinessId') : null;
-    const activeBusinessId = activeBusinessIdStr ? Number(activeBusinessIdStr) : null;
+    const activeBusinessId = authStorage.getActiveBusinessId();
     
     let shipperId: number | null = null;
     if (Array.isArray(user?.shipper) && user.shipper.length > 0) {
@@ -1889,24 +1916,15 @@ function BookShipmentForm() {
 
     try {
       await syncTrackingNumberWithDb();
-      for (let i = 0; i < parsedRows.length; i++) {
-        const row = parsedRows[i];
-        const originCity = selectedShipperBusiness?.city || 'Lahore';
+
+      const originCity = selectedShipperBusiness?.city || 'Lahore';
+
+      // 1. Prepare batch payloads in memory
+      const parcelPayloads = parsedRows.map((row) => {
         const destCity = row.destinationCity || 'Lahore';
         const deliveryCharge = row.serviceCharge || calculateDeliveryCharge(originCity, destCity, row.weight, selectedShipperBusiness?.shipper_plan);
-        const trackingId = generateTrackingId(isShipper ? 'shipper' : 'courier');
 
-        // Check dynamically against courier offices loaded from database (detailedOffices)
-        const is2PLCourierCity = detailedOffices && detailedOffices.length > 0
-          ? detailedOffices.some((o: any) => {
-              const oCity = (o.cityName || '').trim().toLowerCase();
-              const dCity = destCity.trim().toLowerCase();
-              return oCity && (dCity === oCity || dCity.includes(oCity) || oCity.includes(dCity));
-            })
-          : false;
-
-        const parcelPayload: any = {
-          tracking_number: trackingId,
+        return {
           status: 'Booked',
           payment_type: (row.codAmount && Number(row.codAmount) > 0) ? 'COD' : 'PAID',
           cod_amount: Number(row.codAmount) || 0,
@@ -1923,44 +1941,44 @@ function BookShipmentForm() {
           allow_to_open: row.allowToOpen || 'No',
           comments: row.productDescription || row.comments || '',
           shipper: shipperId || null,
-          is_3pl: !is2PLCourierCity,
+          is_3pl: false,
+          reference_number: row.referenceNo || null,
         };
+      });
 
-        const parcelRes = await apiClient.post('/parcels', { data: parcelPayload });
+      // 2. Chunk into batches of 100 for high-throughput database creation
+      const BATCH_SIZE = 100;
+      const batches: any[][] = [];
+      for (let i = 0; i < parcelPayloads.length; i += BATCH_SIZE) {
+        batches.push(parcelPayloads.slice(i, i + BATCH_SIZE));
+      }
 
-        if (parcelRes.data?.data?.tpl_booking || parcelPayload.is_3pl) {
-          const tpl = parcelRes.data?.data?.tpl_booking;
-          console.group(`🚚 [Bulk 3PL Booking] - ${trackingId}`);
-          console.log('📦 DBARc Tracking:', trackingId);
-          console.log('🏢 Provider:', tpl?.provider || 'PostEx');
-          console.log('📤 Request Payload:', tpl?.payload);
-          console.log('📡 HTTP Status:', tpl?.status);
-          console.log('📥 Response Body:', tpl?.response);
-          console.log('✅ 3PL CN:', parcelRes.data?.data?.secondary_barcode || 'Pending');
-          console.groupEnd();
-        }
+      // 3. Process with controlled concurrency of 3 parallel workers
+      const CONCURRENCY = 3;
+      for (let i = 0; i < batches.length; i += CONCURRENCY) {
+        const currentChunks = batches.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          currentChunks.map(async (batch) => {
+            try {
+              const res = await apiClient.post('/parcels/bulk', { parcels: batch });
+              successCount += res.data?.created_count || batch.length;
+            } catch (bulkErr) {
+              console.warn('Bulk endpoint fallback to batch requests:', bulkErr);
+              // Fallback to parallel requests if bulk endpoint is unavailable
+              await Promise.all(
+                batch.map(async (item) => {
+                  try {
+                    await apiClient.post('/parcels', { data: item });
+                    successCount++;
+                  } catch (e) {}
+                })
+              );
+            }
+          })
+        );
 
-        const newParcelId = parcelRes.data.data.id;
-
-        if (row.referenceNo && row.referenceNo.trim().length > 3) {
-          const oldParcelRes = await apiClient.get(`/parcels?filters[tracking_number][$eq]=${row.referenceNo.trim()}`);
-          const oldParcel = oldParcelRes.data.data?.[0];
-
-          if (oldParcel) {
-            await apiClient.post('/replacements', {
-              data: {
-                parcel_detail: row.parcelDetail || '',
-                collect_rs: row.collectRs || 0,
-                collect_replacement: row.collectReplacement || 'No',
-                orderid: oldParcel.id,
-                replacementorderid: newParcelId,
-              }
-            });
-          }
-        }
-
-        successCount++;
-        setBulkProgress(Math.round(((i + 1) / parsedRows.length) * 100));
+        const progressPercent = Math.min(100, Math.round((successCount / parcelPayloads.length) * 100));
+        setBulkProgress(progressPercent);
       }
 
       setBulkStatus('success');
@@ -2123,7 +2141,7 @@ function BookShipmentForm() {
                   {(bulkStatus === 'idle' || bulkStatus === 'parsing' || bulkStatus === 'loaded') && (
                     <>
                       <Save className="h-4 w-4" />
-                      Create Order
+                      {parsedRows.length > 1 ? `Book ${parsedRows.length.toLocaleString()} Orders` : 'Create Order'}
                     </>
                   )}
                 </button>
@@ -2794,7 +2812,7 @@ function BookShipmentForm() {
                     <UploadCloud className="h-4 w-4 text-primary" />
                     <span><strong className="text-slate-900">Drag & drop</strong> spreadsheet here or click to browse (.xlsx, .csv)</span>
                   </div>
-                  <span className="text-[10px] font-bold text-outline uppercase tracking-wider">Max 10MB</span>
+                  <span className="text-[10px] font-bold text-outline uppercase tracking-wider">Max 100MB</span>
                 </div>
               )}
 
@@ -2968,7 +2986,7 @@ function BookShipmentForm() {
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total COD Collected</span>
                       <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
-                        PKR {parsedRows.reduce((acc, r) => acc + (Number(r.codAmount) || 0), 0).toLocaleString()}
+                        PKR {bulkSummary.totalCod.toLocaleString()}
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5">Gross cash from recipients</p>
                     </div>
@@ -2976,7 +2994,7 @@ function BookShipmentForm() {
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courier Freight Charges</span>
                       <div className="text-xl font-black font-mono text-red-600 mt-0.5">
-                        - PKR {parsedRows.reduce((acc, r) => acc + (Number(r.serviceCharge) || 0), 0).toLocaleString()}
+                        - PKR {bulkSummary.totalFreight.toLocaleString()}
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5">Service charges deduction</p>
                     </div>
@@ -2984,7 +3002,7 @@ function BookShipmentForm() {
                     <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200">
                       <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Net Payout to Shipper</span>
                       <div className="text-xl font-black font-mono text-emerald-700 mt-0.5">
-                        PKR {parsedRows.reduce((acc, r) => acc + (Number(r.payableToShipper) || 0), 0).toLocaleString()}
+                        PKR {bulkSummary.totalPayable.toLocaleString()}
                       </div>
                       <p className="text-[10px] font-bold text-emerald-800 mt-0.5">Remaining payable to merchant</p>
                     </div>
@@ -3007,7 +3025,8 @@ function BookShipmentForm() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-outline-variant font-medium text-on-surface">
-                        {parsedRows.map((row, index) => {
+                        {paginatedParsedRows.map((row, idx) => {
+                          const index = (bulkPage - 1) * bulkPageSize + idx;
                           const isEditing = editingRowId === row.id;
                           const hasErrors = Object.keys(row.errors || {}).length > 0;
 
@@ -3169,6 +3188,70 @@ function BookShipmentForm() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* High-Performance Pagination Bar for Large Datasets (5,000+ orders) */}
+                  {parsedRows.length > 25 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 px-1 border-t border-outline-variant text-xs text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <span>Showing <strong>{(bulkPage - 1) * bulkPageSize + 1}</strong> to <strong>{Math.min(bulkPage * bulkPageSize, parsedRows.length)}</strong> of <strong>{parsedRows.length.toLocaleString()}</strong> orders</span>
+                        <span className="text-slate-300">|</span>
+                        <label className="flex items-center gap-1.5">
+                          <span>Per page:</span>
+                          <select
+                            value={bulkPageSize}
+                            onChange={(e) => {
+                              setBulkPageSize(Number(e.target.value));
+                              setBulkPage(1);
+                            }}
+                            className="border border-outline-variant rounded-lg px-2 py-1 bg-white text-xs text-slate-800 outline-none cursor-pointer"
+                          >
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value={200}>200</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setBulkPage(1)}
+                          disabled={bulkPage === 1}
+                          className="px-2.5 py-1 rounded-lg border border-outline-variant bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          First
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBulkPage(prev => Math.max(1, prev - 1))}
+                          disabled={bulkPage === 1}
+                          className="px-2.5 py-1 rounded-lg border border-outline-variant bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          Prev
+                        </button>
+                        <span className="px-3 py-1 font-bold text-slate-800 bg-slate-100 rounded-lg">
+                          Page {bulkPage} of {totalBulkPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBulkPage(prev => Math.min(totalBulkPages, prev + 1))}
+                          disabled={bulkPage === totalBulkPages}
+                          className="px-2.5 py-1 rounded-lg border border-outline-variant bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          Next
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBulkPage(totalBulkPages)}
+                          disabled={bulkPage === totalBulkPages}
+                          className="px-2.5 py-1 rounded-lg border border-outline-variant bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          Last
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -19,6 +19,10 @@
       "type": "string",
       "default": "#003ec7"
     },
+    "theme_secondary_color": {
+      "type": "string",
+      "default": "#565e74"
+    },
     "logo": {
       "type": "media",
       "multiple": false,

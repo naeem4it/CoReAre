@@ -7,6 +7,7 @@ import { apiClient } from '@/shared/api/api-client';
 import { useAuth } from '@/components/AuthProvider';
 import { useTenant } from '@/components/TenantProvider';
 import { ChevronDown, Building2, MapPin, LogOut, Key, CreditCard } from 'lucide-react';
+import { authStorage } from '@/shared/utils/auth-storage';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -29,14 +30,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     if (authCheckedRef.current) return;
     authCheckedRef.current = true;
 
-    const token = localStorage.getItem('token') || localStorage.getItem('dbarc-token');
+    const token = authStorage.getToken();
     if (!token) {
       router.push('/login');
       return;
     }
 
-    const existingUserStr = localStorage.getItem('user');
-    if (existingUserStr) {
+    const existingUser = authStorage.getUser();
+    if (existingUser) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsAuthenticated(true);
     }
@@ -58,34 +59,30 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           userData?.isAdminUser;
 
         if (isSuperAdmin) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('dbarc-token');
-          localStorage.removeItem('user');
+          authStorage.clearSession();
           router.push('/login');
           return;
         }
 
-        localStorage.setItem('user', JSON.stringify(userData));
+        authStorage.setSession(token, userData, activeBusinessId, activeOfficeId);
         refreshUser();
         setIsAuthenticated(true);
       })
       .catch((err) => {
         console.warn('Failed to fetch user context:', err.message);
         if (err.response?.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('dbarc-token');
-          localStorage.removeItem('user');
+          authStorage.clearSession();
           router.push('/login');
           return;
         }
-        if (existingUserStr) {
+        if (existingUser) {
           refreshUser();
           setIsAuthenticated(true);
         } else {
           router.push('/login');
         }
       });
-  }, [router, refreshUser]);
+  }, [router, refreshUser, activeBusinessId, activeOfficeId]);
 
   const isShipperUser = React.useMemo(() => {
     if (!user) return false;
@@ -154,21 +151,37 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col">
       {/* TopNavBar */}
-      <header className="bg-surface-container-lowest dark:bg-surface-dim h-[64px] w-full sticky top-0 z-50 border-b border-outline-variant dark:border-outline shadow-sm dark:shadow-none">
+      <header 
+        className="h-[64px] w-full sticky top-0 z-50 shadow-xs border-b border-[#C8DFD4] bg-[#E6F0EB] text-[#1B3B2F] transition-colors"
+      >
         <div className="flex items-center justify-between px-4 md:px-6 w-full max-w-[1920px] mx-auto h-full gap-md">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             {logoUrl ? (
-              <img src={logoUrl} alt={businessName} className="h-8 object-contain" />
+              <div className="h-11 max-w-[200px] flex items-center justify-start shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={logoUrl} 
+                  alt="Tenant Logo" 
+                  className="max-h-10 max-w-[190px] w-auto object-contain" 
+                />
+              </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <span className="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">{businessName}</span>
-                <span className="text-xs font-semibold text-slate-500 hidden xl:inline">
-                  [Digital Business Automation for Routing & Courier]
+              <div className="flex items-center gap-2.5">
+                <div 
+                  className="h-9 w-9 rounded-xl bg-[#2D5A47] flex items-center justify-center shrink-0 shadow-xs text-white" 
+                >
+                  <svg width="22" height="22" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M 18 24 H 42 C 68 24, 86 36, 86 54 C 86 64, 80 72, 70 78 C 76 70, 78 62, 78 54 C 78 42, 64 34, 44 34 H 28 L 18 42 Z" fill="#FFFFFF" />
+                    <path d="M 16 78 C 22 84, 34 86, 48 86 C 64 86, 76 78, 80 66 C 72 74, 60 76, 48 76 C 34 76, 26 70, 26 58 C 26 50, 32 44, 40 40 C 30 42, 22 50, 22 62 C 22 68, 18 72, 16 78 Z" fill="#FFFFFF" opacity="0.85" />
+                  </svg>
+                </div>
+                <span className="font-headline-md text-headline-md font-bold text-[#1B3B2F] tracking-tight leading-none">
+                  DBARc
                 </span>
               </div>
             )}
             {isShipperUser && (
-              <span className="bg-amber-500 text-white text-[10px] font-extrabold uppercase px-2 py-0.5 rounded shadow-xs tracking-wider shrink-0">
+              <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shadow-xs tracking-wider shrink-0">
                 Merchant
               </span>
             )}
@@ -176,9 +189,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
           {/* Welcome Message for Shipper */}
           {isShipperUser && (
-            <div className="hidden xl:flex items-center gap-1.5 text-sm font-medium text-slate-600">
-              <span className="text-slate-400">Welcome,</span>
-              <span className="font-extrabold text-slate-900 tracking-tight">
+            <div className="hidden xl:flex items-center gap-1.5 text-sm font-medium text-[#1B3B2F]">
+              <span className="text-[#3E6B58]">Welcome,</span>
+              <span className="font-extrabold text-[#112920] tracking-tight">
                 {(user?.shipper && Array.isArray(user.shipper) && user.shipper[0]?.name) || user?.fullName || user?.username || 'Wears Clothing'}!
               </span>
             </div>
@@ -186,11 +199,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
           {/* Global Search */}
           <div className="flex-1 max-w-[500px] relative hidden md:block">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-outline">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[#3E6B58]">
               <span className="material-symbols-outlined text-[20px]">search</span>
             </div>
             <input
-              className="w-full bg-surface-container-low border border-slate-200/60 rounded-xl py-2 pl-10 pr-4 text-body-md focus:ring-2 focus:ring-primary-container transition-all outline-none"
+              className="w-full bg-white border border-[#C8DFD4] rounded-xl py-2 pl-10 pr-4 text-body-md text-[#112920] placeholder:text-slate-400 focus:border-[#2D5A47] focus:ring-1 focus:ring-[#2D5A47] transition-all outline-none shadow-2xs"
               placeholder="Search shipments, fleet, or orders..."
               type="text"
             />
@@ -200,12 +213,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             {/* Shippers Switcher */}
             {user?.shipper && Array.isArray(user.shipper) && user.shipper.length > 0 && (
               <div className="relative group mr-2">
-                <button className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
-                  <Building2 className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700 max-w-[120px] truncate">
+                <button className="flex items-center gap-2 bg-white hover:bg-[#DCEAE3] px-3 py-1.5 rounded-lg transition-colors border border-[#C8DFD4] text-[#1B3B2F] shadow-2xs">
+                  <Building2 className="w-4 h-4 text-[#2D5A47]" />
+                  <span className="text-sm font-medium text-[#1B3B2F] max-w-[120px] truncate">
                     {user.shipper.find((s: { id: number; name: string }) => s.id === activeBusinessId)?.name || 'Select Shipper'}
                   </span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <ChevronDown className="w-3 h-3 text-[#3E6B58]" />
                 </button>
                 <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                   <div className="py-1">
@@ -213,7 +226,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                       <button
                         key={biz.id}
                         onClick={() => setActiveBusinessId(biz.id)}
-                        className={`w-full text-left px-4 py-2 text-sm ${activeBusinessId === biz.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                        className={`w-full text-left px-4 py-2 text-sm ${activeBusinessId === biz.id ? 'bg-[#E6F0EB] text-[#1B3B2F] font-medium' : 'text-slate-700 hover:bg-slate-50'
                           }`}
                       >
                         {biz.name}
@@ -227,12 +240,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             {/* Offices Switcher */}
             {user?.offices && Array.isArray(user.offices) && user.offices.length > 0 && (
               <div className="relative group mr-2">
-                <button className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
-                  <MapPin className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700 max-w-[120px] truncate">
+                <button className="flex items-center gap-2 bg-white hover:bg-[#DCEAE3] px-3 py-1.5 rounded-lg transition-colors border border-[#C8DFD4] text-[#1B3B2F] shadow-2xs">
+                  <MapPin className="w-4 h-4 text-[#2D5A47]" />
+                  <span className="text-sm font-medium text-[#1B3B2F] max-w-[120px] truncate">
                     {user.offices.find((o: { id: number; name: string }) => o.id === activeOfficeId)?.name || 'Select Office'}
                   </span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <ChevronDown className="w-3 h-3 text-[#3E6B58]" />
                 </button>
                 <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                   <div className="py-1">
@@ -240,7 +253,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                       <button
                         key={office.id}
                         onClick={() => setActiveOfficeId(office.id)}
-                        className={`w-full text-left px-4 py-2 text-sm ${activeOfficeId === office.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                        className={`w-full text-left px-4 py-2 text-sm ${activeOfficeId === office.id ? 'bg-[#E6F0EB] text-[#1B3B2F] font-medium' : 'text-slate-700 hover:bg-slate-50'
                           }`}
                       >
                         {office.name}
@@ -251,22 +264,22 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               </div>
             )}
 
-            <button className="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95 cursor-pointer">
-              <span className="material-symbols-outlined text-on-surface-variant">notifications</span>
+            <button className="p-2 rounded-full text-[#2D5A47] hover:text-[#112920] hover:bg-[#DCEAE3] transition-colors duration-200 active:scale-95 cursor-pointer">
+              <span className="material-symbols-outlined">notifications</span>
             </button>
-            <button className="p-2 rounded-full hover:bg-surface-container-low dark:hover:bg-surface-container-high transition-colors duration-200 active:scale-95 cursor-pointer">
-              <span className="material-symbols-outlined text-on-surface-variant">help</span>
+            <button className="p-2 rounded-full text-[#2D5A47] hover:text-[#112920] hover:bg-[#DCEAE3] transition-colors duration-200 active:scale-95 cursor-pointer">
+              <span className="material-symbols-outlined">help</span>
             </button>
             <div className="relative">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 p-1 pl-3 pr-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95 cursor-pointer border border-transparent hover:border-outline-variant"
+                className="flex items-center gap-2 p-1 pl-3 pr-2 rounded-full hover:bg-[#DCEAE3] transition-colors duration-200 active:scale-95 cursor-pointer border border-transparent hover:border-[#C8DFD4]"
               >
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-semibold text-on-surface">{user?.fullName || user?.username || 'Employee'}</p>
-                  <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{userRoles[0] || 'User'}</p>
+                  <p className="text-sm font-semibold text-[#112920]">{user?.fullName || user?.username || 'Employee'}</p>
+                  <p className="text-[10px] text-[#2D5A47] uppercase tracking-wider font-semibold">{userRoles[0] || 'User'}</p>
                 </div>
-                <div className="w-8 h-8 rounded-full overflow-hidden border border-emerald-800 bg-[#0c4a42] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-[#2D5A47] bg-[#1E3E31] text-white flex items-center justify-center font-bold text-xs shadow-xs">
                   {userInitials}
                 </div>
               </button>
@@ -297,8 +310,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   <div className="p-2 border-t border-outline-variant">
                     <button
                       onClick={() => {
-                        localStorage.clear();
-                        sessionStorage.clear();
+                        authStorage.clearSession();
                         window.location.href = '/login';
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-error hover:bg-error-container/20 hover:text-error rounded-lg flex items-center gap-2 transition-colors font-medium cursor-pointer"
@@ -315,7 +327,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
       <div className="flex min-h-[calc(100vh-64px)] max-w-[1920px] w-full mx-auto flex-1">
         {/* SideNavBar */}
-        <aside className="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-outline-variant dark:border-outline bg-surface dark:bg-surface-dim shrink-0 h-[calc(100vh-64px)] sticky top-[64px] overflow-y-auto custom-scrollbar">
+        <aside className="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-[#C8DFD4] bg-[#E6F0EB] text-[#1B3B2F] shrink-0 h-[calc(100vh-64px)] sticky top-[64px] overflow-y-auto custom-scrollbar">
           <React.Suspense fallback={
             <div className="h-48 flex items-center justify-center text-outline">
               <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
@@ -324,12 +336,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <SideNavigation showShipmentBooking={showShipmentBooking} />
           </React.Suspense>
           <div className="mt-auto p-sm">
-            <div className="bg-surface-container-low rounded-xl p-md border border-outline-variant">
-              <p className="font-label-md text-label-md text-on-surface-variant mb-1">Storage Status</p>
-              <div className="w-full bg-surface-container-highest h-1.5 rounded-full mb-2">
-                <div className="bg-primary w-3/4 h-full rounded-full"></div>
+            <div className="bg-white/80 rounded-xl p-md border border-[#C8DFD4] shadow-2xs">
+              <p className="font-label-md text-label-md text-[#2D5A47] mb-1 font-semibold">Storage Status</p>
+              <div className="w-full bg-[#DCEAE3] h-1.5 rounded-full mb-2">
+                <div className="bg-[#0D9488] w-3/4 h-full rounded-full"></div>
               </div>
-              <p className="text-[10px] font-medium text-outline">75% capacity reached</p>
+              <p className="text-[10px] font-medium text-[#3E6B58]">75% capacity reached</p>
             </div>
           </div>
         </aside>
@@ -451,8 +463,8 @@ function NavLink({
     <Link
       href={href}
       className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${active
-        ? 'bg-secondary-container dark:bg-secondary-fixed-dim text-primary dark:text-primary-fixed shadow-2xs font-extrabold'
-        : 'text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-highest'
+        ? 'bg-white text-[#0D9488] shadow-xs font-extrabold border border-[#C8DFD4]'
+        : 'text-[#1B3B2F] hover:bg-[#DCEAE3]'
         }`}
     >
       <span className="material-symbols-outlined">{icon}</span>

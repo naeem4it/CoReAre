@@ -318,8 +318,8 @@ export default {
       return ctx.badRequest('Please provide an array of orders in the "orders" payload field.');
     }
 
-    if (orders.length > 200) {
-      return ctx.badRequest('Bulk booking limit exceeded. Maximum 200 orders allowed per request.');
+    if (orders.length > 10000) {
+      return ctx.badRequest('Bulk booking limit exceeded. Maximum 10,000 orders allowed per request.');
     }
 
     const results = {

@@ -32,5 +32,13 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/tenant/resolve',
+      handler: 'tenant.resolveByDomain',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

@@ -58,7 +58,7 @@ export default function DashboardPage() {
     return '';
   }, [user]);
 
-  const dashboardHeading = shipperName ? `${shipperName} Dashboard` : (businessName ? `${businessName} Dashboard` : 'Dashboard');
+  const dashboardHeading = shipperName ? `${shipperName} Dashboard` : 'Operations Dashboard';
 
   // Dynamic business location address/city
   const businessLocation = React.useMemo(() => {

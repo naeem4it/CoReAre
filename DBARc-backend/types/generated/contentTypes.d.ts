@@ -2197,6 +2197,8 @@ export interface ApiTenantTenant extends Struct.CollectionTypeSchema {
     >;
     theme_primary_color: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'#003ec7'>;
+    theme_secondary_color: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'#565e74'>;
     tpl_partners: Schema.Attribute.Relation<
       'oneToMany',
       'api::tpl-partner.tpl-partner'

@@ -13,6 +13,16 @@ export const apiClient = axios.create({
 // Request Interceptor: Attach Bearer Token and Tenant Context
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // When sending FormData, remove default Content-Type so the browser sets multipart/form-data with boundary
+    if (config.data instanceof FormData && config.headers) {
+      if (typeof (config.headers as any).delete === 'function') {
+        (config.headers as any).delete('Content-Type');
+        (config.headers as any).delete('content-type');
+      }
+      delete config.headers['Content-Type'];
+      delete (config.headers as any)['content-type'];
+    }
+
     const token = useAuthStore.getState().accessToken;
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
