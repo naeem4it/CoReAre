@@ -84,6 +84,27 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       });
   }, [router, refreshUser, activeBusinessId, activeOfficeId]);
 
+  const sidebarRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+
+    const saved = sessionStorage.getItem('dbarc_sidebar_scroll');
+    if (saved !== null) {
+      sidebar.scrollTop = Number(saved);
+    }
+
+    const timer = setTimeout(() => {
+      const activeLink = sidebar.querySelector('[data-active="true"]');
+      if (activeLink) {
+        activeLink.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }
+    }, 60);
+
+    return () => clearTimeout(timer);
+  }, [pathname]);
+
   const isShipperUser = React.useMemo(() => {
     if (!user) return false;
     if (user.shipper_roles && Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0) return true;
@@ -327,7 +348,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
       <div className="flex min-h-[calc(100vh-64px)] max-w-[1920px] w-full mx-auto flex-1">
         {/* SideNavBar */}
-        <aside className="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-[#C8DFD4] bg-[#E6F0EB] text-[#1B3B2F] shrink-0 h-[calc(100vh-64px)] sticky top-[64px] overflow-y-auto custom-scrollbar">
+        <aside
+          id="portal-sidebar"
+          ref={sidebarRef}
+          onScroll={(e) => {
+            sessionStorage.setItem('dbarc_sidebar_scroll', String(e.currentTarget.scrollTop));
+          }}
+          className="hidden lg:flex flex-col p-sm gap-xs w-64 border-r border-[#C8DFD4] bg-[#E6F0EB] text-[#1B3B2F] shrink-0 h-[calc(100vh-64px)] sticky top-[64px] overflow-y-auto custom-scrollbar"
+        >
           <React.Suspense fallback={
             <div className="h-48 flex items-center justify-center text-outline">
               <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
@@ -462,6 +490,14 @@ function NavLink({
   return (
     <Link
       href={href}
+      scroll={false}
+      data-active={active ? 'true' : undefined}
+      onClick={() => {
+        const aside = document.getElementById('portal-sidebar');
+        if (aside) {
+          sessionStorage.setItem('dbarc_sidebar_scroll', String(aside.scrollTop));
+        }
+      }}
       className={`flex items-center gap-md p-sm font-bold rounded-lg cursor-pointer active:opacity-80 transition-all ${active
         ? 'bg-white text-[#0D9488] shadow-xs font-extrabold border border-[#C8DFD4]'
         : 'text-[#1B3B2F] hover:bg-[#DCEAE3]'
@@ -698,7 +734,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 <NavLink href="/operations/bulk-arrivals" icon="upload_file" label="Bulk Arrivals" />
                 <NavLink href="/operations/manifestation" icon="inventory" label="Manifestation" />
                 <NavLink href="/operations/demanifestation" icon="unarchive" label="DeManifestation" />
-                <NavLink href="/operations/route-assignment" icon="alt_route" label="Route Assignment" />
+                <NavLink href="/operations/route-assignment" icon="alt_route" label="Rider Route Assignment" />
                 <NavLink href="/operations/delivery-sheet" icon="assignment" label="Delivery Sheet" />
               </div>
             )}

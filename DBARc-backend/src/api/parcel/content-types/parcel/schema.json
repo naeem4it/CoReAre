@@ -40,7 +40,8 @@
         "Failed Attempt",
         "Ready To Return",
         "Return Dispatched",
-        "Arrived At Destination"
+        "Arrived At Destination",
+        "Cancelled"
       ]
     },
     "payment_type": {
@@ -112,6 +113,9 @@
       ]
     },
     "comments": {
+      "type": "text"
+    },
+    "remarks": {
       "type": "text"
     },
     "pieces": {

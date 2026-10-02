@@ -27,7 +27,8 @@ import {
   Square,
   AlertTriangle,
   FileText,
-  RefreshCw
+  RefreshCw,
+  Building2
 } from 'lucide-react';
 import { TablePagination } from '@/components/ui/TablePagination';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -106,11 +107,16 @@ interface CourierPartnerItem {
   };
 }
 
+interface ShipperOption {
+  id: number;
+  name: string;
+}
+
 function AirwayBillContent() {
   const searchParams = useSearchParams();
   const urlSearch = searchParams?.get('search') || '';
 
-  const { user, activeBusinessId } = useAuth();
+  const { user, activeBusinessId, isShipper: authIsShipper } = useAuth();
   const { businessName } = useTenant();
 
   const [data, setData] = React.useState<OrderRow[]>([]);
@@ -121,6 +127,10 @@ function AirwayBillContent() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = React.useState(0);
+
+  // Shipper filter state for Courier staff/admin (hidden for logged-in Shippers)
+  const [shippersList, setShippersList] = React.useState<ShipperOption[]>([]);
+  const [selectedShipperId, setSelectedShipperId] = React.useState<string>('ALL');
 
   // Date Range State for Airway Bills (default: past 30 days up to today in local time)
   const defaultRange = React.useMemo(() => getDefaultDateRange(30), []);
@@ -141,11 +151,12 @@ function AirwayBillContent() {
   const [selectedBatchIndex, setSelectedBatchIndex] = React.useState<number | 'ALL'>('ALL');
 
   const isShipper = React.useMemo(() => {
+    if (authIsShipper) return true;
     if (!user) return false;
     const hasShipperRelation = !!(user.shipper && (Array.isArray(user.shipper) ? user.shipper.length > 0 : true));
     const hasShipperRoles = Array.isArray(user.shipper_roles) && user.shipper_roles.length > 0;
     return hasShipperRelation || hasShipperRoles;
-  }, [user]);
+  }, [user, authIsShipper]);
 
   const shipperId = React.useMemo(() => {
     if (activeBusinessId) return activeBusinessId;
@@ -197,6 +208,36 @@ function AirwayBillContent() {
       isMounted = false;
     };
   }, [tenantId]);
+
+  // Fetch Shippers list only for Courier users (to populate shipper dropdown)
+  React.useEffect(() => {
+    let isMounted = true;
+    if (isShipper) {
+      setShippersList([]);
+      return;
+    }
+
+    const fetchShippers = async () => {
+      try {
+        const tenantParam = tenantId ? `&filters[tenant][id][$eq]=${tenantId}` : '';
+        const res = await apiClient.get<{ data?: any[] }>(`/shippers?pagination[limit]=250&sort=name:asc${tenantParam}`)
+          .catch(() => apiClient.get<{ data?: any[] }>(`/shippers?pagination[pageSize]=250&sort=name:asc`));
+        if (!isMounted) return;
+        const list = (res.data?.data || []).map((s: any) => ({
+          id: s.id,
+          name: s.name || s.attributes?.name || `Shipper #${s.id}`,
+        }));
+        setShippersList(list);
+      } catch (err) {
+        console.warn('Could not load shippers for courier AWB filter:', err);
+      }
+    };
+
+    fetchShippers();
+    return () => {
+      isMounted = false;
+    };
+  }, [isShipper, tenantId]);
 
   // Load Parcels / Shipments
   React.useEffect(() => {
@@ -258,6 +299,11 @@ function AirwayBillContent() {
             let tplCourierId = serviceProvider;
             let tplTrackingNo = secBarcode;
 
+            const rowShipperId =
+              (typeof raw.shipper === 'object' && raw.shipper?.id) ? raw.shipper.id :
+              (typeof raw.shipper === 'number') ? raw.shipper :
+              raw.pickup_location?.shipper?.id || null;
+
             return {
               id: raw.id,
               trackingNumber: `${raw.tracking_number}`,
@@ -269,6 +315,7 @@ function AirwayBillContent() {
               destination,
               address: raw.recipient_address || 'No address provided',
               shipperName: raw.shipper?.name || raw.pickup_location?.shipper?.name || 'Shipper Account',
+              shipperId: rowShipperId,
               shipperAddress: raw.pickup_location?.address || raw.shipper?.address || 'Pickup Warehouse',
               shipperPhone,
               paymentType: raw.payment_type === 'PAID' || Number(raw.cod_amount) === 0 ? 'PAID' : 'COD',
@@ -366,9 +413,18 @@ function AirwayBillContent() {
         if (!isEligibleForDispatchSlip(row.status)) return false;
       }
 
+      // 6. Shipper Filter for Courier users (hidden/ignored for Shipper logins)
+      if (!isShipper && selectedShipperId !== 'ALL') {
+        const rowId = row.shipperId ? String(row.shipperId) : '';
+        const matchId = rowId === String(selectedShipperId);
+        const targetShipper = shippersList.find((s) => String(s.id) === String(selectedShipperId));
+        const matchByName = targetShipper && row.shipperName && row.shipperName.toLowerCase() === targetShipper.name.toLowerCase();
+        if (!matchId && !matchByName) return false;
+      }
+
       return true;
     });
-  }, [data, searchQuery, fromDate, toDate, selectedRouting, selectedCity, statusFilter]);
+  }, [data, searchQuery, fromDate, toDate, selectedRouting, selectedCity, statusFilter, isShipper, selectedShipperId, shippersList]);
 
   // Table Sorting & Pagination State
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -637,6 +693,32 @@ function AirwayBillContent() {
                 className="w-full pl-9 pr-4 py-2 text-xs font-medium border border-outline-variant bg-slate-50/70 hover:bg-white focus:bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs transition-colors"
               />
             </div>
+
+            {/* Courier Only: Shipper Account Filter Dropdown */}
+            {!isShipper && (
+              <div className="relative shrink-0">
+                <div className="flex items-center gap-1.5 bg-slate-50/90 hover:bg-white border border-outline-variant rounded-xl px-2.5 py-1.5 shadow-2xs transition-colors">
+                  <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <select
+                    id="courier-shipper-filter"
+                    value={selectedShipperId}
+                    onChange={(e) => {
+                      setSelectedShipperId(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer pr-1"
+                    title="Filter bookings by Shipper account"
+                  >
+                    <option value="ALL">All Shippers ({shippersList.length > 0 ? shippersList.length : 'All'})</option>
+                    {shippersList.map((shipper) => (
+                      <option key={shipper.id} value={String(shipper.id)}>
+                        {shipper.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* 2. Unified Shipper Date Range Picker */}
             <div className="shrink-0">

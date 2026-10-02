@@ -74,7 +74,7 @@ export default function RouteAssignmentPage() {
     setIsLoading(true);
     try {
       // 1. Fetch Assignments
-      const assignRes = await apiClient.get('/route-assignments?populate[route][populate]=*&populate[office]=*&populate[rider]=*&sort[0]=assignment_date:desc&pagination[pageSize]=100');
+      const assignRes = await apiClient.get('/route-assignments?populate=*&sort[0]=assignment_date:desc&pagination[pageSize]=10000');
       const loadedAssign = (assignRes.data?.data || []).map((item: any) => ({
         id: item.id,
         documentId: item.documentId,
@@ -108,7 +108,7 @@ export default function RouteAssignmentPage() {
       }));
       setRoutes(loadedRoutes);
     } catch (err: any) {
-      console.error('Failed to load route assignments:', err);
+      console.error('Failed to load s:', err);
       triggerToast('Failed to load assignments: ' + err.message, 'error');
     } finally {
       setIsLoading(false);
@@ -163,7 +163,7 @@ export default function RouteAssignmentPage() {
     }
 
     // 2. Prevent duplicate active assignment for the same rider on the same date and shift
-    const existingActive = assignments.find(a => 
+    const existingActive = assignments.find(a =>
       String(a.rider?.id) === String(selectedRiderId) &&
       a.assignment_date === selectedDate &&
       a.shift === selectedShift &&
@@ -220,7 +220,7 @@ export default function RouteAssignmentPage() {
   };
 
   const handleDeleteAssignment = async (item: RouteAssignmentItem) => {
-    if (!confirm('Are you sure you want to remove this route assignment?')) return;
+    if (!confirm('Are you sure you want to remove this ?')) return;
     try {
       const targetId = item.documentId || item.id;
       await apiClient.delete(`/route-assignments/${targetId}`);
@@ -253,9 +253,8 @@ export default function RouteAssignmentPage() {
       <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
         {/* Toast */}
         {toast.show && (
-          <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${
-            toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
-          }`}>
+          <div className={`fixed bottom-6 right-6 z-50 py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 ${toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-950 text-red-100 border border-red-800'
+            }`}>
             {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-red-400" />}
             <span className="text-sm font-medium">{toast.message}</span>
           </div>
@@ -268,7 +267,7 @@ export default function RouteAssignmentPage() {
               <UserCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-on-surface">Route Assignment</h1>
+              <h1 className="text-2xl font-black tracking-tight text-on-surface">Rider Route Assignment</h1>
               <p className="text-xs text-on-surface-variant mt-0.5">
                 Assign operational routes to delivery riders by date and shift
               </p>
@@ -462,9 +461,8 @@ export default function RouteAssignmentPage() {
               <button
                 type="button"
                 onClick={() => setFilterDate('')}
-                className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${
-                  !filterDate ? 'bg-primary text-white border-primary' : 'bg-white border-outline-variant text-slate-600 hover:bg-slate-50'
-                }`}
+                className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${!filterDate ? 'bg-primary text-white border-primary' : 'bg-white border-outline-variant text-slate-600 hover:bg-slate-50'
+                  }`}
               >
                 All Dates
               </button>
@@ -531,11 +529,10 @@ export default function RouteAssignmentPage() {
                         <td className="py-3 px-4 text-slate-700 font-medium">{a.shift}</td>
                         <td className="py-3 px-4 text-slate-600 font-mono">{a.vehicle_number || '-'}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            a.status === 'Active' ? 'bg-emerald-100 text-emerald-800' :
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${a.status === 'Active' ? 'bg-emerald-100 text-emerald-800' :
                             a.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                            'bg-slate-200 text-slate-600'
-                          }`}>
+                              'bg-slate-200 text-slate-600'
+                            }`}>
                             {a.status}
                           </span>
                         </td>

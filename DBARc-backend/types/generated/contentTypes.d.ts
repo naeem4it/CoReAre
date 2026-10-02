@@ -1387,6 +1387,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
     recipient_name: Schema.Attribute.String & Schema.Attribute.Required;
     recipient_phone: Schema.Attribute.String & Schema.Attribute.Required;
     reference_number: Schema.Attribute.String;
+    remarks: Schema.Attribute.Text;
     secondary_barcode: Schema.Attribute.String;
     service_provider: Schema.Attribute.String;
     service_type: Schema.Attribute.Enumeration<
@@ -1425,6 +1426,7 @@ export interface ApiParcelParcel extends Struct.CollectionTypeSchema {
         'Ready To Return',
         'Return Dispatched',
         'Arrived At Destination',
+        'Cancelled',
       ]
     > &
       Schema.Attribute.DefaultTo<'Booked'>;
@@ -1824,7 +1826,7 @@ export interface ApiRouteAssignmentRouteAssignment
   collectionName: 'route_assignments';
   info: {
     description: 'Daily or shift route assignments for riders';
-    displayName: 'Route Assignment';
+    displayName: 'Rider Route Assignment';
     pluralName: 'route-assignments';
     singularName: 'route-assignment';
   };
