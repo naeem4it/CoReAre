@@ -647,7 +647,6 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
               <div className="pl-4 flex flex-col gap-0.5 animate-in slide-in-from-top-2 fade-in duration-200">
                 <NavLink href="/financials/shipper-invoices" icon="receipt_long" label="Invoices" />
                 <NavLink href="/invoices/customer" icon="request_quote" label="Customer Invoices" />
-                <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />
                 <NavLink href="/reports/customer" icon="assignment_ind" label="Customer Report" />
               </div>
             )}
@@ -722,7 +721,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 {isCourierAdmin && (
                   <NavLink href="/administration/plans" icon="assignment" label="Tariff Plans" />
                 )}
-                <NavLink href="/invoices/cod-settlement" icon="price_check" label="COD Settlement" />
+                <NavLink href="/invoices/cod-settlement" icon="price_check" label="Rider closing" />
                 <NavLink href="/operations/de-runsheet" icon="payments" label="De-Runsheet (Cashier)" />
                 {isCourierAdmin && (
                   <NavLink href="/administration/expenses" icon="receipt" label="Expense Management" />

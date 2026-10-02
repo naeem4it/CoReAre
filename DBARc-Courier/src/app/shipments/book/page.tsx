@@ -472,6 +472,7 @@ function BookShipmentForm() {
   const [selectedOrderForLabel, setSelectedOrderForLabel] = React.useState<GroupedBulkOrder | null>(null);
   const [showPasteModal, setShowPasteModal] = React.useState(false);
   const [rawCsvText, setRawCsvText] = React.useState('');
+  const [uploadLimitModal, setUploadLimitModal] = React.useState<{ title: string; message: string } | null>(null);
 
   // Sync mode with query parameter tab state (?tab=bulk or ?tab=manual)
   React.useEffect(() => {
@@ -1573,6 +1574,19 @@ function BookShipmentForm() {
       return;
     }
 
+    const MAX_FILE_SIZE_MB = 100;
+    const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+    const MAX_RECORDS_LIMIT = 10000;
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setUploadLimitModal({
+        title: "File Size Too Large",
+        message: `The size of this file (${fileSizeMB} MB) is too large. Please upload a file with a maximum size of ${MAX_FILE_SIZE_MB} MB.`
+      });
+      return;
+    }
+
     setSelectedFile(file);
     setBulkStatus('parsing');
     setBulkProgress(20);
@@ -1586,6 +1600,17 @@ function BookShipmentForm() {
           const lines = text.split('\n');
           if (lines.length < 2) {
             alert("Spreadsheet is empty.");
+            setBulkStatus('idle');
+            setSelectedFile(null);
+            return;
+          }
+
+          const rowCount = lines.length - 1;
+          if (rowCount > MAX_RECORDS_LIMIT) {
+            setUploadLimitModal({
+              title: "Record Limit Exceeded",
+              message: `The file contains ${rowCount.toLocaleString()} records, which exceeds the limit. Please upload a file with a maximum of ${MAX_RECORDS_LIMIT.toLocaleString()} records.`
+            });
             setBulkStatus('idle');
             setSelectedFile(null);
             return;
@@ -1740,6 +1765,15 @@ function BookShipmentForm() {
     if (!rawCsvText.trim()) return;
 
     const lines = rawCsvText.trim().split('\n');
+    const MAX_RECORDS_LIMIT = 10000;
+    if (lines.length > MAX_RECORDS_LIMIT) {
+      setUploadLimitModal({
+        title: "Record Limit Exceeded",
+        message: `Pasted data contains ${lines.length.toLocaleString()} records, which exceeds the limit. Please upload or paste a maximum of ${MAX_RECORDS_LIMIT.toLocaleString()} records.`
+      });
+      return;
+    }
+
     const orderMap: { [orderId: string]: GroupedBulkOrder } = {};
 
     lines.forEach((line, idx) => {
@@ -3777,6 +3811,35 @@ ORD-901, Ali Khan, +92 300 1112233, Gulberg II Lahore, Threads Store, Factory Ro
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* FILE SIZE & RECORD LIMIT POPUP MODAL */}
+      {uploadLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-in zoom-in-95">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{uploadLimitModal.title}</h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Upload limit constraint</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed mb-6 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+              {uploadLimitModal.message}
+            </p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setUploadLimitModal(null)}
+                className="px-5 py-2.5 bg-primary hover:bg-primary-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                Okay, I understand
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </PortalLayout>
