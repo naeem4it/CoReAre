@@ -93,7 +93,7 @@ export const RouteAssignmentService = {
   // Get active route assignment for a given rider on an operational date
   getByRiderAndDate: async (riderId: number | string, dateStr: string): Promise<RouteAssignmentItem | null> => {
     try {
-      const res = await apiClient.get(`/route-assignments?filters[rider][id][$eq]=${riderId}&filters[assignment_date][$eq]=${dateStr}&filters[status][$eq]=Active&populate[route][populate]=*&populate[office]=*&populate[rider]=*`);
+      const res = await apiClient.get(`/route-assignments?filters[rider][id][$eq]=${riderId}&filters[assignment_date][$eq]=${dateStr}&filters[status][$eq]=Active&populate=*`);
       const items = res.data?.data || [];
       return items.length > 0 ? items[0] : null;
     } catch (e) {

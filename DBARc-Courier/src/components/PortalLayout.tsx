@@ -687,7 +687,7 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
                 <NavLink href="/operations/bulk-arrivals" icon="upload_file" label="Bulk Arrivals" />
                 <NavLink href="/operations/manifestation" icon="inventory" label="Manifestation" />
                 <NavLink href="/operations/demanifestation" icon="unarchive" label="DeManifestation" />
-                <NavLink href="/operations/route-assignment" icon="alt_route" label="Route Assignment" />
+                <NavLink href="/operations/route-assignment" icon="alt_route" label="Rider Route Assignment" />
                 <NavLink href="/operations/delivery-sheet" icon="assignment" label="Delivery Sheet" />
               </div>
             )}

@@ -1824,7 +1824,7 @@ export interface ApiRouteAssignmentRouteAssignment
   collectionName: 'route_assignments';
   info: {
     description: 'Daily or shift route assignments for riders';
-    displayName: 'Route Assignment';
+    displayName: 'Rider Route Assignment';
     pluralName: 'route-assignments';
     singularName: 'route-assignment';
   };
