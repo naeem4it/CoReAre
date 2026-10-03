@@ -312,9 +312,11 @@ function OrderListContent() {
 
             const is3PL = Boolean(raw.is_3pl) || !is2PL;
             const secBarcode = raw.secondary_barcode || raw.reference_number || '';
-            const serviceProvider = raw.service_provider || raw.courier?.name || (is3PL ? 'PostEx' : 'IN-HOUSE');
-            let tplCourierId = serviceProvider;
-            let tplTrackingNo = secBarcode;
+            const rawProvider = (raw.service_provider || raw.courier?.name || '').trim();
+            const hasExplicitCourier = Boolean(rawProvider && !['in-house', '2pl', '3pl'].includes(rawProvider.toLowerCase()));
+            const serviceProvider = hasExplicitCourier ? rawProvider : (is3PL ? '' : 'IN-HOUSE');
+            const tplCourierId = hasExplicitCourier ? rawProvider : '';
+            const tplTrackingNo = secBarcode;
 
             return {
               id: raw.id,
@@ -1050,7 +1052,7 @@ function OrderListContent() {
                             {row.tplTrackingNo && row.tplTrackingNo !== row.trackingNumber && (
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
-                                  3PL: {row.serviceProvider || row.tplCourierId || 'PostEx'}
+                                  {row.serviceProvider || row.tplCourierId ? `3PL: ${row.serviceProvider || row.tplCourierId}` : '3PL'}
                                 </span>
                                 <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
                                   {row.tplTrackingNo}
@@ -1078,7 +1080,7 @@ function OrderListContent() {
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : 'bg-amber-100 text-amber-800 border border-amber-300'
                                 }`}>
-                                {row.is2PL ? '2PL (In-House)' : `3PL (${row.tplCourierId})`}
+                                {row.is2PL ? '2PL (In-House)' : (row.serviceProvider || row.tplCourierId ? `3PL (${row.serviceProvider || row.tplCourierId})` : '3PL')}
                               </span>
                               <span className="text-[10px] text-slate-500 font-medium">
                                 {row.destination}

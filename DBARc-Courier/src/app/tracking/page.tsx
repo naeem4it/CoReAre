@@ -301,7 +301,7 @@ function TrackingPageContent() {
             failure_reason: item.failure_reason || item.comments || '',
             delivery_attempts: item.delivery_attempts || 0,
             secondary_barcode: item.secondary_barcode || item.reference_number || null,
-            service_provider: item.service_provider || (item.is_3pl ? 'PostEx' : null),
+            service_provider: item.service_provider && !['in-house', '2pl', '3pl'].includes(item.service_provider.toLowerCase()) ? item.service_provider : null,
             is_3pl: Boolean(item.is_3pl),
           };
         });
@@ -1050,7 +1050,7 @@ function TrackingPageContent() {
                           {parcel.secondary_barcode && (
                             <div className="flex items-center gap-1 mt-0.5">
                               <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-extrabold px-1.5 py-0.2 rounded shadow-2xs">
-                                3PL: {parcel.service_provider || 'PostEx'}
+                                {parcel.service_provider ? `3PL: ${parcel.service_provider}` : '3PL'}
                               </span>
                               <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
                                 {parcel.secondary_barcode}
@@ -1323,7 +1323,7 @@ function TrackingPageContent() {
                           3PL Partner
                         </span>
                         <span className="font-bold text-slate-800 text-xs">
-                          {selectedOrder.service_provider || 'PostEx'}
+                          {selectedOrder.service_provider || '3PL'}
                         </span>
                       </div>
                       <button

@@ -144,7 +144,8 @@ export const CourierShipmentsTable = ({
             const paymentType: 'COD' | 'PAID' = (item as any).payment_type === 'PAID' || Number(item.cod_amount) === 0 ? 'PAID' : 'COD';
             const codAmount = Number(item.cod_amount) || 0;
             const secBarcode = (item as any).secondary_barcode || (item as any).reference_number || null;
-            const provider = (item as any).service_provider || ((item as any).is_3pl ? 'PostEx' : null);
+            const rawProv = (item as any).service_provider;
+            const provider = rawProv && !['in-house', '2pl', '3pl'].includes(String(rawProv).toLowerCase()) ? rawProv : null;
 
             return {
               id: item.id,
@@ -459,7 +460,7 @@ export const CourierShipmentsTable = ({
                       {row.secondaryBarcode && (
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
-                            3PL: {row.serviceProvider || 'PostEx'}
+                            {row.serviceProvider ? `3PL: ${row.serviceProvider}` : '3PL'}
                           </span>
                           <span className="font-mono text-xs font-bold text-slate-800 tracking-tight">
                             {row.secondaryBarcode}

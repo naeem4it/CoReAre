@@ -131,7 +131,7 @@ export default function ShipmentsPage() {
             eta: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A',
             createdAt: item.createdAt || new Date().toISOString(),
             secondaryBarcode: item.secondary_barcode || item.reference_number || undefined,
-            serviceProvider: item.service_provider || (item.is_3pl ? 'PostEx' : undefined),
+            serviceProvider: item.service_provider && !['in-house', '2pl', '3pl'].includes(item.service_provider.toLowerCase()) ? item.service_provider : undefined,
             is3PL: Boolean(item.is_3pl || item.secondary_barcode || item.service_provider),
             rawParcel: item,
           };
@@ -402,7 +402,7 @@ export default function ShipmentsPage() {
                             {row.secondaryBarcode && (
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                  3PL: {row.serviceProvider || 'PostEx'}
+                                  {row.serviceProvider ? `3PL: ${row.serviceProvider}` : '3PL'}
                                 </span>
                                 <span className="font-mono text-[11px] font-semibold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">
                                   {row.secondaryBarcode}
@@ -540,7 +540,7 @@ export default function ShipmentsPage() {
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-2xl border border-amber-200 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-500 text-white uppercase tracking-wider">
-                      3PL: {viewingShipment.serviceProvider || 'PostEx'}
+                      {viewingShipment.serviceProvider ? `3PL: ${viewingShipment.serviceProvider}` : '3PL'}
                     </span>
                     <div>
                       <div className="text-[11px] font-bold text-amber-900/70 uppercase">Consignment Tracking ID</div>

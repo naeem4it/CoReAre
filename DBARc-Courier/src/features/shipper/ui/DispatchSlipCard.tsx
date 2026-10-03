@@ -233,7 +233,9 @@ export const DispatchSlipCard = React.memo(function DispatchSlipCard({
     (!order.is2PL && tplTrackingId) ||
     (order.serviceProvider && order.serviceProvider !== 'IN-HOUSE' && order.serviceProvider !== '2PL')
   );
-  const providerLabel = order.serviceProvider || order.tplCourierId || 'PostEx';
+  const rawProvider = (order.serviceProvider || order.tplCourierId || '').trim();
+  const hasConfigured3PL = Boolean(rawProvider && !['in-house', '2pl', '3pl'].includes(rawProvider.toLowerCase()));
+  const providerLabel = hasConfigured3PL ? rawProvider : '3PL';
 
   return (
     <div className="dispatch-slip-card bg-white text-black font-sans border-2 border-black p-0 select-none overflow-hidden text-[9px] leading-tight shadow-xs">
