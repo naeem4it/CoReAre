@@ -2101,7 +2101,7 @@ function BookShipmentForm() {
 
       <div className="w-full space-y-md relative no-print">
         {/* Page Header */}
-        <div className="flex items-center justify-between mb-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-md">
           <div>
             <nav className="flex gap-xs text-label-md font-label-md text-on-surface-variant mb-xs">
               <Link href="/orders" className="hover:text-primary transition-colors cursor-pointer">Booking Order</Link>
@@ -2116,8 +2116,8 @@ function BookShipmentForm() {
           </div>
           
           {/* Header Action Buttons, Live Price Summary & Selected Business Badge */}
-          <div className="flex flex-col items-end gap-1.5">
-            <div className="flex items-center gap-2.5">
+          <div className="flex flex-col sm:items-end gap-1.5 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2.5">
               {(bookingMode === 'manual' || !isShipper) && (
                 <button
                   type="button"
@@ -2200,7 +2200,7 @@ function BookShipmentForm() {
 
             {/* Below Create Order: Selected Business Address & Origin City Indicator */}
             {selectedShipperBusiness && (
-              <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl shadow-2xs animate-in fade-in duration-200">
+              <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs animate-in fade-in duration-200">
                 <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
                 <span className="font-bold text-slate-800">
                   {!isShipper ? `Shipper: ${selectedShipperBusiness.name}` : selectedShipperBusiness.name}

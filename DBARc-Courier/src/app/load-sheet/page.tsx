@@ -824,7 +824,7 @@ export default function LoadSheetPage() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-200 gap-6">
+        <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto custom-scrollbar whitespace-nowrap pb-0.5">
           <button
             onClick={() => setActiveTab('create')}
             className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${

@@ -862,7 +862,7 @@ function OrderListContent() {
 
         {/* Multi-Select Floating Notification Bar */}
         {selectedIds.length > 0 && (
-          <div className="bg-primary-50 border border-primary-200 rounded-xl p-3 px-4 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="bg-primary-50 border border-primary-200 rounded-xl p-3 px-4 flex flex-wrap items-center justify-between gap-2 shadow-sm animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center gap-3 text-xs font-bold text-primary-900">
               <span className="bg-primary text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">
                 {selectedIds.length}

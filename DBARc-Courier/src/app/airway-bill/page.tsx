@@ -634,7 +634,7 @@ function AirwayBillContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Quick Print All Booked in view */}
             <button
               onClick={handleQuickPrintAll}
@@ -848,7 +848,7 @@ function AirwayBillContent() {
         {/* ===================== TABLE CARD & SELECTION BAR ===================== */}
         <div className="bg-white border border-outline-variant rounded-2xl shadow-xs overflow-hidden">
           {/* Sub-Header Selection Bar */}
-          <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-slate-50">
+          <div className="p-3 sm:p-4 border-b border-outline-variant flex flex-wrap items-center justify-between gap-2 bg-slate-50">
             <div className="flex items-center gap-3">
               <button
                 type="button"

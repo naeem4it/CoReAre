@@ -77,7 +77,7 @@ export function TablePagination({
       </div>
 
       {/* Navigation button controls */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap justify-center">
         <button
           type="button"
           onClick={() => onPageChange(1)}

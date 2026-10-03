@@ -757,10 +757,10 @@ function TrackingPageContent() {
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-primary-200 flex items-center gap-1.5">
               <Barcode className="w-4 h-4 text-primary-300 shrink-0" /> Instant Consignment Tracking
             </span>
-            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight whitespace-nowrap">
+            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight">
               Track Any Air Waybill (CN#) or Shipment
             </h3>
-            <p className="text-xs text-slate-300 whitespace-nowrap">
+            <p className="text-xs text-slate-300">
               Enter any booking tracking number to immediately open the complete verification timeline.
             </p>
           </div>

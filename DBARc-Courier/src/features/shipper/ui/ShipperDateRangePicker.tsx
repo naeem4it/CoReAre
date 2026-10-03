@@ -89,7 +89,7 @@ export function ShipperDateRangePicker({ fromDate, toDate, onChange }: ShipperDa
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="flex flex-wrap gap-1.5 pb-3 mb-3 border-b border-slate-100">
             <button
               onClick={() => setPreset('today')}
