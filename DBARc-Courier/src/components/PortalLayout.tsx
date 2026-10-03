@@ -9,7 +9,7 @@ import { useTenant } from '@/components/TenantProvider';
 import { ChevronDown, Building2, MapPin, LogOut, Key, CreditCard, Menu, X, Search } from 'lucide-react';
 import { authStorage } from '@/shared/utils/auth-storage';
 
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
+function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1553,6 +1553,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </button>
       </nav>
     </div>
+  );
+}
+
+export default function PortalLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <React.Suspense fallback={null}>
+      <PortalLayoutContent>{children}</PortalLayoutContent>
+    </React.Suspense>
   );
 }
 
