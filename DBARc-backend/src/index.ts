@@ -240,6 +240,8 @@ export default {
 
       const authenticatedPermissions: string[] = [
         // Users-permissions endpoints
+        'plugin::users-permissions.auth.callback',
+        'plugin::users-permissions.auth.connect',
         'plugin::users-permissions.user.update',
         'plugin::users-permissions.user.findOne',
         'plugin::users-permissions.user.find',

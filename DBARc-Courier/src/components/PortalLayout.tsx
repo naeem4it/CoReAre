@@ -618,9 +618,6 @@ function SideNavigation({ showShipmentBooking }: { showShipmentBooking: boolean 
             <NavLink href="/administration/sales-person" icon="badge" label="Sales Person" />
           )}
 
-          {isCourierAdmin && (
-            <NavLink href="/administration/shippers" icon="storefront" label="Shipper Setup" />
-          )}
 
           {isCourierAdmin && (
             <NavLink href="/administration/employees?type=shipper" icon="local_shipping" label="Shippers Directory" />

@@ -40,14 +40,11 @@ function uploadFile(conn, localPath, remotePath) {
     conn.sftp((err, sftp) => {
       if (err) return reject(err);
       console.log(`\n[SFTP] Uploading ${path.basename(localPath)} (${(fs.statSync(localPath).size / 1024 / 1024).toFixed(2)} MB) -> ${remotePath}...`);
-      const readStream = fs.createReadStream(localPath);
-      const writeStream = sftp.createWriteStream(remotePath);
-      writeStream.on('close', () => {
+      sftp.fastPut(localPath, remotePath, (err) => {
+        if (err) return reject(err);
         console.log(`[SFTP] Upload completed.`);
         resolve();
       });
-      writeStream.on('error', (e) => reject(e));
-      readStream.pipe(writeStream);
     });
   });
 }
@@ -80,7 +77,7 @@ async function main() {
   // 1b. Create fresh dbarc_db backup for complete safety
   console.log('Creating fresh pre-deployment backup of dbarc_db...');
   const backupTimestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-  await runCommand(conn, `echo 'Password123!' | sudo -S -u postgres pg_dump dbarc_db > /var/backups/dbarc/dbarc_db_predeploy_${backupTimestamp}.sql`);
+  await runCommand(conn, `echo 'Password123!' | sudo -S bash -c "pg_dump -U postgres dbarc_db > /var/backups/dbarc/dbarc_db_predeploy_${backupTimestamp}.sql"`);
   const backupCheck = await runCommand(conn, `ls -lh /var/backups/dbarc/dbarc_db_predeploy_${backupTimestamp}.sql`);
   console.log('Verified fresh database backup:\n', backupCheck.stdout);
 

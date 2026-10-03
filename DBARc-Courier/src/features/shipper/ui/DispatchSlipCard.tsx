@@ -14,7 +14,7 @@ export type OrderRow = {
   destination: string;
   address: string;
   shipperName: string;
-  shipperId?: number | string;
+  shipperId?: number | string | null;
   shipperAddress: string;
   shipperPhone: string;
   paymentType: 'COD' | 'PAID';

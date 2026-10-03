@@ -65,7 +65,15 @@ apiClient.interceptors.request.use(
       }
     }
 
-    if (token && !token.startsWith('mock-') && config.headers) {
+    // Never attach Authorization header to public auth endpoints
+    const isPublicAuthRoute = config.url && (
+      config.url.includes('/auth/local') ||
+      config.url.includes('/auth/register') ||
+      config.url.includes('/auth/forgot-password') ||
+      config.url.includes('/auth/reset-password')
+    );
+
+    if (!isPublicAuthRoute && token && !token.startsWith('mock-') && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
