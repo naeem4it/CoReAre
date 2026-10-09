@@ -44,6 +44,10 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::office.office"
+    },
+    "pending_balance": {
+      "type": "decimal",
+      "default": 0
     }
   }
 }

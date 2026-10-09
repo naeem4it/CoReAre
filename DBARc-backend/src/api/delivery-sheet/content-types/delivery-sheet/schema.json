@@ -78,6 +78,33 @@
         "Completed"
       ],
       "default": "Pending"
+    },
+    "cash_collected": {
+      "type": "decimal",
+      "default": 0
+    },
+    "cash_deposit_account": {
+      "type": "string"
+    },
+    "online_collected": {
+      "type": "decimal",
+      "default": 0
+    },
+    "online_deposit_account": {
+      "type": "string"
+    },
+    "rider_shortage_pending": {
+      "type": "decimal",
+      "default": 0
+    },
+    "shortage_reason": {
+      "type": "text"
+    },
+    "closed_at": {
+      "type": "datetime"
+    },
+    "closed_by": {
+      "type": "string"
     }
   }
 }

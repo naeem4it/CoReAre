@@ -859,6 +859,10 @@ export interface ApiDeliverySheetDeliverySheet
     draftAndPublish: false;
   };
   attributes: {
+    cash_collected: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    cash_deposit_account: Schema.Attribute.String;
+    closed_at: Schema.Attribute.DateTime;
+    closed_by: Schema.Attribute.String;
     collection_amount: Schema.Attribute.Decimal;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -872,10 +876,14 @@ export interface ApiDeliverySheetDeliverySheet
     > &
       Schema.Attribute.Private;
     office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    online_collected: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    online_deposit_account: Schema.Attribute.String;
     parcels: Schema.Attribute.Relation<'manyToMany', 'api::parcel.parcel'>;
     publishedAt: Schema.Attribute.DateTime;
     return_count: Schema.Attribute.Integer;
     rider: Schema.Attribute.Relation<'manyToOne', 'api::rider.rider'>;
+    rider_shortage_pending: Schema.Attribute.Decimal &
+      Schema.Attribute.DefaultTo<0>;
     route: Schema.Attribute.Relation<'manyToOne', 'api::route.route'>;
     route_code: Schema.Attribute.String;
     sheet_date: Schema.Attribute.Date & Schema.Attribute.Required;
@@ -883,6 +891,7 @@ export interface ApiDeliverySheetDeliverySheet
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
     shipment_count: Schema.Attribute.Integer;
+    shortage_reason: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
       ['Pending', 'Out For Delivery', 'Completed']
     > &
@@ -1775,6 +1784,7 @@ export interface ApiRiderRider extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     office: Schema.Attribute.Relation<'manyToOne', 'api::office.office'>;
+    pending_balance: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     phone: Schema.Attribute.String &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;
