@@ -58,6 +58,14 @@ interface DeliverySheetOption {
   status: string;
   parcelCount: number;
   parcels: ClosingParcel[];
+  cashCollected?: number;
+  cashDepositAccount?: string;
+  onlineCollected?: number;
+  onlineDepositAccount?: string;
+  riderShortagePending?: number;
+  shortageReason?: string;
+  closedAt?: string;
+  closedBy?: string;
 }
 
 export default function RiderClosingPage() {
@@ -75,6 +83,7 @@ export default function RiderClosingPage() {
   const [selectedRiderId, setSelectedRiderId] = React.useState<string>('');
   const [deliverySheets, setDeliverySheets] = React.useState<DeliverySheetOption[]>([]);
   const [selectedSheetId, setSelectedSheetId] = React.useState<string>('');
+  const selectedSheetIdRef = React.useRef<string>('');
   const [showAllSheets, setShowAllSheets] = React.useState<boolean>(false);
 
   // Parcels Data
@@ -244,6 +253,14 @@ export default function RiderClosingPage() {
             status: s.status || 'Out For Delivery',
             parcelCount: sheetParcels.length,
             parcels: sheetParcels,
+            cashCollected: s.cash_collected !== null && s.cash_collected !== undefined ? Number(s.cash_collected) : undefined,
+            cashDepositAccount: s.cash_deposit_account || undefined,
+            onlineCollected: s.online_collected !== null && s.online_collected !== undefined ? Number(s.online_collected) : undefined,
+            onlineDepositAccount: s.online_deposit_account || undefined,
+            riderShortagePending: s.rider_shortage_pending !== null && s.rider_shortage_pending !== undefined ? Number(s.rider_shortage_pending) : undefined,
+            shortageReason: s.shortage_reason || undefined,
+            closedAt: s.closed_at || undefined,
+            closedBy: s.closed_by || undefined,
           };
         });
       } catch (err) {
@@ -284,18 +301,39 @@ export default function RiderClosingPage() {
 
       setDeliverySheets(loadedSheets);
 
-      // Determine initial rider and sheet
-      const firstSheet = loadedSheets[0];
-      const initialRiderId = String(firstSheet.riderId || loadedRiders[0]?.id || '');
-      setSelectedRiderId(initialRiderId);
-      setSelectedSheetId(String(firstSheet.id));
-      setParcels(firstSheet.parcels);
+      // Determine initial rider and sheet (preserving active sheet selection if still present)
+      const currentSelectedId = selectedSheetIdRef.current;
+      const targetSheet = (currentSelectedId && loadedSheets.find(s => String(s.id) === String(currentSelectedId))) || loadedSheets[0];
 
-      // Calculate initial delivered COD to auto-fill cash
-      const initialDeliveredCod = firstSheet.parcels
-        .filter(p => p.outcome === 'Delivered' || p.status.toLowerCase() === 'delivered')
-        .reduce((sum, p) => sum + (p.codAmount || 0), 0);
-      setCashHandedOver(initialDeliveredCod);
+      if (targetSheet) {
+        const sheetIdStr = String(targetSheet.id);
+        setSelectedSheetId(sheetIdStr);
+        selectedSheetIdRef.current = sheetIdStr;
+        setSelectedRiderId(String(targetSheet.riderId || loadedRiders[0]?.id || ''));
+        setParcels(targetSheet.parcels);
+
+        // Load saved values if sheet is completed or already has saved cash
+        if (targetSheet.status === 'Completed' || targetSheet.cashCollected !== undefined) {
+          setCashHandedOver(Number(targetSheet.cashCollected) || 0);
+          setCashDepositAccount(targetSheet.cashDepositAccount || 'Main Cash Drawer');
+          setTransferredOnline(Number(targetSheet.onlineCollected) || 0);
+          setOnlineDepositAccount(targetSheet.onlineDepositAccount || 'Main Cash Drawer');
+          setPendingAmount(Number(targetSheet.riderShortagePending) || 0);
+          setPendingReason(targetSheet.shortageReason || '');
+          hasUserEditedCashRef.current = true;
+        } else {
+          const initialDeliveredCod = targetSheet.parcels
+            .filter(p => p.outcome === 'Delivered' || p.status.toLowerCase() === 'delivered')
+            .reduce((sum, p) => sum + (p.codAmount || 0), 0);
+          setCashHandedOver(initialDeliveredCod);
+          setCashDepositAccount('Main Cash Drawer');
+          setTransferredOnline(0);
+          setOnlineDepositAccount('Main Cash Drawer');
+          setPendingAmount(0);
+          setPendingReason('');
+          hasUserEditedCashRef.current = false;
+        }
+      }
 
     } catch (err) {
       console.error('Initial load failed:', err);
@@ -326,19 +364,41 @@ export default function RiderClosingPage() {
     if (riderSheets.length > 0) {
       // Pick the first sheet (prefer unclosed / Out For Delivery sheets)
       const openSheet = riderSheets.find(s => s.status !== 'Completed') || riderSheets[0];
-      setSelectedSheetId(String(openSheet.id));
-      setParcels(openSheet.parcels);
+      handleSheetChange(String(openSheet.id));
     }
   };
 
-  // When Delivery Sheet changes, load its parcels and sync rider
+  // When Delivery Sheet changes, load its parcels, sync rider, and load saved settlement data
   const handleSheetChange = (sheetId: string) => {
     setSelectedSheetId(sheetId);
+    selectedSheetIdRef.current = sheetId;
     const found = deliverySheets.find(s => String(s.id) === sheetId);
     if (found) {
       setParcels(found.parcels);
       if (found.riderId && String(found.riderId) !== selectedRiderId) {
         setSelectedRiderId(String(found.riderId));
+      }
+
+      // Load saved values if completed or has saved cash
+      if (found.status === 'Completed' || found.cashCollected !== undefined) {
+        setCashHandedOver(Number(found.cashCollected) || 0);
+        setCashDepositAccount(found.cashDepositAccount || 'Main Cash Drawer');
+        setTransferredOnline(Number(found.onlineCollected) || 0);
+        setOnlineDepositAccount(found.onlineDepositAccount || 'Main Cash Drawer');
+        setPendingAmount(Number(found.riderShortagePending) || 0);
+        setPendingReason(found.shortageReason || '');
+        hasUserEditedCashRef.current = true;
+      } else {
+        const deliveredCod = found.parcels
+          .filter(p => p.outcome === 'Delivered' || p.status.toLowerCase() === 'delivered')
+          .reduce((sum, p) => sum + (p.codAmount || 0), 0);
+        setCashHandedOver(deliveredCod);
+        setCashDepositAccount('Main Cash Drawer');
+        setTransferredOnline(0);
+        setOnlineDepositAccount('Main Cash Drawer');
+        setPendingAmount(0);
+        setPendingReason('');
+        hasUserEditedCashRef.current = false;
       }
     }
   };
@@ -637,29 +697,38 @@ export default function RiderClosingPage() {
         }).catch(() => null);
       }
 
-      // Record completed voucher state to display confirmation modal
-      setClosedVoucher({
-        voucherNumber: successVoucherNo,
-        sheetId: activeSheet?.id,
-        riderId: activeRider?.id,
-        sheetNumber: activeSheet?.sheetNumber,
-        riderName: activeRider?.name,
-        date: new Date().toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        deliveredCount: deliveredParcels.length,
-        deliveredCodTotal,
-        cashHandedOver,
-        cashDepositAccount,
-        transferredOnline,
-        onlineDepositAccount,
-        pendingAmount: effectivePending,
-        pendingReason: effectiveReason,
-        closedBy: user?.username || 'Dispatcher',
-      });
+      // Update deliverySheets local state so the sheet is marked Completed and saved settlement data displays here
+      setDeliverySheets(prev =>
+        prev.map(s => {
+          if (String(s.id) === String(activeSheet?.id)) {
+            return {
+              ...s,
+              status: 'Completed',
+              cashCollected: cashHandedOver,
+              cashDepositAccount,
+              onlineCollected: transferredOnline,
+              onlineDepositAccount,
+              riderShortagePending: effectivePending,
+              shortageReason: effectiveReason,
+            };
+          }
+          return s;
+        })
+      );
+
+      // Keep user-entered values displayed in the form
+      setCashHandedOver(cashHandedOver);
+      setPendingAmount(effectivePending);
+      setPendingReason(effectiveReason);
+      hasUserEditedCashRef.current = true;
+
+      // Do not display popup modal since all data is entered and shown on this page
+      setClosedVoucher(null);
 
       triggerToast(
         effectivePending > 0
-          ? `Rider closing for ${activeSheet?.sheetNumber || 'sheet'} saved! Rs ${effectivePending.toLocaleString()} added to rider history.`
-          : `Rider closing for ${activeSheet?.sheetNumber || 'sheet'} successfully saved and closed!`,
+          ? `✓ Saved! Cash: Rs ${cashHandedOver.toLocaleString()}, Shortage: Rs ${effectivePending.toLocaleString()} added to rider history.`
+          : `✓ Rider closing for ${activeSheet?.sheetNumber || 'sheet'} successfully saved and closed!`,
         'success'
       );
 
@@ -1522,8 +1591,8 @@ export default function RiderClosingPage() {
                   <input
                     type="number"
                     min="0"
-                    value={pendingAmount || ''}
-                    onChange={e => setPendingAmount(Number(e.target.value) || 0)}
+                    value={pendingAmount === 0 ? '' : pendingAmount}
+                    onChange={e => setPendingAmount(Math.max(0, Number(e.target.value) || 0))}
                     placeholder="0"
                     className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm font-bold font-mono text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   />
@@ -1547,6 +1616,31 @@ export default function RiderClosingPage() {
               </div>
             </div>
           </div>
+
+          {/* COMPLETED SETTLEMENT STATUS CARD */}
+          {activeSheet?.status === 'Completed' && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-900 text-xs sm:text-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCheck className="w-4 h-4 font-bold" />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-900">Runsheet Settlement Completed</span>
+                  <p className="text-[11px] text-slate-500">
+                    Saved Cash: <strong className="text-slate-800 font-mono">Rs {cashHandedOver.toLocaleString()}</strong> ({cashDepositAccount}) · Shortage to Rider: <strong className="text-amber-800 font-mono">Rs {pendingAmount.toLocaleString()}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span>Print Voucher</span>
+              </button>
+            </div>
+          )}
 
           {/* Bottom Save & Close Action Strip */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between">
